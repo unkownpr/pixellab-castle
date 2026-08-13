@@ -26,7 +26,13 @@
               <label>Seed<input id="seed-input" name="seed" type="number" value="17" /></label>
               <label>Koloni<input id="colony-input" name="colonies" type="number" min="1" max="8" value="4" /></label>
             </div>
-            <button class="primary" type="submit">Yeni karşılaşma başlat</button>
+            <label>Tur süresi (saniye)<input id="deadline-input" name="deadline" type="number" min="1" max="300" value="30" /></label>
+            <label>Orchestrator capability
+              <input id="orchestrator-token" name="orchestrator-token" type="password" autocomplete="off" aria-describedby="orchestrator-help" />
+            </label>
+            <small id="orchestrator-help">Yalnızca session oluşturma isteğinde kullanılır; sayfada tutulmaz.</small>
+            <button class="primary" type="submit">Agent lobby oluştur</button>
+            <button id="dev-quick-play" type="button">DEVELOPMENT: tek kolonili hızlı oyun</button>
             <label class="replay-import">Replay snapshots.jsonl
               <input id="replay-input" type="file" accept=".jsonl,application/json" />
             </label>
@@ -36,6 +42,7 @@
               <button id="replay-next" type="button" aria-label="Sonraki replay turu">→</button>
             </div>
           </form>
+          <div id="lobby-root" aria-live="polite"></div>
           <section class="ledger" aria-labelledby="ledger-title">
             <div class="section-label"><span id="ledger-title">Koloni defteri</span><output id="turn-output">T–</output></div>
             <div id="colony-stats" class="empty-state">Henüz aktif koloni yok.</div>

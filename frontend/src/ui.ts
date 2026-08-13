@@ -1,7 +1,7 @@
 import {
   ApiError,
   BenchmarkApi,
-  type MatchCreated,
+  type CreateSessionInput,
   type Observation,
   type ScenarioSummary,
   type VisibleCell,
@@ -12,6 +12,11 @@ import {
   type ControllerAction,
   type ReplaySnapshot,
 } from "./game";
+import {
+  LobbyController,
+  setHumanActionControlsEnabled,
+  type StartedHumanController,
+} from "./lobby";
 
 type ActionKind = "wait" | "gather" | "build" | "policy" | "diplomacy" | "trade" | "raid";
 
@@ -24,7 +29,9 @@ function required<T extends Element>(selector: string): T {
 export class BenchmarkWorkbench {
   private readonly api = new BenchmarkApi();
   private readonly renderer = new CastleRenderer();
-  private match: MatchCreated | null = null;
+  private lobby: LobbyController | null = null;
+  private activeMatchId: string | null = null;
+  private humanController: { readonly colonyId: string; readonly token: string } | null = null;
   private observation: Observation | null = null;
   private selectedCell: VisibleCell | null = null;
   private replayFrames: readonly ReplaySnapshot[] = [];
@@ -33,10 +40,17 @@ export class BenchmarkWorkbench {
 
   async init(): Promise<void> {
     await Promise.all([this.renderer.init(required("#world-host")), this.loadScenarios()]);
+    this.lobby = new LobbyController(required("#lobby-root"), this.api, {
+      onStarted: (controller) => void this.sessionStarted(controller),
+      onError: (error) => this.logError(error),
+    });
     this.renderer.onCellSelected((cell) => this.selectCell(cell));
     required<HTMLFormElement>("#match-form").addEventListener("submit", (event) => {
       event.preventDefault();
-      void this.createMatch();
+      void this.createSession();
+    });
+    required<HTMLButtonElement>("#dev-quick-play").addEventListener("click", () => {
+      void this.createDevelopmentQuickPlay();
     });
     document.querySelectorAll<HTMLButtonElement>("[data-action]").forEach((button) => {
       button.addEventListener("click", () => void this.takeAction(button.dataset.action as ActionKind));
@@ -74,20 +88,46 @@ export class BenchmarkWorkbench {
     return option;
   }
 
-  private async createMatch(): Promise<void> {
+  private async createSession(): Promise<void> {
+    if (!this.lobby || this.busy) return;
+    const orchestratorInput = required<HTMLInputElement>("#orchestrator-token");
+    const orchestratorToken = orchestratorInput.value;
+    orchestratorInput.value = "";
+    const input: CreateSessionInput = {
+      scenario_id: required<HTMLSelectElement>("#scenario-select").value,
+      seed: Number(required<HTMLInputElement>("#seed-input").value),
+      colony_count: Number(required<HTMLInputElement>("#colony-input").value),
+      deadline_seconds: Number(required<HTMLInputElement>("#deadline-input").value),
+      slots: [],
+    };
+    this.setBusy(true);
+    try {
+      this.activeMatchId = null;
+      this.humanController = null;
+      await this.lobby.create(input, orchestratorToken);
+      this.resetRunState();
+      this.replaceLog("Draft session created. Configure every slot, pair external agents, then start explicitly.");
+    } catch (error) {
+      this.logError(error);
+    } finally {
+      this.setBusy(false);
+    }
+  }
+
+  private async createDevelopmentQuickPlay(): Promise<void> {
     if (this.busy) return;
     this.setBusy(true);
     try {
-      this.match = await this.api.createMatch({
+      const created = await this.api.createDevelopmentMatch({
         scenario_id: required<HTMLSelectElement>("#scenario-select").value,
         seed: Number(required<HTMLInputElement>("#seed-input").value),
-        colony_count: Number(required<HTMLInputElement>("#colony-input").value),
       });
-      this.selectedCell = null;
-      this.matchTerminal = false;
-      this.replayFrames = [];
-      required<HTMLElement>("#replay-controls").hidden = true;
-      this.replaceLog("Karşılaşma oluşturuldu; c1 insan kontrolünde, diğer koloniler deterministik baseline.");
+      const token = created.controller_tokens.c1;
+      if (!token) throw new Error("Development quick-play human capability is missing");
+      this.activeMatchId = created.match_id;
+      this.humanController = { colonyId: "c1", token };
+      this.resetRunState();
+      this.replaceLog("DEVELOPMENT quick play started with one human colony.");
       await this.refreshObservation();
       this.enableActions(true);
     } catch (error) {
@@ -97,32 +137,49 @@ export class BenchmarkWorkbench {
     }
   }
 
+  private async sessionStarted(controller: StartedHumanController): Promise<void> {
+    this.activeMatchId = controller.matchId;
+    this.humanController = controller.colonyId && controller.controllerToken
+      ? { colonyId: controller.colonyId, token: controller.controllerToken }
+      : null;
+    this.resetRunState();
+    this.replaceLog("Match started. Baselines and turn deadlines are server-owned.");
+    if (this.humanController) {
+      try {
+        await this.refreshObservation();
+        this.enableActions(true);
+      } catch (error) {
+        this.logError(error);
+      }
+    } else {
+      this.enableActions(false);
+      this.log("No human slot was handed off; monitor the connected agents in the lobby.", "muted");
+    }
+  }
+
+  private resetRunState(): void {
+    this.selectedCell = null;
+    this.matchTerminal = false;
+    this.replayFrames = [];
+    required<HTMLElement>("#replay-controls").hidden = true;
+  }
+
   private async takeAction(kind: ActionKind): Promise<void> {
-    if (!this.match || !this.observation || this.busy) return;
+    if (!this.activeMatchId || !this.humanController || !this.observation || this.busy) return;
     const action = this.humanAction(kind);
     if (!action) return;
     this.setBusy(true);
     try {
-      const humanToken = this.match.controller_tokens[this.observation.colony_id];
-      if (!humanToken) throw new Error("İnsan kontrol tokenı bulunamadı");
-      let result = await this.api.submitActions(this.match.match_id, humanToken, {
+      const result = await this.api.submitActions(this.activeMatchId, this.humanController.token, {
         turn: this.observation.turn,
         actions: [action],
       });
-
-      for (const colonyId of result.waiting_for) {
-        const token = this.match.controller_tokens[colonyId];
-        if (!token) continue;
-        const observation = await this.api.observe(this.match.match_id, colonyId, token);
-        result = await this.api.submitActions(this.match.match_id, token, {
-          turn: observation.turn,
-          actions: [this.baselineAction(observation)],
-        });
-      }
-
       this.appendEvents(result.events ?? []);
+      if (result.waiting_for.length) {
+        this.log(`Waiting for server/controllers: ${result.waiting_for.join(", ")}`, "muted");
+      }
       await this.refreshObservation();
-      const status = await this.api.status(this.match.match_id, this.match.admin_token);
+      const status = await this.api.status(this.activeMatchId, this.humanController.token);
       this.matchTerminal = status.terminal === true;
       if (this.matchTerminal) {
         this.log(`Karşılaşma tamamlandı: ${String(status.termination_reason ?? "terminal")}`, "event");
@@ -166,25 +223,13 @@ export class BenchmarkWorkbench {
     };
   }
 
-  private baselineAction(observation: Observation): ControllerAction {
-    const stock = observation.colony.resources;
-    const useful = observation.visible_cells
-      .filter((cell) => cell.resource && cell.resource_amount > 0)
-      .sort((a, b) => {
-        const urgent = (cell: VisibleCell) =>
-          (cell.resource === "food" && (stock.food ?? 0) < observation.colony.population * 2) ||
-          (cell.resource === "water" && (stock.water ?? 0) < observation.colony.population * 2) ? 0 : 1;
-        return urgent(a) - urgent(b) || b.resource_amount - a.resource_amount;
-      })[0];
-    if (useful) return { kind: "gather", x: useful.x, y: useful.y };
-    return { kind: "wait" };
-  }
-
   private async refreshObservation(): Promise<void> {
-    if (!this.match) return;
-    const token = this.match.controller_tokens.c1;
-    if (!token) throw new Error("c1 tokenı bulunamadı");
-    this.observation = await this.api.observe(this.match.match_id, "c1", token);
+    if (!this.activeMatchId || !this.humanController) return;
+    this.observation = await this.api.observe(
+      this.activeMatchId,
+      this.humanController.colonyId,
+      this.humanController.token,
+    );
     await this.renderer.render(this.observation);
     this.renderStats(this.observation);
   }
@@ -198,7 +243,8 @@ export class BenchmarkWorkbench {
         .map((line) => JSON.parse(line) as ReplaySnapshot);
       if (!frames.length) throw new Error("Replay dosyasında tamamlanmış snapshot yok");
       this.replayFrames = frames;
-      this.match = null;
+      this.activeMatchId = null;
+      this.humanController = null;
       this.matchTerminal = true;
       const range = required<HTMLInputElement>("#replay-range");
       range.max = String(frames.length - 1);
@@ -296,13 +342,11 @@ export class BenchmarkWorkbench {
   private setBusy(busy: boolean): void {
     this.busy = busy;
     document.body.classList.toggle("is-busy", busy);
-    this.enableActions(Boolean(this.match) && !this.matchTerminal && !busy);
+    this.enableActions(Boolean(this.activeMatchId && this.humanController) && !this.matchTerminal && !busy);
   }
 
   private enableActions(enabled: boolean): void {
-    document.querySelectorAll<HTMLButtonElement>("[data-action]").forEach((button) => {
-      button.disabled = !enabled;
-    });
+    setHumanActionControlsEnabled(enabled);
   }
 
   private setConnection(label: string, connected: boolean): void {
