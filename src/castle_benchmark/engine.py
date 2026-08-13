@@ -410,6 +410,20 @@ class SimCore:
             structures[structure_id] = replace(structure, progress=progress, status=status)
             changed = True
             events.append(DomainEvent(self.state.turn, "construction_progress", structure.colony_id, {"structure_id": structure_id, "progress": progress, "status": status.value}))
+            if status == StructureStatus.OPERATIONAL:
+                events.append(
+                    DomainEvent(
+                        self.state.turn,
+                        "construction_completed",
+                        structure.colony_id,
+                        {
+                            "structure_id": structure_id,
+                            "kind": structure.kind.value,
+                            "x": structure.position.x,
+                            "y": structure.position.y,
+                        },
+                    )
+                )
         if changed:
             self.state = replace(self.state, structures=structures)
 
@@ -418,7 +432,14 @@ class SimCore:
             housing = sum(
                 HOUSING_BY_STRUCTURE.get(structure.kind, 0)
                 for structure in self.state.structures.values()
-                if structure.colony_id == colony_id and structure.status == StructureStatus.OPERATIONAL
+                if structure.colony_id == colony_id
+                and structure.status
+                in {
+                    StructureStatus.OPERATIONAL,
+                    StructureStatus.DAMAGED,
+                    StructureStatus.BURNING,
+                    StructureStatus.REPAIRING,
+                }
             )
             known = visible_cells(self.state.world, (colony.spawn,), self.scenario.sight_radius)  # type: ignore[arg-type]
             population = colony.population
@@ -459,6 +480,88 @@ class SimCore:
             elif self.scenario.biome == "desert":
                 loss = min(3, colony.resources.water)
                 self._update_colony(colony_id, resources=colony.resources.apply({"water": -loss}))
+        self._apply_fire(events)
+
+    def _apply_fire(self, events: list[DomainEvent]) -> None:
+        structures = dict(self.state.structures)
+        burning = [
+            structure
+            for structure in sorted(structures.values(), key=lambda item: item.id)
+            if structure.status == StructureStatus.BURNING
+        ]
+        if not burning:
+            candidates = [
+                structure
+                for structure in sorted(structures.values(), key=lambda item: item.id)
+                if structure.status in {StructureStatus.OPERATIONAL, StructureStatus.DAMAGED}
+            ]
+            if not candidates:
+                return
+            target_index = (self.state.seed + self.state.turn) % len(candidates)
+            target = candidates[target_index]
+            structures[target.id] = replace(target, status=StructureStatus.BURNING)
+            self.state = replace(self.state, structures=structures)
+            events.append(
+                DomainEvent(
+                    self.state.turn,
+                    "fire_started",
+                    target.colony_id,
+                    {
+                        "structure_id": target.id,
+                        "x": target.position.x,
+                        "y": target.position.y,
+                    },
+                )
+            )
+            return
+
+        spread_targets: set[str] = set()
+        for source in burning:
+            neighbours = [
+                target
+                for target in sorted(structures.values(), key=lambda item: item.id)
+                if target.status == StructureStatus.OPERATIONAL
+                and target.colony_id == source.colony_id
+                and abs(target.position.x - source.position.x)
+                + abs(target.position.y - source.position.y)
+                == 1
+            ]
+            if neighbours:
+                spread_targets.add(neighbours[0].id)
+            condition = max(0, source.condition - 40)
+            status = StructureStatus.RUINED if condition == 0 else StructureStatus.DAMAGED
+            structures[source.id] = replace(source, condition=condition, status=status)
+            events.append(
+                DomainEvent(
+                    self.state.turn,
+                    "fire_damage",
+                    source.colony_id,
+                    {
+                        "structure_id": source.id,
+                        "condition": condition,
+                        "status": status.value,
+                        "x": source.position.x,
+                        "y": source.position.y,
+                    },
+                )
+            )
+
+        for target_id in sorted(spread_targets):
+            target = structures[target_id]
+            structures[target_id] = replace(target, status=StructureStatus.BURNING)
+            events.append(
+                DomainEvent(
+                    self.state.turn,
+                    "fire_spread",
+                    target.colony_id,
+                    {
+                        "structure_id": target.id,
+                        "x": target.position.x,
+                        "y": target.position.y,
+                    },
+                )
+            )
+        self.state = replace(self.state, structures=structures)
 
     def _expire_offers(self, events: list[DomainEvent]) -> None:
         for offer_id, offer in tuple(self.state.offers.items()):

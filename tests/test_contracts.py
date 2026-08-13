@@ -76,3 +76,20 @@ def test_stale_http_action_has_stable_error_code(service: GameService) -> None:
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "stale_turn"
 
+
+def test_live_report_accumulates_model_usage_and_decision_metrics(service: GameService) -> None:
+    created = service.create_match("basic-survival-v1", seed=91, colony_count=1)
+    token = created.controller_tokens["c1"]
+
+    service.record_usage(token, input_tokens=120, output_tokens=35, latency_ms=480)
+    service.submit_actions(token, turn=0, actions=({"kind": "wait"},))
+    report = service.run_report(created.admin_token)
+
+    assert report["metrics"]["cost"]["c1"] == {
+        "model_calls": 1,
+        "mcp_calls": 1,
+        "input_tokens": 120,
+        "output_tokens": 35,
+        "latency_ms": 480,
+    }
+    assert report["metrics"]["decision_quality"]["c1"]["invalid_actions"] == 0

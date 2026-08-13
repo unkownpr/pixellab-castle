@@ -19,6 +19,8 @@ async def test_mcp_exposes_versioned_benchmark_tools() -> None:
         "benchmark.observe",
         "benchmark.submit_actions",
         "benchmark.match_status",
+        "benchmark.record_usage",
+        "benchmark.run_report",
     }
 
 

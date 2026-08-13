@@ -7,7 +7,16 @@ from castle_benchmark.actions import (
     TradeRespondAction,
     WaitAction,
 )
-from castle_benchmark.domain import MilitaryPosture, RelationStatus
+from dataclasses import replace
+
+from castle_benchmark.domain import (
+    MilitaryPosture,
+    Position,
+    RelationStatus,
+    Structure,
+    StructureKind,
+    StructureStatus,
+)
 from castle_benchmark.engine import SimCore
 from castle_benchmark.scenarios import BASIC_SURVIVAL, SNOW_RECOVERY
 
@@ -107,3 +116,45 @@ def test_seeded_snow_scenario_emits_weather_hazard() -> None:
 
     assert hazard_events
     assert {event.data["biome"] for event in hazard_events} == {"snow"}
+
+
+def test_seeded_hazard_starts_a_visible_structure_fire() -> None:
+    sim = SimCore.create(BASIC_SURVIVAL, seed=37, colony_count=1)
+    hazard_turn = (-sim.state.seed) % 11
+    sim.state = replace(sim.state, turn=hazard_turn)
+
+    result = sim.resolve(all_wait(sim))
+
+    burning = [s for s in result.state.structures.values() if s.status == StructureStatus.BURNING]
+    assert len(burning) == 1
+    event = next(event for event in result.events if event.kind == "fire_started")
+    assert event.data == {
+        "structure_id": burning[0].id,
+        "x": burning[0].position.x,
+        "y": burning[0].position.y,
+    }
+
+
+def test_burning_structure_damages_and_spreads_on_next_hazard() -> None:
+    sim = SimCore.create(BASIC_SURVIVAL, seed=37, colony_count=1)
+    structures = dict(sim.state.structures)
+    headquarters = structures["s1"]
+    structures["s1"] = replace(headquarters, status=StructureStatus.BURNING)
+    structures["s2"] = Structure(
+        id="s2",
+        colony_id="c1",
+        kind=StructureKind.HOUSE,
+        position=Position(headquarters.position.x + 1, headquarters.position.y),
+        status=StructureStatus.OPERATIONAL,
+        progress=3,
+        required_progress=3,
+    )
+    sim.state = replace(sim.state, structures=structures, turn=(-sim.state.seed) % 11)
+
+    result = sim.resolve(all_wait(sim))
+
+    assert result.state.structures["s1"].status == StructureStatus.DAMAGED
+    assert result.state.structures["s1"].condition < 100
+    assert result.state.structures["s2"].status == StructureStatus.BURNING
+    assert any(event.kind == "fire_damage" for event in result.events)
+    assert any(event.kind == "fire_spread" for event in result.events)

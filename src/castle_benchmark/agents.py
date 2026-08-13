@@ -4,7 +4,16 @@ import random
 from dataclasses import dataclass
 from typing import Protocol
 
-from .actions import ActionBatch, BuildAction, DiplomacyAction, GatherAction, RaidAction, WaitAction
+from .actions import (
+    ActionBatch,
+    BuildAction,
+    DiplomacyAction,
+    GatherAction,
+    RaidAction,
+    TradeOfferAction,
+    TradeRespondAction,
+    WaitAction,
+)
 from .domain import Position, StructureKind
 from .observation import Observation
 from .world import derive_seed
@@ -72,12 +81,48 @@ class TraderAgent:
     name: str = "trader"
 
     def decide(self, observation: Observation) -> ActionBatch:
+        resources = observation.colony["resources"]
+        assert isinstance(resources, dict)
+        incoming = [
+            offer
+            for offer in observation.active_offers
+            if offer["target_colony_id"] == observation.colony_id
+        ]
+        if incoming:
+            offer = incoming[0]
+            requested = offer["receive"]
+            assert isinstance(requested, dict)
+            affordable = all(int(resources.get(name, 0)) >= int(amount) for name, amount in requested.items())
+            return ActionBatch(
+                observation.turn,
+                observation.colony_id,
+                (TradeRespondAction(str(offer["id"]), affordable),),
+            )
         unknown = [item for item in observation.known_colonies.values() if not item["contacted"]]
         if unknown:
             return ActionBatch(
                 observation.turn,
                 observation.colony_id,
                 (DiplomacyAction(str(unknown[0]["id"]), "contact", "Trade brings resilience."),),
+            )
+        targets = sorted(observation.known_colonies)
+        outgoing = [
+            offer
+            for offer in observation.active_offers
+            if offer["source_colony_id"] == observation.colony_id
+        ]
+        if targets and not outgoing and observation.turn % 6 == 0 and int(resources["wood"]) >= 2:
+            return ActionBatch(
+                observation.turn,
+                observation.colony_id,
+                (
+                    TradeOfferAction(
+                        targets[0],
+                        give=(("wood", 2),),
+                        receive=(("food", 2),),
+                        message="Timber for provisions.",
+                    ),
+                ),
             )
         return SurvivalistAgent(self.seed).decide(observation)
 
@@ -127,4 +172,3 @@ AGENT_TYPES = {
     "expansionist": ExpansionistAgent,
     "militarist": MilitaristAgent,
 }
-

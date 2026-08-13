@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 from dataclasses import asdict
 
 from mcp.server.fastmcp import FastMCP
@@ -73,8 +74,26 @@ def build_mcp_server(service: GameService | None = None) -> FastMCP:
     def run_report(admin_token: str) -> str:
         """Read the current in-memory match status and latest resolved events as admin."""
         try:
+            return encode(game.run_report(admin_token))
+        except ServiceError as exc:
+            return encode({"error": {"code": exc.code, "message": exc.message}})
+
+    @mcp.tool(name="benchmark.record_usage")
+    def record_usage(
+        controller_token: str,
+        input_tokens: int,
+        output_tokens: int,
+        latency_ms: int,
+    ) -> str:
+        """Record measured cost and latency for one model decision before submitting it."""
+        try:
             return encode(
-                {"status": game.match_status(admin_token), "latest_events": game.last_events(admin_token)}
+                game.record_usage(
+                    controller_token,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                )
             )
         except ServiceError as exc:
             return encode({"error": {"code": exc.code, "message": exc.message}})
@@ -83,7 +102,14 @@ def build_mcp_server(service: GameService | None = None) -> FastMCP:
 
 
 def main() -> None:
-    build_mcp_server().run(transport="streamable-http")
+    parser = argparse.ArgumentParser(prog="castle-benchmark-mcp")
+    parser.add_argument(
+        "--transport",
+        choices=("stdio", "streamable-http"),
+        default="stdio",
+    )
+    args = parser.parse_args()
+    build_mcp_server().run(transport=args.transport)
 
 
 if __name__ == "__main__":

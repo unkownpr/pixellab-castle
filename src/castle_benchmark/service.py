@@ -7,6 +7,7 @@ from typing import Iterable
 
 from .actions import ActionBatch, GameAction
 from .engine import SimCore, TurnResult
+from .metrics import MetricCollector
 from .observation import Observation, project_observation
 from .persistence import action_from_dict
 from .scenarios import OFFICIAL_SCENARIOS, get_scenario
@@ -74,6 +75,8 @@ class LiveMatch:
     admin_token: str
     pending: dict[str, ActionBatch] = field(default_factory=dict)
     last_result: TurnResult | None = None
+    metrics: MetricCollector | None = None
+    usage: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,7 +114,7 @@ class GameService:
         match_id = uuid.uuid4().hex
         tokens = {colony_id: secrets.token_urlsafe(24) for colony_id in sim.state.colonies}
         admin_token = secrets.token_urlsafe(24)
-        match = LiveMatch(match_id, sim, tokens, admin_token)
+        match = LiveMatch(match_id, sim, tokens, admin_token, metrics=MetricCollector.create(sim.state))
         self._matches[match_id] = match
         for colony_id, token in tokens.items():
             self._access[token] = Access(match_id, colony_id, False)
@@ -167,6 +170,8 @@ class GameService:
         batches = tuple(match.pending[colony_id] for colony_id in sorted(match.pending))
         match.pending.clear()
         match.last_result = match.sim.resolve(batches)
+        assert match.metrics is not None
+        match.metrics.record(match.last_result)
         return Submission("resolved", match.sim.state.turn, (), match.last_result)
 
     def match_status(self, token: str) -> dict[str, object]:
@@ -187,3 +192,47 @@ class GameService:
             return ()
         return tuple(asdict(event) for event in match.last_result.events)
 
+    def record_usage(
+        self,
+        token: str,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        latency_ms: int,
+    ) -> dict[str, int]:
+        access, match = self._authorize(token)
+        if access.admin or access.colony_id is None:
+            raise ForbiddenError("admin capabilities cannot record controller usage")
+        if min(input_tokens, output_tokens, latency_ms) < 0:
+            raise ServiceError("usage values must be non-negative")
+        usage = match.usage.setdefault(
+            access.colony_id,
+            {"model_calls": 0, "mcp_calls": 0, "input_tokens": 0, "output_tokens": 0, "latency_ms": 0},
+        )
+        usage["model_calls"] += 1
+        usage["mcp_calls"] += 1
+        usage["input_tokens"] += input_tokens
+        usage["output_tokens"] += output_tokens
+        usage["latency_ms"] += latency_ms
+        return dict(usage)
+
+    def run_report(self, token: str) -> dict[str, object]:
+        access, match = self._authorize(token)
+        if not access.admin:
+            raise ForbiddenError("run reports require an admin capability")
+        assert match.metrics is not None
+        metrics = match.metrics.report(match.sim.state)
+        cost = metrics["cost"]
+        assert isinstance(cost, dict)
+        for colony_id in sorted(match.sim.state.colonies):
+            cost[colony_id] = dict(
+                match.usage.get(
+                    colony_id,
+                    {"model_calls": 0, "mcp_calls": 0, "input_tokens": 0, "output_tokens": 0, "latency_ms": 0},
+                )
+            )
+        return {
+            "status": self.match_status(token),
+            "metrics": metrics,
+            "latest_events": self.last_events(token),
+        }
