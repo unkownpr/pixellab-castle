@@ -1,9 +1,11 @@
 import {
   ApiError,
   BenchmarkApi,
+  type AdminWebSocketMessage,
   type CreateSessionInput,
   type Observation,
   type ScenarioSummary,
+  type SessionCreated,
   type VisibleCell,
 } from "./api";
 import {
@@ -17,6 +19,12 @@ import {
   setHumanActionControlsEnabled,
   type StartedHumanController,
 } from "./lobby";
+import {
+  OperationsController,
+  bindOperationsRoom,
+  currentSourceMessageHandler,
+  renderOperationsRoom,
+} from "./operations";
 
 type ActionKind = "wait" | "gather" | "build" | "policy" | "diplomacy" | "trade" | "raid";
 
@@ -26,9 +34,25 @@ function required<T extends Element>(selector: string): T {
   return element;
 }
 
+class WorkbenchApi extends BenchmarkApi {
+  constructor(private readonly onSessionCreated: (session: SessionCreated) => void) {
+    super();
+  }
+
+  override async createSession(
+    input: CreateSessionInput,
+    orchestratorToken?: string,
+  ): Promise<SessionCreated> {
+    const created = await super.createSession(input, orchestratorToken);
+    this.onSessionCreated(created);
+    return created;
+  }
+}
+
 export class BenchmarkWorkbench {
-  private readonly api = new BenchmarkApi();
+  private readonly api: WorkbenchApi;
   private readonly renderer = new CastleRenderer();
+  private readonly operations: OperationsController;
   private lobby: LobbyController | null = null;
   private activeMatchId: string | null = null;
   private humanController: { readonly colonyId: string; readonly token: string } | null = null;
@@ -37,8 +61,29 @@ export class BenchmarkWorkbench {
   private replayFrames: readonly ReplaySnapshot[] = [];
   private busy = false;
   private matchTerminal = false;
+  private operationsCapability: { readonly matchId: string; readonly token: string } | null = null;
+  private operationsSocket: WebSocket | null = null;
+  private operationsReconnectTimer: number | null = null;
+  private operationsReconnectAttempt = 0;
+  private operationsRefreshVersion = 0;
+
+  constructor() {
+    this.api = new WorkbenchApi((session) => {
+      void this.attachOperations(session.match_id, session.admin_token);
+    });
+    this.operations = new OperationsController({
+      onChange: (controller) => {
+        const app = document.querySelector<HTMLElement>("#app");
+        if (app) renderOperationsRoom(app, controller);
+        this.renderer.focusColony(controller.state.selectedAgentId);
+      },
+    });
+  }
 
   async init(): Promise<void> {
+    const app = required<HTMLElement>("#app");
+    renderOperationsRoom(app, this.operations);
+    bindOperationsRoom(app, this.operations);
     await Promise.all([this.renderer.init(required("#world-host")), this.loadScenarios()]);
     this.lobby = new LobbyController(required("#lobby-root"), this.api, {
       onStarted: (controller) => void this.sessionStarted(controller),
@@ -66,6 +111,9 @@ export class BenchmarkWorkbench {
     });
     required<HTMLButtonElement>("#replay-prev").addEventListener("click", () => void this.stepReplay(-1));
     required<HTMLButtonElement>("#replay-next").addEventListener("click", () => void this.stepReplay(1));
+    document.querySelectorAll<HTMLButtonElement>("[data-world-view]").forEach((button) => {
+      button.addEventListener("click", () => this.changeWorldView(button.dataset.worldView ?? ""));
+    });
   }
 
   private async loadScenarios(): Promise<void> {
@@ -124,6 +172,10 @@ export class BenchmarkWorkbench {
       });
       const token = created.controller_tokens.c1;
       if (!token) throw new Error("Development quick-play human capability is missing");
+      this.lobby?.dispose();
+      this.closeOperationsLive();
+      this.operationsCapability = null;
+      this.operations.reset("Development quick play does not expose the session operations stream.");
       this.activeMatchId = created.match_id;
       this.humanController = { colonyId: "c1", token };
       this.resetRunState();
@@ -144,6 +196,7 @@ export class BenchmarkWorkbench {
       : null;
     this.resetRunState();
     this.replaceLog("Match started. Baselines and turn deadlines are server-owned.");
+    void this.refreshOperations();
     if (this.humanController) {
       try {
         await this.refreshObservation();
@@ -246,6 +299,10 @@ export class BenchmarkWorkbench {
       this.activeMatchId = null;
       this.humanController = null;
       this.matchTerminal = true;
+      this.lobby?.dispose();
+      this.closeOperationsLive();
+      this.operationsCapability = null;
+      this.operations.reset("Replay mode uses imported authoritative frames.");
       const range = required<HTMLInputElement>("#replay-range");
       range.max = String(frames.length - 1);
       range.value = "0";
@@ -279,21 +336,25 @@ export class BenchmarkWorkbench {
   private renderStats(observation: Observation): void {
     required<HTMLOutputElement>("#turn-output").value = `T${observation.turn}`;
     required("#scenario-label").textContent = observation.scenario_id.toUpperCase();
-    const resources = Object.entries(observation.colony.resources)
-      .map(([name, value]) => `<div><span>${this.resourceName(name)}</span><strong>${value}</strong></div>`)
-      .join("");
-    required("#colony-stats").innerHTML = `
-      <div class="population-line"><span>Nüfus</span><strong>${observation.colony.population}<small> / ${observation.colony.housing} konut</small></strong></div>
-      <div class="resource-grid">${resources}</div>`;
-    const survival = Math.min(100, Math.round(
-      ((observation.colony.health.healthy ?? 0) / Math.max(1, observation.colony.population)) * 100,
-    ));
-    required("#score-survival").textContent = String(survival);
-    required("#score-prosperity").textContent = String(
-      Object.values(observation.colony.resources).reduce((sum, value) => sum + value, 0),
-    );
-    required("#score-diplomacy").textContent = String(Object.keys(observation.known_colonies).length);
-    required("#score-resilience").textContent = String(observation.colony.health.healthy ?? 0);
+    const population = document.createElement("div");
+    population.className = "population-line";
+    const populationLabel = document.createElement("span");
+    populationLabel.textContent = "Nüfus";
+    const populationValue = document.createElement("strong");
+    populationValue.textContent = `${observation.colony.population} / ${observation.colony.housing} konut`;
+    population.append(populationLabel, populationValue);
+    const resources = document.createElement("div");
+    resources.className = "resource-grid";
+    for (const [name, value] of Object.entries(observation.colony.resources)) {
+      const row = document.createElement("div");
+      const label = document.createElement("span");
+      label.textContent = this.resourceName(name);
+      const output = document.createElement("strong");
+      output.textContent = String(value);
+      row.append(label, output);
+      resources.append(row);
+    }
+    required("#colony-stats").replaceChildren(population, resources);
   }
 
   private selectCell(cell: VisibleCell): void {
@@ -342,6 +403,12 @@ export class BenchmarkWorkbench {
   private setBusy(busy: boolean): void {
     this.busy = busy;
     document.body.classList.toggle("is-busy", busy);
+    document.body.setAttribute("aria-busy", String(busy));
+    const createButton = document.querySelector<HTMLButtonElement>("#match-form .primary");
+    if (createButton) {
+      if (busy) createButton.dataset.state = "loading";
+      else delete createButton.dataset.state;
+    }
     this.enableActions(Boolean(this.activeMatchId && this.humanController) && !this.matchTerminal && !busy);
   }
 
@@ -352,6 +419,128 @@ export class BenchmarkWorkbench {
   private setConnection(label: string, connected: boolean): void {
     required("#connection-label").textContent = label;
     document.body.classList.toggle("is-offline", !connected);
+    const shape = document.querySelector<HTMLElement>(".run-state .status-shape");
+    if (shape) shape.dataset.statusShape = connected ? "circle" : "ring";
+  }
+
+  private async attachOperations(matchId: string, adminToken: string): Promise<void> {
+    this.closeOperationsLive();
+    const capability = { matchId, token: adminToken };
+    this.operationsCapability = capability;
+    this.operationsReconnectAttempt = 0;
+    this.operations.reset("Sanitized operations snapshot yükleniyor.");
+    try {
+      await this.refreshOperations();
+      if (this.operationsCapability !== capability) return;
+      await this.connectOperationsLive();
+    } catch (error) {
+      if (this.operationsCapability !== capability) return;
+      this.logError(error);
+      this.scheduleOperationsReconnect();
+    }
+  }
+
+  private async refreshOperations(): Promise<void> {
+    const capability = this.operationsCapability;
+    if (!capability) return;
+    const refreshVersion = ++this.operationsRefreshVersion;
+    const snapshot = await this.api.operations(capability.matchId, capability.token);
+    if (this.operationsCapability !== capability || refreshVersion !== this.operationsRefreshVersion) return;
+    this.operations.applySnapshot(snapshot);
+    try {
+      const report = await this.api.report(capability.matchId, capability.token);
+      if (this.operationsCapability === capability && refreshVersion === this.operationsRefreshVersion) {
+        this.operations.setReport(report);
+      }
+    } catch (error) {
+      if (error instanceof ApiError && [404, 409].includes(error.status)) return;
+      throw error;
+    }
+  }
+
+  private async connectOperationsLive(): Promise<void> {
+    const capability = this.operationsCapability;
+    if (!capability) return;
+    this.operations.announce("Operations live feed connecting.");
+    const ticket = await this.api.operationsTicket(capability.matchId, capability.token);
+    if (this.operationsCapability !== capability) return;
+    const socket = this.api.openOperationsSocket(capability.matchId, ticket.websocket_ticket);
+    this.operationsSocket = socket;
+    socket.addEventListener("open", () => {
+      if (this.operationsSocket === socket) {
+        this.operationsReconnectAttempt = 0;
+        this.operations.announce("Operations live feed connected.");
+      }
+    });
+    socket.addEventListener("message", currentSourceMessageHandler(
+      socket,
+      () => this.operationsSocket,
+      (message) => this.handleOperationsMessage(message),
+    ));
+    socket.addEventListener("error", () => {
+      if (this.operationsSocket === socket) socket.close();
+    });
+    socket.addEventListener("close", () => {
+      if (this.operationsSocket !== socket) return;
+      this.operationsSocket = null;
+      this.operations.announce("Operations live feed disconnected; retained data remains visible.");
+      this.scheduleOperationsReconnect();
+    });
+  }
+
+  private handleOperationsMessage(message: MessageEvent): void {
+    let parsed: AdminWebSocketMessage;
+    try {
+      parsed = JSON.parse(String(message.data)) as AdminWebSocketMessage;
+    } catch {
+      return;
+    }
+    const result = this.operations.applyMessage(parsed);
+    if (result === "resync") void this.refreshOperations().catch((error) => this.logError(error));
+    if (parsed.type === "match.completed") {
+      void this.refreshOperations().catch((error) => this.logError(error));
+    }
+  }
+
+  private scheduleOperationsReconnect(): void {
+    if (
+      !this.operationsCapability ||
+      this.operationsReconnectTimer !== null ||
+      this.operationsReconnectAttempt >= 5
+    ) {
+      if (this.operationsCapability && this.operationsReconnectAttempt >= 5) {
+        this.operations.announce("Operations live reconnect limit reached; retained data remains visible.");
+      }
+      return;
+    }
+    const delay = Math.min(1_000 * (2 ** this.operationsReconnectAttempt), 16_000);
+    this.operationsReconnectAttempt += 1;
+    this.operationsReconnectTimer = window.setTimeout(() => {
+      this.operationsReconnectTimer = null;
+      void this.connectOperationsLive().catch((error) => {
+        this.logError(error);
+        this.scheduleOperationsReconnect();
+      });
+    }, delay);
+  }
+
+  private closeOperationsLive(): void {
+    this.operationsRefreshVersion += 1;
+    if (this.operationsReconnectTimer !== null) window.clearTimeout(this.operationsReconnectTimer);
+    this.operationsReconnectTimer = null;
+    const socket = this.operationsSocket;
+    this.operationsSocket = null;
+    socket?.close();
+  }
+
+  private changeWorldView(action: string): void {
+    if (action === "zoom-in") this.renderer.zoomBy(0.15);
+    else if (action === "zoom-out") this.renderer.zoomBy(-0.15);
+    else if (action === "pan-up") this.renderer.panBy(0, -24);
+    else if (action === "pan-down") this.renderer.panBy(0, 24);
+    else if (action === "pan-left") this.renderer.panBy(-24, 0);
+    else if (action === "pan-right") this.renderer.panBy(24, 0);
+    else if (action === "reset") this.renderer.resetView();
   }
 
   private resourceName(name: string): string {

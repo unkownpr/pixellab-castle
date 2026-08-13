@@ -15,9 +15,14 @@ import type {
   VisibleCell,
   VisibleStructure,
 } from "./api";
+import { nextWorldView, type WorldView } from "./operations";
 
 export const TILE_WIDTH = 48;
 export const TILE_HEIGHT = 24;
+
+export function shouldAnimateWorld(reducedMotion: boolean): boolean {
+  return !reducedMotion;
+}
 
 export interface GridPosition {
   readonly x: number;
@@ -177,14 +182,69 @@ const STRUCTURE_KEYS: Readonly<Record<string, readonly string[]>> = {
   watchtower: ["structure.watchtower.operational"],
 };
 
-const COLONY_COLORS = [0xe6a65d, 0x76a6c8, 0xa8bd71, 0xca7d82, 0xb690c5, 0x64b6aa];
+interface RendererVisualTokens {
+  readonly ink: number;
+  readonly accent: number;
+  readonly surfaceMap: number;
+  readonly focus: number;
+  readonly damaged: number;
+  readonly burning: number;
+  readonly colonies: readonly number[];
+  readonly fontBody: string;
+  readonly labelSize: number;
+  readonly labelTracking: number;
+}
+
+function cssToken(name: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (!value) throw new Error(`Eksik renderer tasarım tokenı: ${name}`);
+  return value;
+}
+
+function canvasColor(value: string): number {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("Renderer renk dönüşümü için Canvas 2D gerekli");
+  context.clearRect(0, 0, 1, 1);
+  context.fillStyle = value;
+  context.fillRect(0, 0, 1, 1);
+  const pixels = context.getImageData(0, 0, 1, 1).data;
+  const red = pixels[0] ?? 0;
+  const green = pixels[1] ?? 0;
+  const blue = pixels[2] ?? 0;
+  return (red << 16) | (green << 8) | blue;
+}
+
+function rendererVisualTokens(): RendererVisualTokens {
+  return {
+    ink: canvasColor(cssToken("--color-ink")),
+    accent: canvasColor(cssToken("--color-accent")),
+    surfaceMap: canvasColor(cssToken("--color-surface-map")),
+    focus: canvasColor(cssToken("--color-focus")),
+    damaged: canvasColor(cssToken("--color-structure-damaged")),
+    burning: canvasColor(cssToken("--color-structure-burning")),
+    colonies: Array.from(
+      { length: 6 },
+      (_, index) => canvasColor(cssToken(`--color-colony-${index + 1}`)),
+    ),
+    fontBody: cssToken("--font-body"),
+    labelSize: Number.parseFloat(cssToken("--text-pixi-label")),
+    labelTracking: Number.parseFloat(cssToken("--tracking-pixi-label")),
+  };
+}
 
 export class CastleRenderer {
   private readonly app = new Application();
   private readonly world = new Container();
   private manifest: AssetManifest | null = null;
+  private visualTokens: RendererVisualTokens | null = null;
   private renderVersion = 0;
   private selectHandler: ((cell: VisibleCell) => void) | null = null;
+  private currentObservation: Observation | null = null;
+  private focusedColonyId: string | null = null;
+  private view: WorldView = { scale: 1, x: 0, y: 0 };
 
   async init(host: HTMLElement, manifestUrl = "/manifest.json"): Promise<void> {
     await this.app.init({
@@ -198,6 +258,7 @@ export class CastleRenderer {
     this.app.canvas.setAttribute("aria-label", "İzometrik koloni haritası");
     host.replaceChildren(this.app.canvas);
     this.app.stage.addChild(this.world);
+    this.visualTokens = rendererVisualTokens();
     const response = await fetch(manifestUrl);
     if (!response.ok) throw new Error(`Asset manifest yüklenemedi (${response.status})`);
     this.manifest = await response.json() as AssetManifest;
@@ -207,8 +268,31 @@ export class CastleRenderer {
     this.selectHandler = handler;
   }
 
+  zoomBy(delta: number): void {
+    this.view = nextWorldView(this.view, { kind: "zoom", delta });
+    this.applyViewTransform();
+  }
+
+  panBy(x: number, y: number): void {
+    this.view = nextWorldView(this.view, { kind: "pan", x, y });
+    this.applyViewTransform();
+  }
+
+  resetView(): void {
+    this.view = nextWorldView(this.view, { kind: "reset" });
+    this.applyViewTransform();
+  }
+
+  focusColony(colonyId: string | null): void {
+    if (this.focusedColonyId === colonyId) return;
+    this.focusedColonyId = colonyId;
+    if (this.currentObservation) void this.render(this.currentObservation);
+  }
+
   async render(observation: Observation): Promise<void> {
     if (!this.manifest) throw new Error("Renderer henüz hazır değil");
+    const visualTokens = this.requireVisualTokens();
+    this.currentObservation = observation;
     const version = ++this.renderVersion;
     this.world.removeChildren().forEach((child) => child.destroy({ children: true }));
 
@@ -226,7 +310,10 @@ export class CastleRenderer {
       const position = isoToScreen(cell, origin);
       const key = this.terrainKey(cell);
       const sprite = await this.spriteFor(key, position);
-      if (version !== this.renderVersion) return;
+      if (version !== this.renderVersion) {
+        sprite?.destroy();
+        return;
+      }
       if (sprite) {
         sprite.zIndex = (cell.x + cell.y) * 1000 + cell.x;
         cellLayer.addChild(sprite);
@@ -239,7 +326,7 @@ export class CastleRenderer {
           position.x, position.y + TILE_HEIGHT / 2,
           position.x - TILE_WIDTH / 2, position.y,
         ])
-        .fill({ color: 0xffffff, alpha: 0.001 });
+        .fill({ color: visualTokens.ink, alpha: 0.001 });
       hit.eventMode = "static";
       hit.cursor = "pointer";
       hit.on("pointertap", () => this.selectHandler?.(cell));
@@ -248,7 +335,7 @@ export class CastleRenderer {
       if (cell.resource && cell.resource_amount > 0) {
         const resource = new Graphics()
           .circle(position.x, position.y - 7, 2.5)
-          .fill({ color: 0xf0c36a, alpha: 0.9 });
+          .fill({ color: visualTokens.accent, alpha: 0.9 });
         markerLayer.addChild(resource);
       }
     }));
@@ -256,14 +343,20 @@ export class CastleRenderer {
     await Promise.all(structures.map(async (structure) => {
       const position = isoToScreen(structure, origin);
       const sprite = await this.structureSprite(structure, position);
-      if (version !== this.renderVersion || !sprite) return;
+      if (version !== this.renderVersion || !sprite) {
+        sprite?.destroy();
+        return;
+      }
       const depth = (structure.x + structure.y) * 1000 + structure.x;
       sprite.zIndex = depth;
       structureLayer.addChild(sprite);
       const ownerIndex = Math.max(0, Number(structure.colony_id.replace(/\D/g, "")) - 1);
       const flag = new Graphics()
         .rect(position.x - 14, position.y - 35, 5, 12)
-        .fill({ color: COLONY_COLORS[ownerIndex % COLONY_COLORS.length] ?? COLONY_COLORS[0] });
+        .fill({
+          color: visualTokens.colonies[ownerIndex % visualTokens.colonies.length]
+            ?? visualTokens.colonies[0],
+        });
       flag.zIndex = depth + 0.1;
       structureLayer.addChild(flag);
 
@@ -271,12 +364,16 @@ export class CastleRenderer {
         const ratio = Math.min(1, structure.progress / Math.max(1, structure.required_progress));
         const progress = new Graphics()
           .rect(position.x - 14, position.y + 3, 28, 3)
-          .fill({ color: 0x29231f, alpha: 0.8 })
+          .fill({ color: visualTokens.surfaceMap, alpha: 0.8 })
           .rect(position.x - 14, position.y + 3, 28 * ratio, 3)
-          .fill({ color: 0xe6a65d });
+          .fill({ color: visualTokens.accent });
         progress.zIndex = depth + 0.2;
         structureLayer.addChild(progress);
         const scaffold = await this.spriteFor("effect.construction", position);
+        if (version !== this.renderVersion) {
+          scaffold?.destroy();
+          return;
+        }
         if (scaffold) {
           scaffold.alpha = 0.72;
           scaffold.zIndex = depth + 0.3;
@@ -286,19 +383,39 @@ export class CastleRenderer {
 
       if (structure.status === "burning") {
         const fire = await this.fireSprite(position);
+        if (version !== this.renderVersion) {
+          fire?.destroy();
+          return;
+        }
         if (fire) {
           fire.zIndex = depth + 0.4;
           structureLayer.addChild(fire);
         }
       }
+
+      if (structure.colony_id === this.focusedColonyId) {
+        const focus = new Graphics()
+          .circle(position.x, position.y - 8, 22)
+          .stroke({ color: visualTokens.focus, width: 2, alpha: 0.95 });
+        focus.zIndex = depth + 0.5;
+        structureLayer.addChild(focus);
+      }
     }));
+
+    if (version !== this.renderVersion) return;
 
     const turnLabel = new Text({
       text: `TUR ${String(observation.turn).padStart(2, "0")} · ${observation.colony_id.toUpperCase()}`,
-      style: { fill: 0xe9dfce, fontFamily: "monospace", fontSize: 11, letterSpacing: 1 },
+      style: {
+        fill: visualTokens.ink,
+        fontFamily: visualTokens.fontBody,
+        fontSize: visualTokens.labelSize,
+        letterSpacing: visualTokens.labelTracking,
+      },
     });
     turnLabel.position.set(14, 12);
     this.world.addChild(turnLabel);
+    this.applyViewTransform();
   }
 
   destroy(): void {
@@ -312,6 +429,19 @@ export class CastleRenderer {
       x: this.app.screen.width / 2,
       y: Math.max(72, (this.app.screen.height - maxDiagonal * TILE_HEIGHT / 2) / 2),
     };
+  }
+
+  private requireVisualTokens(): RendererVisualTokens {
+    if (!this.visualTokens) throw new Error("Renderer tasarım tokenları henüz hazır değil");
+    return this.visualTokens;
+  }
+
+  private applyViewTransform(): void {
+    this.world.scale.set(this.view.scale);
+    this.world.position.set(
+      this.view.x + this.app.screen.width * (1 - this.view.scale) / 2,
+      this.view.y + this.app.screen.height * (1 - this.view.scale) / 2,
+    );
   }
 
   private terrainKey(cell: VisibleCell): string {
@@ -335,8 +465,8 @@ export class CastleRenderer {
     const sprite = await this.spriteFor(key, position);
     if (!sprite) return null;
     if (["foundation", "building", "repairing"].includes(structure.status)) sprite.alpha = 0.62;
-    if (structure.status === "damaged") sprite.tint = 0xb99783;
-    if (structure.status === "burning") sprite.tint = 0xd69063;
+    if (structure.status === "damaged") sprite.tint = this.requireVisualTokens().damaged;
+    if (structure.status === "burning") sprite.tint = this.requireVisualTokens().burning;
     return sprite;
   }
 
@@ -361,7 +491,7 @@ export class CastleRenderer {
     sprite.position.set(position.x - anchor[0], position.y - anchor[1]);
     sprite.animationSpeed = 0.14;
     sprite.loop = true;
-    sprite.play();
+    if (shouldAnimateWorld(window.matchMedia("(prefers-reduced-motion: reduce)").matches)) sprite.play();
     return sprite;
   }
 }
