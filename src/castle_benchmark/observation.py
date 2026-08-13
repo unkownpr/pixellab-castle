@@ -1,0 +1,111 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from .domain import MatchState, StructureStatus
+from .world import WorldState
+
+
+@dataclass(frozen=True, slots=True)
+class Observation:
+    schema_version: str
+    scenario_id: str
+    turn: int
+    colony_id: str
+    colony: dict[str, object]
+    visible_cells: tuple[dict[str, object], ...]
+    visible_structures: tuple[dict[str, object], ...]
+    known_colonies: dict[str, dict[str, object]]
+    active_offers: tuple[dict[str, object], ...]
+    valid_action_kinds: tuple[str, ...]
+
+
+def project_observation(state: MatchState, colony_id: str) -> Observation:
+    if colony_id not in state.colonies:
+        raise KeyError(f"unknown colony: {colony_id}")
+    colony = state.colonies[colony_id]
+    world = state.world
+    assert isinstance(world, WorldState)
+    cells = tuple(
+        {
+            "x": position.x,
+            "y": position.y,
+            "biome": cell.biome,
+            "water": cell.water,
+            "buildable": cell.buildable,
+            "movement_cost": cell.movement_cost,
+            "resource": cell.resource,
+            "resource_amount": cell.resource_amount,
+        }
+        for position in sorted(colony.known_cells, key=lambda item: (item.y, item.x))
+        if (cell := world.cells.get(position)) is not None
+    )
+    structures = tuple(
+        {
+            "id": structure.id,
+            "colony_id": structure.colony_id,
+            "kind": structure.kind.value,
+            "status": structure.status.value,
+            "progress": structure.progress,
+            "required_progress": structure.required_progress,
+            "condition": structure.condition,
+            "x": structure.position.x,
+            "y": structure.position.y,
+        }
+        for structure in sorted(state.structures.values(), key=lambda item: item.id)
+        if structure.position in colony.known_cells and structure.status != StructureStatus.RUINED
+    )
+    known_colonies = {
+        other_id: {
+            "id": other_id,
+            "relation": colony.relations[other_id].value,
+            "contacted": colony.relations[other_id].value != "unknown",
+        }
+        for other_id in sorted(colony.relations)
+    }
+    offers = tuple(
+        {
+            "id": offer.id,
+            "source_colony_id": offer.source_colony_id,
+            "target_colony_id": offer.target_colony_id,
+            "give": dict(offer.give),
+            "receive": dict(offer.receive),
+            "expires_turn": offer.expires_turn,
+        }
+        for offer in sorted(state.offers.values(), key=lambda item: item.id)
+        if offer.status == "open" and colony_id in {offer.source_colony_id, offer.target_colony_id}
+    )
+    return Observation(
+        schema_version="1.0",
+        scenario_id=state.scenario_id,
+        turn=state.turn,
+        colony_id=colony_id,
+        colony={
+            "id": colony.id,
+            "population": colony.population,
+            "housing": colony.housing,
+            "health": {
+                "healthy": colony.healthy,
+                "injured": colony.injured,
+                "sick": colony.sick,
+                "hungry": colony.hungry,
+            },
+            "resources": colony.resources.as_dict(),
+            "policies": dict(sorted(colony.policies.items())),
+        },
+        visible_cells=cells,
+        visible_structures=structures,
+        known_colonies=known_colonies,
+        active_offers=offers,
+        valid_action_kinds=(
+            "wait",
+            "gather",
+            "build",
+            "diplomacy",
+            "trade_offer",
+            "trade_respond",
+            "raid",
+            "set_policy",
+        ),
+    )
+
