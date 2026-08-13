@@ -7,8 +7,8 @@ from hashlib import sha256
 from threading import RLock
 from typing import Iterable
 
-from .actions import ActionBatch, GameAction
-from .engine import SimCore, TurnResult
+from .actions import ActionBatch, GameAction, WaitAction
+from .engine import DomainEvent, SimCore, TurnResult
 from .metrics import MetricCollector
 from .observation import Observation, project_observation
 from .persistence import action_from_dict
@@ -16,6 +16,7 @@ from .scenarios import OFFICIAL_SCENARIOS, get_scenario
 from .lobby import (
     PAIRING_MAX_ATTEMPTS,
     PAIRING_TTL_SECONDS,
+    DEFAULT_DEADLINE_SECONDS,
     ControllerIdentity,
     ControllerSlot,
     ControllerType,
@@ -90,6 +91,11 @@ class LiveMatch:
     last_result: TurnResult | None = None
     metrics: MetricCollector | None = None
     usage: dict[str, dict[str, int]] = field(default_factory=dict)
+    deadline_at: float | None = None
+    deadline_seconds: int = DEFAULT_DEADLINE_SECONDS
+    pending_controller_ids: dict[str, str | None] = field(default_factory=dict)
+    operational_events: list[DomainEvent] = field(default_factory=list)
+    tenures: dict[str, list[dict[str, object]]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +143,103 @@ class GameService:
             if slot.colony_id == colony_id:
                 return slot
         raise NotFoundError("colony does not exist")
+
+    @staticmethod
+    def _event_data(slot: ControllerSlot, now: float, **extra: object) -> dict[str, object]:
+        return {
+            "at": now,
+            "controller_id": slot.controller_id,
+            "generation": slot.generation,
+            **extra,
+        }
+
+    def _record_controller_event(
+        self, match: LiveMatch, kind: str, slot: ControllerSlot, now: float, **extra: object
+    ) -> DomainEvent:
+        event = DomainEvent(
+            match.sim.state.turn,
+            kind,
+            slot.colony_id,
+            self._event_data(slot, now, **extra),
+        )
+        match.operational_events.append(event)
+        return event
+
+    def _begin_tenure(self, match: LiveMatch, slot: ControllerSlot, now: float) -> None:
+        if slot.controller_id is None:
+            return
+        history = match.tenures.setdefault(slot.colony_id, [])
+        if (
+            history
+            and history[-1].get("ended_at") is None
+            and history[-1].get("controller_id") == slot.controller_id
+        ):
+            return
+        history.append(
+            {
+                "colony_id": slot.colony_id,
+                "controller_id": slot.controller_id,
+                "controller_type": slot.controller_type.value,
+                "identity": asdict(slot.identity) if slot.identity is not None else None,
+                "generation": slot.generation,
+                "started_at": now,
+                "ended_at": None,
+            }
+        )
+
+    @staticmethod
+    def _end_tenure(match: LiveMatch, colony_id: str, now: float) -> None:
+        history = match.tenures.get(colony_id, [])
+        if history and history[-1].get("ended_at") is None:
+            history[-1]["ended_at"] = now
+
+    @staticmethod
+    def _usage_defaults(include_presence: bool = False) -> dict[str, int]:
+        values = {
+            "model_calls": 0,
+            "mcp_calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "latency_ms": 0,
+        }
+        if include_presence:
+            values.update({"timeouts": 0, "reconnects": 0})
+        return values
+
+    def _resolve_pending(
+        self,
+        match: LiveMatch,
+        session: LobbySession | None,
+        application_events: tuple[DomainEvent, ...] = (),
+        now: float | None = None,
+    ) -> TurnResult:
+        batches = tuple(match.pending[colony_id] for colony_id in sorted(match.pending))
+        match.pending.clear()
+        raw_result = match.sim.resolve(batches)
+        assert match.metrics is not None
+        match.metrics.record(raw_result)
+        result = TurnResult(
+            raw_result.state,
+            application_events + raw_result.events,
+            raw_result.action_results,
+        )
+        match.last_result = result
+        match.pending_controller_ids.clear()
+        if session is not None:
+            if match.sim.state.terminal:
+                session.status = SessionStatus.COMPLETED
+                match.deadline_at = None
+            elif now is not None:
+                match.deadline_at = now + match.deadline_seconds
+            elif match.deadline_at is not None:
+                match.deadline_at += match.deadline_seconds
+            for slot in session.slots:
+                if (
+                    slot.controller_type is ControllerType.EXTERNAL
+                    and slot.presence is PresenceStatus.SUBMITTED
+                ):
+                    slot.presence = PresenceStatus.THINKING
+        return result
 
     def create_session(
         self, orchestrator_token: str, scenario_id: str, seed: int, colony_count: int
@@ -199,6 +302,8 @@ class GameService:
         slot.pairing_expires_at = None
         slot.pairing_consumed = False
         slot.pairing_attempts = 0
+        slot.last_heartbeat_at = None
+        slot.last_heartbeat_turn = None
         slot.presence = (
             PresenceStatus.READY
             if configured_type in (ControllerType.HUMAN, ControllerType.BASELINE)
@@ -216,7 +321,11 @@ class GameService:
     def create_pairing(self, admin_token: str, colony_id: str, now: float) -> PairingGrant:
         with self._lobby_lock:
             session, _ = self._lobby_for_admin(admin_token)
-            if session.status not in (SessionStatus.DRAFT, SessionStatus.LOBBY):
+            if session.status not in (
+                SessionStatus.DRAFT,
+                SessionStatus.LOBBY,
+                SessionStatus.RUNNING,
+            ):
                 raise ConflictError("pairing is unavailable for this session", code="invalid_session_status")
             slot = self._slot(session, colony_id)
             if slot.controller_type is not ControllerType.EXTERNAL:
@@ -242,6 +351,7 @@ class GameService:
                 raise UnauthorizedError("invalid pairing code")
             match_id, colony_id = target
             session = self._lobbies[match_id]
+            match = self._matches[match_id]
             slot = self._slot(session, colony_id)
             if slot.pairing_digest is None or not secrets.compare_digest(slot.pairing_digest, digest):
                 raise UnauthorizedError("invalid pairing code")
@@ -262,7 +372,11 @@ class GameService:
             slot.pairing_consumed = True
             slot.generation += 1
             slot.presence = PresenceStatus.CONNECTED
+            slot.last_heartbeat_at = None
+            slot.last_heartbeat_turn = None
             self._access[controller_token] = Access(match_id, colony_id, False)
+            self._begin_tenure(match, slot, now)
+            self._record_controller_event(match, "controller_claimed", slot, now)
             return PairingGrant(match_id, colony_id, controller_token=controller_token)
 
     def lobby_status(self, admin_token: str, now: float) -> dict[str, object]:
@@ -287,6 +401,8 @@ class GameService:
                 "pairing_expires_at": slot.pairing_expires_at,
                 "pairing_consumed": slot.pairing_consumed,
                 "pairing_attempts": slot.pairing_attempts,
+                "last_heartbeat_at": slot.last_heartbeat_at,
+                "last_heartbeat_turn": slot.last_heartbeat_turn,
             }
 
         return {
@@ -297,6 +413,163 @@ class GameService:
             "status": session.status.value,
             "slots": [serialize(slot) for slot in session.slots],
         }
+
+    def heartbeat(
+        self, controller_token: str, turn: int, status: PresenceStatus | str, now: float
+    ) -> None:
+        """Record controller-owned presence without making wall time part of SimCore."""
+        access, match = self._authorize(controller_token)
+        if access.admin or access.colony_id is None:
+            raise ForbiddenError("admin capabilities cannot send controller heartbeats")
+        session = self._lobbies.get(access.match_id)
+        if session is None:
+            raise ConflictError("session_not_running", code="session_not_running")
+        if turn != match.sim.state.turn:
+            raise ConflictError("stale_turn", code="stale_turn")
+        try:
+            presence = PresenceStatus(status)
+        except ValueError as exc:
+            raise ServiceError("unknown controller presence") from exc
+        if presence not in {
+            PresenceStatus.CONNECTED,
+            PresenceStatus.THINKING,
+            PresenceStatus.SUBMITTED,
+            PresenceStatus.DISCONNECTED,
+        }:
+            raise ServiceError("invalid heartbeat presence")
+        slot = self._slot(session, access.colony_id)
+        if slot.controller_id is None:
+            raise UnauthorizedError("controller is no longer assigned")
+        was_disconnected = slot.presence in {PresenceStatus.DISCONNECTED, PresenceStatus.TIMED_OUT}
+        slot.last_heartbeat_at = now
+        slot.last_heartbeat_turn = turn
+        slot.presence = presence
+        if presence is PresenceStatus.DISCONNECTED:
+            self._record_controller_event(match, "controller_disconnected", slot, now)
+        elif was_disconnected:
+            assert match.metrics is not None
+            match.metrics.record_reconnect(slot.colony_id)
+            self._record_controller_event(match, "controller_connected", slot, now, reconnect=True)
+        elif slot.last_heartbeat_at is not None:
+            self._record_controller_event(match, "controller_connected", slot, now)
+
+    def start_match(self, admin_token: str, now: float) -> LobbySession:
+        session, match = self._lobby_for_admin(admin_token)
+        if session.status not in {SessionStatus.DRAFT, SessionStatus.LOBBY}:
+            raise ConflictError("invalid_session_status", code="invalid_session_status")
+        unready = [
+            slot.colony_id
+            for slot in session.slots
+            if not (
+                slot.controller_type in {ControllerType.HUMAN, ControllerType.BASELINE}
+                or (
+                    slot.controller_type is ControllerType.EXTERNAL
+                    and slot.controller_id is not None
+                    and slot.last_heartbeat_at is not None
+                    and slot.presence is not PresenceStatus.DISCONNECTED
+                )
+            )
+        ]
+        if unready:
+            raise ConflictError("session_not_ready", code="session_not_ready")
+        session.status = SessionStatus.RUNNING
+        match.deadline_at = now + match.deadline_seconds
+        for slot in session.slots:
+            self._begin_tenure(match, slot, now)
+            if slot.controller_type is ControllerType.EXTERNAL:
+                slot.presence = PresenceStatus.THINKING
+        return session
+
+    def close_deadline(self, admin_token: str, now: float) -> TurnResult:
+        session, match = self._lobby_for_admin(admin_token)
+        if session.status is not SessionStatus.RUNNING:
+            raise ConflictError("session_not_running", code="session_not_running")
+        if match.deadline_at is None or now < match.deadline_at:
+            raise ConflictError("deadline_not_reached", code="deadline_not_reached")
+        application_events: list[DomainEvent] = []
+        for colony_id in sorted(match.sim.state.colonies):
+            if colony_id in match.pending:
+                continue
+            slot = self._slot(session, colony_id)
+            match.pending[colony_id] = ActionBatch(
+                match.sim.state.turn, colony_id, (WaitAction(),)
+            )
+            match.pending_controller_ids[colony_id] = slot.controller_id
+            if slot.controller_type is ControllerType.EXTERNAL:
+                slot.presence = PresenceStatus.TIMED_OUT
+                assert match.metrics is not None
+                match.metrics.record_timeout(colony_id)
+                application_events.append(
+                    self._record_controller_event(match, "controller_timed_out", slot, now)
+                )
+        return self._resolve_pending(match, session, tuple(application_events), now)
+
+    def replace_controller(
+        self,
+        admin_token: str,
+        colony_id: str,
+        replacement: ControllerType | str,
+        now: float,
+    ) -> ControllerSlot:
+        """End the current tenure, revoke its capability, and install a takeover slot."""
+        session, match = self._lobby_for_admin(admin_token)
+        if session.status not in {SessionStatus.LOBBY, SessionStatus.RUNNING}:
+            raise ConflictError("invalid_session_status", code="invalid_session_status")
+        try:
+            replacement_type = ControllerType(replacement)
+        except ValueError as exc:
+            raise ServiceError("unknown controller type") from exc
+        slot = self._slot(session, colony_id)
+        self._end_tenure(match, colony_id, now)
+        for token, access in tuple(self._access.items()):
+            if not access.admin and access.match_id == match.id and access.colony_id == colony_id:
+                del self._access[token]
+        slot.generation += 1
+        slot.controller_type = replacement_type
+        slot.baseline_kind = None
+        slot.identity = None
+        slot.capability_digest = None
+        slot.pairing_digest = None
+        slot.pairing_expires_at = None
+        slot.pairing_consumed = False
+        slot.pairing_attempts = 0
+        slot.last_heartbeat_at = None
+        slot.last_heartbeat_turn = None
+        slot.controller_id = (
+            uuid.uuid4().hex if replacement_type is not ControllerType.EXTERNAL else None
+        )
+        slot.presence = (
+            PresenceStatus.TAKEN_OVER
+            if replacement_type in {ControllerType.HUMAN, ControllerType.BASELINE}
+            else PresenceStatus.UNASSIGNED
+        )
+        self._begin_tenure(match, slot, now)
+        self._record_controller_event(
+            match, "controller_replaced", slot, now, replacement_type=replacement_type.value
+        )
+        return slot
+
+    def operations_snapshot(self, admin_token: str, now: float) -> dict[str, object]:
+        session, match = self._lobby_for_admin(admin_token)
+        snapshot = self.lobby_status(admin_token, now)
+        snapshot.update(
+            {
+                "turn": match.sim.state.turn,
+                "deadline_at": match.deadline_at,
+                "pending_colonies": tuple(sorted(match.pending)),
+                "events": [
+                    {
+                        "turn": event.turn,
+                        "kind": event.kind,
+                        "colony_id": event.colony_id,
+                        "data": event.data,
+                    }
+                    for event in match.operational_events
+                ],
+                "tenures": match.tenures,
+            }
+        )
+        return snapshot
 
     def list_scenarios(self) -> tuple[dict[str, object], ...]:
         return tuple(
@@ -373,15 +646,16 @@ class GameService:
         except (KeyError, TypeError, ValueError) as exc:
             raise InvalidActionError(str(exc)) from exc
         match.pending[access.colony_id] = batch
+        session = self._lobbies.get(access.match_id)
+        if session is not None:
+            slot = self._slot(session, access.colony_id)
+            slot.presence = PresenceStatus.SUBMITTED
+            match.pending_controller_ids[access.colony_id] = slot.controller_id
         waiting = tuple(sorted(set(match.sim.state.colonies) - set(match.pending)))
         if waiting:
             return Submission("pending", match.sim.state.turn, waiting)
-        batches = tuple(match.pending[colony_id] for colony_id in sorted(match.pending))
-        match.pending.clear()
-        match.last_result = match.sim.resolve(batches)
-        assert match.metrics is not None
-        match.metrics.record(match.last_result)
-        return Submission("resolved", match.sim.state.turn, (), match.last_result)
+        result = self._resolve_pending(match, session)
+        return Submission("resolved", match.sim.state.turn, (), result)
 
     def match_status(self, token: str) -> dict[str, object]:
         access, match = self._authorize(token)
@@ -416,7 +690,7 @@ class GameService:
             raise ServiceError("usage values must be non-negative")
         usage = match.usage.setdefault(
             access.colony_id,
-            {"model_calls": 0, "mcp_calls": 0, "input_tokens": 0, "output_tokens": 0, "latency_ms": 0},
+            self._usage_defaults(access.match_id in self._lobbies),
         )
         usage["model_calls"] += 1
         usage["input_tokens"] += input_tokens
@@ -430,7 +704,7 @@ class GameService:
             return
         usage = match.usage.setdefault(
             access.colony_id,
-            {"model_calls": 0, "mcp_calls": 0, "input_tokens": 0, "output_tokens": 0, "latency_ms": 0},
+            self._usage_defaults(access.match_id in self._lobbies),
         )
         usage["mcp_calls"] += 1
 
@@ -442,13 +716,38 @@ class GameService:
         metrics = match.metrics.report(match.sim.state)
         cost = metrics["cost"]
         assert isinstance(cost, dict)
+        session = self._lobbies.get(access.match_id)
         for colony_id in sorted(match.sim.state.colonies):
-            cost[colony_id] = dict(
-                match.usage.get(
-                    colony_id,
-                    {"model_calls": 0, "mcp_calls": 0, "input_tokens": 0, "output_tokens": 0, "latency_ms": 0},
-                )
-            )
+            usage = dict(match.usage.get(colony_id, self._usage_defaults(session is not None)))
+            if session is not None:
+                usage["timeouts"] = match.metrics.timeouts.get(colony_id, 0)
+                usage["reconnects"] = match.metrics.reconnects.get(colony_id, 0)
+            cost[colony_id] = usage
+        if session is not None:
+            metrics["presence"] = {
+                "timeouts": {
+                    colony_id: match.metrics.timeouts.get(colony_id, 0)
+                    for colony_id in sorted(match.sim.state.colonies)
+                },
+                "reconnects": {
+                    colony_id: match.metrics.reconnects.get(colony_id, 0)
+                    for colony_id in sorted(match.sim.state.colonies)
+                },
+                "tenures": match.tenures,
+            }
+            metrics["server_measured"] = {
+                "mcp_calls": {
+                    colony_id: cost[colony_id]["mcp_calls"]
+                    for colony_id in sorted(match.sim.state.colonies)
+                }
+            }
+            metrics["adapter_reported_model_usage"] = {
+                colony_id: {
+                    key: cost[colony_id][key]
+                    for key in ("model_calls", "input_tokens", "output_tokens", "latency_ms")
+                }
+                for colony_id in sorted(match.sim.state.colonies)
+            }
         return {
             "status": self.match_status(token),
             "metrics": metrics,

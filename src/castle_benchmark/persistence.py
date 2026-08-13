@@ -166,6 +166,7 @@ class ArtifactWriter:
         seed: int,
         colony_count: int,
         controller_names: dict[str, str],
+        controller_tenures: list[dict[str, object]] | None = None,
     ) -> ArtifactWriter:
         run_dir.mkdir(parents=True, exist_ok=False)
         writer = cls(
@@ -182,16 +183,23 @@ class ArtifactWriter:
             "seed": seed,
             "colony_count": colony_count,
             "controllers": controller_names,
+            "controller_tenures": controller_tenures or [],
             "dependency_lock_hashes": _dependency_lock_hashes(),
             "seat_rotation": 0,
         }
         writer.metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
         return writer
 
-    def write_turn(self, batches: Iterable[ActionBatch], result: TurnResult) -> None:
+    def write_turn(
+        self,
+        batches: Iterable[ActionBatch],
+        result: TurnResult,
+        action_controller_ids: dict[str, str | None] | None = None,
+    ) -> None:
         record = {
             "turn": result.state.turn - 1,
             "batches": [batch_to_dict(batch) for batch in batches],
+            "action_controller_ids": action_controller_ids or {},
             "events": [
                 {
                     "turn": event.turn,

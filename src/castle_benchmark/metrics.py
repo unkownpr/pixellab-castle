@@ -13,6 +13,8 @@ class MetricCollector:
     raids: dict[str, int] = field(default_factory=dict)
     trades: dict[str, int] = field(default_factory=dict)
     peak_population: dict[str, int] = field(default_factory=dict)
+    timeouts: dict[str, int] = field(default_factory=dict)
+    reconnects: dict[str, int] = field(default_factory=dict)
 
     @classmethod
     def create(cls, state: MatchState) -> MetricCollector:
@@ -34,6 +36,12 @@ class MetricCollector:
             self.peak_population[colony_id] = max(
                 self.peak_population.get(colony_id, 0), colony.population
             )
+
+    def record_timeout(self, colony_id: str) -> None:
+        self.timeouts[colony_id] = self.timeouts.get(colony_id, 0) + 1
+
+    def record_reconnect(self, colony_id: str) -> None:
+        self.reconnects[colony_id] = self.reconnects.get(colony_id, 0) + 1
 
     def report(self, state: MatchState) -> dict[str, object]:
         colony_ids = sorted(state.colonies)
@@ -65,4 +73,3 @@ class MetricCollector:
                 for colony_id in colony_ids
             },
         }
-

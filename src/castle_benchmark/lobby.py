@@ -7,6 +7,7 @@ from enum import Enum
 
 PAIRING_TTL_SECONDS = 600
 PAIRING_MAX_ATTEMPTS = 5
+DEFAULT_DEADLINE_SECONDS = 30
 
 
 _ADMIN_TOKEN_RESOLVERS: dict[str, Callable[[], str]] = {}
@@ -79,6 +80,8 @@ class ControllerSlot:
     presence: PresenceStatus = PresenceStatus.UNASSIGNED
     baseline_kind: str | None = None
     pairing_attempts: int = 0
+    last_heartbeat_at: float | None = None
+    last_heartbeat_turn: int | None = None
 
 
 @dataclass(slots=True)
