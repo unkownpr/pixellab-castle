@@ -8,6 +8,7 @@ import secrets
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict
+from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import ValidationError
@@ -18,12 +19,50 @@ from .schemas import (
     SCHEMA_VERSION,
     ControllerIdentityRequest,
     CreateSessionRequest,
+    ServerInvocationTelemetryResponse,
+    project_lobby_snapshot,
+    project_match_status,
+    project_run_report,
 )
 from .service import GameService, ServiceError
 
 
 class SecureFastMCP(FastMCP):
     """FastMCP runner that leaves forwarded-peer trust to the explicit adapter policy."""
+
+    def __init__(
+        self,
+        *args: object,
+        invocation_meter: Callable[[str, dict[str, Any]], None],
+        configured_transport: str,
+        **kwargs: object,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._invocation_meter = invocation_meter
+        self._configured_transport = configured_transport
+
+    def _assert_transport(self, transport: str) -> None:
+        if transport != self._configured_transport:
+            raise ValueError("MCP server transport does not match its registered tool surface")
+
+    def run(self, transport: str = "stdio", mount_path: str | None = None) -> None:
+        self._assert_transport(transport)
+        return super().run(transport=transport, mount_path=mount_path)  # type: ignore[arg-type]
+
+    def streamable_http_app(self) -> object:
+        self._assert_transport("streamable-http")
+        return super().streamable_http_app()
+
+    def sse_app(self, mount_path: str | None = None) -> object:
+        self._assert_transport("sse")
+        return super().sse_app(mount_path)
+
+    async def call_tool(
+        self, name: str, arguments: dict[str, Any]
+    ) -> object:
+        if self._tool_manager.get_tool(name) is not None:
+            self._invocation_meter(name, arguments)
+        return await super().call_tool(name, arguments)
 
     async def run_streamable_http_async(self) -> None:
         import uvicorn
@@ -63,6 +102,7 @@ def build_mcp_server(
     service: GameService | None = None,
     orchestrator_token: str | None = None,
     *,
+    transport: str = "stdio",
     trusted_proxies: Sequence[str] = (),
     clock: Callable[[], float] = time.time,
 ) -> FastMCP:
@@ -70,8 +110,17 @@ def build_mcp_server(
     required_orchestrator_token = (
         orchestrator_token or os.environ.get("CASTLE_BENCHMARK_ORCHESTRATOR_TOKEN")
     )
+    def meter_invocation(name: str, arguments: dict[str, Any]) -> None:
+        """Measure every dispatch before FastMCP validates or executes its wrapper."""
+        capability = arguments.get("controller_token") or arguments.get("admin_token")
+        game.record_mcp_invocation(
+            name, capability if isinstance(capability, str) else None
+        )
+
     mcp = SecureFastMCP(
         "PixelLab Castle Benchmark",
+        invocation_meter=meter_invocation,
+        configured_transport=transport,
         instructions=(
             "Control one survival colony through structured observations and simultaneous action turns. "
             "Never infer hidden opponent state. Keep every capability private."
@@ -114,13 +163,6 @@ def build_mcp_server(
             }
         )
 
-    def meter(capability: str) -> None:
-        """Count a valid scoped wrapper call without changing its eventual safe error."""
-        try:
-            game.record_mcp_call(capability)
-        except ServiceError:
-            pass
-
     def mcp_peer(context: Context) -> str:
         return resolve_mcp_peer(context, trusted_proxies)
 
@@ -128,6 +170,25 @@ def build_mcp_server(
     def list_scenarios() -> str:
         """List deterministic official benchmark scenarios."""
         return encode(game.list_scenarios())
+
+    @mcp.tool(name="benchmark.server_telemetry")
+    def server_telemetry(orchestrator_token: str) -> str:
+        """Read process-wide MCP dispatch totals with the orchestrator capability."""
+        if too_large := payload_error({"orchestrator_token": orchestrator_token}):
+            return too_large
+        if not authorize_orchestrator(orchestrator_token):
+            return encode(
+                {
+                    "error": {
+                        "code": "unauthorized",
+                        "message": "orchestrator capability required",
+                    }
+                }
+            )
+        projected = ServerInvocationTelemetryResponse.model_validate(
+            versioned(game.server_mcp_telemetry())
+        )
+        return encode(projected.model_dump(mode="json"))
 
     @mcp.tool(name="benchmark.create_session")
     def create_session(
@@ -178,6 +239,7 @@ def build_mcp_server(
                     for slot in request.slots
                 ),
             )
+            game.attribute_mcp_invocation(session.match_id, "benchmark.create_session")
             return encode(
                 versioned(
                     {
@@ -191,7 +253,6 @@ def build_mcp_server(
         except (ServiceError, ValidationError, ValueError) as exc:
             return error(exc)
 
-    @mcp.tool(name="benchmark.create_match")
     def create_match(
         orchestrator_token: str,
         scenario_id: str = "basic-survival-v1",
@@ -219,6 +280,7 @@ def build_mcp_server(
                     }
                 )
             created = game.create_match(scenario_id, seed, colony_count)
+            game.attribute_mcp_invocation(created.match_id, "benchmark.create_match")
             return encode(
                 versioned(
                     {
@@ -232,11 +294,9 @@ def build_mcp_server(
         except ServiceError as exc:
             return error(exc)
 
-    @mcp.tool(name="benchmark.join_match")
     def join_match(admin_token: str, colony_id: str) -> str:
         """Provision one legacy local colony capability from an admin capability."""
         try:
-            meter(admin_token)
             if too_large := payload_error(
                 {"admin_token": admin_token, "colony_id": colony_id}
             ):
@@ -252,11 +312,14 @@ def build_mcp_server(
         except ServiceError as exc:
             return error(exc)
 
+    if transport == "stdio":
+        mcp.tool(name="benchmark.create_match")(create_match)
+        mcp.tool(name="benchmark.join_match")(join_match)
+
     @mcp.tool(name="benchmark.create_pairing")
     def create_pairing(admin_token: str, colony_id: str) -> str:
         """Mint one expiring, single-use pairing code for an external slot."""
         try:
-            meter(admin_token)
             if too_large := payload_error(
                 {"admin_token": admin_token, "colony_id": colony_id}
             ):
@@ -299,6 +362,9 @@ def build_mcp_server(
             except ServiceError:
                 raise
             game.clear_pairing_rate(peer, pairing_code)
+            game.attribute_mcp_invocation(
+                str(claimed["match_id"]), "benchmark.claim_slot"
+            )
             return encode(versioned(claimed))
         except (ServiceError, ValidationError, ValueError) as exc:
             return error(exc)
@@ -307,15 +373,19 @@ def build_mcp_server(
     def heartbeat(controller_token: str, turn: int, status: str) -> str:
         """Record one controller presence heartbeat for the authoritative turn."""
         try:
-            meter(controller_token)
             if too_large := payload_error(
                 {"controller_token": controller_token, "turn": turn, "status": status}
             ):
                 return too_large
-            game.heartbeat(controller_token, turn, status, clock())
-            match_id = game.match_status(controller_token)["match_id"]
+            receipt = game.heartbeat(controller_token, turn, status, clock())
             return encode(
-                versioned({"match_id": match_id, "turn": turn, "status": status})
+                versioned(
+                    {
+                        "match_id": receipt.match_id,
+                        "turn": receipt.turn,
+                        "status": receipt.status,
+                    }
+                )
             )
         except ServiceError as exc:
             return error(exc)
@@ -324,7 +394,6 @@ def build_mcp_server(
     def start_match(admin_token: str) -> str:
         """Start a ready lobby using its admin capability."""
         try:
-            meter(admin_token)
             if too_large := payload_error({"admin_token": admin_token}):
                 return too_large
             session = game.start_match(admin_token, clock())
@@ -343,7 +412,6 @@ def build_mcp_server(
     ) -> str:
         """Revoke a slot controller and install an explicit replacement type."""
         try:
-            meter(admin_token)
             if too_large := payload_error(
                 {
                     "admin_token": admin_token,
@@ -372,18 +440,17 @@ def build_mcp_server(
     def lobby_status(admin_token: str) -> str:
         """Read the sanitized lobby snapshot without any capability material."""
         try:
-            meter(admin_token)
             if too_large := payload_error({"admin_token": admin_token}):
                 return too_large
-            return encode(versioned(game.lobby_status(admin_token, clock())))
-        except ServiceError as exc:
+            projected = project_lobby_snapshot(game.lobby_status(admin_token, clock()))
+            return encode(projected.model_dump(mode="json"))
+        except (ServiceError, ValidationError, ValueError) as exc:
             return error(exc)
 
     @mcp.tool(name="benchmark.observe")
     def observe(controller_token: str) -> str:
         """Get the fog-limited immutable observation for your colony's current turn."""
         try:
-            meter(controller_token)
             if too_large := payload_error({"controller_token": controller_token}):
                 return too_large
             return encode(versioned(asdict(game.observe(controller_token))))
@@ -396,7 +463,6 @@ def build_mcp_server(
     ) -> str:
         """Submit one structured action batch; resolution waits for every controller."""
         try:
-            meter(controller_token)
             if too_large := payload_error(
                 {"controller_token": controller_token, "turn": turn, "actions": actions}
             ):
@@ -408,9 +474,7 @@ def build_mcp_server(
                         "status": submission.status,
                         "turn": submission.turn,
                         "waiting_for": submission.waiting_for,
-                        "events": game.last_events(controller_token)
-                        if submission.status == "resolved"
-                        else (),
+                        "events": tuple(asdict(event) for event in submission.events),
                     }
                 )
             )
@@ -421,22 +485,23 @@ def build_mcp_server(
     def match_status(controller_token: str) -> str:
         """Read turn, terminal condition, and barrier status for your match."""
         try:
-            meter(controller_token)
             if too_large := payload_error({"controller_token": controller_token}):
                 return too_large
-            return encode(versioned(game.match_status(controller_token)))
-        except ServiceError as exc:
+            projected = project_match_status(game.match_status(controller_token))
+            return encode(projected.model_dump(mode="json"))
+        except (ServiceError, ValidationError, ValueError) as exc:
             return error(exc)
 
     @mcp.tool(name="benchmark.run_report")
     def run_report(admin_token: str) -> str:
         """Read the sanitized run report using an admin capability."""
         try:
-            meter(admin_token)
             if too_large := payload_error({"admin_token": admin_token}):
                 return too_large
-            return encode(versioned(game.run_report(admin_token)))
-        except ServiceError as exc:
+            payload = game.run_report(admin_token)
+            projected = project_run_report(payload)
+            return encode(projected.model_dump(mode="json"))
+        except (ServiceError, ValidationError, TypeError, ValueError) as exc:
             return error(exc)
 
     @mcp.tool(name="benchmark.record_usage")
@@ -448,7 +513,6 @@ def build_mcp_server(
     ) -> str:
         """Record adapter-reported provider usage separately from server MCP calls."""
         try:
-            meter(controller_token)
             if too_large := payload_error(
                 {
                     "controller_token": controller_token,
@@ -488,7 +552,10 @@ def main() -> None:
         help="explicit proxy IP/CIDR allowed to supply X-Forwarded-For",
     )
     args = parser.parse_args()
-    build_mcp_server(trusted_proxies=tuple(args.trusted_proxy)).run(
+    build_mcp_server(
+        transport=args.transport,
+        trusted_proxies=tuple(args.trusted_proxy),
+    ).run(
         transport=args.transport
     )
 

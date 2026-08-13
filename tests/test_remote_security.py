@@ -144,6 +144,50 @@ def test_actual_serve_cli_rejects_unsafe_remote_before_uvicorn(
     assert called is False
 
 
+def test_actual_serve_cli_reload_uses_importable_app_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catches Uvicorn reload receiving a live app object and refusing startup."""
+    import uvicorn
+
+    captured: dict[str, object] = {}
+
+    def capture_run(app: object, **kwargs: object) -> None:
+        captured["app"] = app
+        captured.update(kwargs)
+
+    monkeypatch.setattr(uvicorn, "run", capture_run)
+    monkeypatch.setattr(sys, "argv", ["castle-benchmark", "serve", "--reload"])
+
+    cli.main()
+
+    assert captured["app"] == "castle_benchmark.cli:create_serve_app"
+    assert captured["factory"] is True
+    assert captured["reload"] is True
+    assert captured["proxy_headers"] is False
+
+
+def test_reload_factory_reconstructs_remote_origin_and_route_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catches reload workers losing the validated remote security configuration."""
+    monkeypatch.setenv("CASTLE_BENCHMARK_ORCHESTRATOR_TOKEN", ORCHESTRATOR)
+    monkeypatch.setenv("CASTLE_BENCHMARK_SERVE_ALLOWED_ORIGINS", '["https://ops.example"]')
+    monkeypatch.setenv("CASTLE_BENCHMARK_SERVE_TRUSTED_PROXIES", '["10.0.0.0/8"]')
+    monkeypatch.setenv("CASTLE_BENCHMARK_SERVE_REMOTE", "1")
+
+    app = cli.create_serve_app()
+    paths = {route.path for route in app.routes}  # type: ignore[attr-defined]
+    cors = next(
+        middleware
+        for middleware in app.user_middleware  # type: ignore[attr-defined]
+        if middleware.cls.__name__ == "CORSMiddleware"
+    )
+
+    assert "/api/matches" not in paths
+    assert cors.kwargs["allow_origins"] == ["https://ops.example"]
+
+
 def test_http_rejects_oversized_identity_with_stable_safe_error() -> None:
     """Catches unbounded controller labels or validation internals crossing the HTTP boundary."""
     service = GameService()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 import uuid
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from hashlib import sha256
 from threading import RLock
@@ -81,6 +82,30 @@ class Submission:
     turn: int
     waiting_for: tuple[str, ...] = ()
     result: TurnResult | None = None
+    events: tuple[DomainEvent, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class HeartbeatReceipt:
+    match_id: str
+    turn: int
+    status: str
+
+
+@dataclass(frozen=True, slots=True)
+class SlotMutationReceipt:
+    match_id: str
+    colony_id: str
+    controller_type: ControllerType
+    controller_id: str | None
+    presence: PresenceStatus
+    baseline_kind: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class SessionMutationReceipt:
+    match_id: str
+    status: SessionStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +134,7 @@ class LiveMatch:
     tenure_usage: dict[str, dict[str, dict[str, int]]] = field(default_factory=dict)
     resolved_turns: list[ResolvedTurn] = field(default_factory=list)
     persisted_turn_count: int = 0
+    mcp_invocations_by_tool: dict[str, int] = field(default_factory=dict)
     turn_lock: object = field(default_factory=RLock)
 
 
@@ -127,6 +153,7 @@ class GameService:
         self._pairings: dict[str, tuple[str, str]] = {}
         self._pairing_code_attempts: dict[str, tuple[int, float]] = {}
         self._pairing_peer_attempts: dict[str, tuple[int, float]] = {}
+        self._server_mcp_invocations_by_tool: dict[str, int] = {}
         self._lobby_lock = RLock()
 
     @staticmethod
@@ -490,7 +517,7 @@ class GameService:
         colony_id: str,
         controller_type: ControllerType | str,
         baseline_kind: str | None = None,
-    ) -> ControllerSlot:
+    ) -> SlotMutationReceipt:
         with self._lobby_lock:
             return self._configure_slot(
                 admin_token, colony_id, controller_type, baseline_kind
@@ -502,7 +529,7 @@ class GameService:
         colony_id: str,
         controller_type: ControllerType | str,
         baseline_kind: str | None = None,
-    ) -> ControllerSlot:
+    ) -> SlotMutationReceipt:
         session, match = self._lobby_for_admin(admin_token)
         if session.status is not SessionStatus.DRAFT:
             raise ForbiddenError("lobby configuration is frozen")
@@ -536,7 +563,14 @@ class GameService:
             else PresenceStatus.UNASSIGNED
         )
         self._record_presence_change(match, slot, previous_presence, None)
-        return slot
+        return SlotMutationReceipt(
+            match.id,
+            slot.colony_id,
+            slot.controller_type,
+            slot.controller_id,
+            slot.presence,
+            slot.baseline_kind,
+        )
 
     def open_lobby(self, admin_token: str) -> LobbySession:
         with self._lobby_lock:
@@ -694,7 +728,7 @@ class GameService:
 
     def heartbeat(
         self, controller_token: str, turn: int, status: PresenceStatus | str, now: float
-    ) -> None:
+    ) -> HeartbeatReceipt:
         """Record controller-owned presence without making wall time part of SimCore."""
         with self._lobby_lock:
             access, match = self._authorize(controller_token)
@@ -763,12 +797,14 @@ class GameService:
                 self._record_controller_event(
                     match, "controller_connected", slot, now, reconnect=True
                 )
+            return HeartbeatReceipt(match.id, turn, presence.value)
 
-    def start_match(self, admin_token: str, now: float) -> LobbySession:
+    def start_match(self, admin_token: str, now: float) -> SessionMutationReceipt:
         with self._lobby_lock:
             _, match = self._lobby_for_admin(admin_token)
             with match.turn_lock:
-                return self._start_match(admin_token, now)
+                session = self._start_match(admin_token, now)
+                return SessionMutationReceipt(session.match_id, session.status)
 
     def _start_match(self, admin_token: str, now: float) -> LobbySession:
         session, match = self._lobby_for_admin(admin_token)
@@ -850,7 +886,7 @@ class GameService:
         replacement: ControllerType | str,
         now: float,
         baseline_kind: str | None = None,
-    ) -> ControllerSlot:
+    ) -> SlotMutationReceipt:
         """Serialize replacement against slot claims and capability projection."""
         with self._lobby_lock:
             return self._replace_controller(
@@ -864,7 +900,7 @@ class GameService:
         replacement: ControllerType | str,
         now: float,
         baseline_kind: str | None = None,
-    ) -> ControllerSlot:
+    ) -> SlotMutationReceipt:
         """End the current tenure, revoke its capability, and install a takeover slot."""
         _, authorized_match = self._authorize(admin_token)
         with authorized_match.turn_lock:
@@ -911,7 +947,14 @@ class GameService:
                 match, "controller_replaced", slot, now, replacement_type=replacement_type.value
             )
             self._record_presence_change(match, slot, previous_presence, now)
-            return slot
+            return SlotMutationReceipt(
+                match.id,
+                slot.colony_id,
+                slot.controller_type,
+                slot.controller_id,
+                slot.presence,
+                slot.baseline_kind,
+            )
 
     def human_controller_token(self, admin_token: str, colony_id: str) -> str:
         """Admin-only handoff of the current locally controlled colony capability."""
@@ -964,7 +1007,7 @@ class GameService:
                         "turn": event.turn,
                         "kind": event.kind,
                         "colony_id": event.colony_id,
-                        "data": event.data,
+                        "data": deepcopy(event.data),
                     }
                     for sequence, event in zip(
                         match.operational_event_sequences,
@@ -972,7 +1015,7 @@ class GameService:
                         strict=True,
                     )
                 ],
-                "tenures": match.tenures,
+                "tenures": deepcopy(match.tenures),
             }
         )
         return snapshot
@@ -1088,7 +1131,13 @@ class GameService:
             if waiting:
                 return Submission("pending", match.sim.state.turn, waiting)
             result = self._resolve_pending(match, session)
-            return Submission("resolved", match.sim.state.turn, (), result)
+            return Submission(
+                "resolved",
+                match.sim.state.turn,
+                (),
+                result,
+                tuple(result.events),
+            )
 
     def match_status(self, token: str) -> dict[str, object]:
         access, match = self._authorize(token)
@@ -1165,6 +1214,44 @@ class GameService:
         with self._lobby_lock:
             self._record_mcp_call(token)
 
+    def record_mcp_invocation(self, tool_name: str, token: str | None = None) -> bool:
+        """Count one server dispatch and attribute it when a match is already known."""
+        with self._lobby_lock:
+            self._server_mcp_invocations_by_tool[tool_name] = (
+                self._server_mcp_invocations_by_tool.get(tool_name, 0) + 1
+            )
+            if token is None:
+                return False
+            try:
+                access, match = self._authorize(token)
+            except ServiceError:
+                return False
+            match.mcp_invocations_by_tool[tool_name] = (
+                match.mcp_invocations_by_tool.get(tool_name, 0) + 1
+            )
+            if not access.admin and access.colony_id is not None:
+                self._record_mcp_call(token)
+            return True
+
+    def attribute_mcp_invocation(self, match_id: str, tool_name: str) -> None:
+        """Attach a pre-counted create/claim dispatch once its match becomes known."""
+        with self._lobby_lock:
+            match = self._matches.get(match_id)
+            if match is None:
+                raise NotFoundError("match no longer exists")
+            match.mcp_invocations_by_tool[tool_name] = (
+                match.mcp_invocations_by_tool.get(tool_name, 0) + 1
+            )
+
+    def server_mcp_telemetry(self) -> dict[str, object]:
+        """Return orchestrator-facing process telemetry without capability material."""
+        with self._lobby_lock:
+            by_tool = dict(sorted(self._server_mcp_invocations_by_tool.items()))
+            return {
+                "invocations_total": sum(by_tool.values()),
+                "invocations_by_tool": by_tool,
+            }
+
     def _record_mcp_call(self, token: str) -> None:
         access, match = self._authorize(token)
         if access.admin or access.colony_id is None:
@@ -1192,6 +1279,7 @@ class GameService:
         cost = metrics["cost"]
         assert isinstance(cost, dict)
         session = self._lobbies.get(access.match_id)
+        tenures = deepcopy(match.tenures)
         for colony_id in sorted(match.sim.state.colonies):
             usage = dict(match.usage.get(colony_id, self._usage_defaults(session is not None)))
             if session is not None:
@@ -1208,13 +1296,17 @@ class GameService:
                     colony_id: match.metrics.reconnects.get(colony_id, 0)
                     for colony_id in sorted(match.sim.state.colonies)
                 },
-                "tenures": match.tenures,
+                "tenures": tenures,
             }
             metrics["server_measured"] = {
                 "mcp_calls": {
                     colony_id: cost[colony_id]["mcp_calls"]
                     for colony_id in sorted(match.sim.state.colonies)
-                }
+                },
+                "invocations_total": sum(match.mcp_invocations_by_tool.values()),
+                "invocations_by_tool": dict(
+                    sorted(match.mcp_invocations_by_tool.items())
+                ),
             }
             metrics["adapter_reported_model_usage"] = {
                 colony_id: {
@@ -1245,7 +1337,7 @@ class GameService:
                             )
                         },
                     }
-                    for tenure in match.tenures.get(colony_id, [])
+                    for tenure in tenures.get(colony_id, [])
                 ]
                 for colony_id in sorted(match.sim.state.colonies)
             }

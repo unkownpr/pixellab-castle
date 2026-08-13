@@ -215,6 +215,7 @@ class MatchStatusResponse(VersionedModel):
     terminal: bool
     termination_reason: str | None
     pending_colonies: tuple[str, ...]
+    scope: str
 
 
 class ReportStatusResponse(ContractModel):
@@ -286,7 +287,14 @@ class AdapterReportedUsageResponse(ContractModel):
 
 
 class AggregateServerMeasuredResponse(ContractModel):
-    mcp_calls: dict[str, int]
+    mcp_calls: dict[str, int] = Field(default_factory=dict)
+    invocations_total: int = 0
+    invocations_by_tool: dict[str, int] = Field(default_factory=dict)
+
+
+class ServerInvocationTelemetryResponse(VersionedModel):
+    invocations_total: int
+    invocations_by_tool: dict[str, int]
 
 
 class ControllerTenureMetricResponse(ControllerTenureResponse):
@@ -366,3 +374,51 @@ AdminWebSocketMessage = Annotated[
 ]
 
 ADMIN_WEBSOCKET_MESSAGE_ADAPTER = TypeAdapter(AdminWebSocketMessage)
+
+
+def ensure_secret_free(payload: object) -> None:
+    """Reject capability-shaped keys recursively, including inside open event data."""
+    forbidden = {
+        "admin_token",
+        "controller_token",
+        "orchestrator_token",
+        "pairing_code",
+        "admin_capability_digest",
+        "capability_digest",
+        "pairing_digest",
+    }
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            normalized = str(key).lower()
+            if normalized in forbidden or normalized.endswith(
+                ("_token", "_digest", "_secret")
+            ):
+                raise ValueError("unsafe response projection")
+            ensure_secret_free(value)
+    elif isinstance(payload, (list, tuple)):
+        for value in payload:
+            ensure_secret_free(value)
+
+
+def project_lobby_snapshot(payload: dict[str, object]) -> LobbySnapshotResponse:
+    """Fail closed when a service lobby projection grows an unreviewed field."""
+    ensure_secret_free(payload)
+    return LobbySnapshotResponse.model_validate(
+        {**payload, "schema_version": SCHEMA_VERSION}
+    )
+
+
+def project_match_status(payload: dict[str, object]) -> MatchStatusResponse:
+    """Fail closed when a service status projection grows an unreviewed field."""
+    ensure_secret_free(payload)
+    return MatchStatusResponse.model_validate(
+        {**payload, "schema_version": SCHEMA_VERSION}
+    )
+
+
+def project_run_report(payload: dict[str, object]) -> RunReportResponse:
+    """Fail closed when a service report projection grows an unreviewed field."""
+    ensure_secret_free(payload)
+    return RunReportResponse.model_validate(
+        {**payload, "schema_version": SCHEMA_VERSION}
+    )

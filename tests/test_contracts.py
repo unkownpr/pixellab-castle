@@ -24,6 +24,115 @@ def test_controller_can_only_observe_own_colony(service: GameService) -> None:
         service.observe(c1_token, requested_colony_id="c2")
 
 
+def test_http_submit_receipt_survives_immediate_controller_replacement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catches HTTP returning 401 after an action was already committed."""
+    service = GameService()
+    session = service.create_session(
+        "o" * 32,
+        "basic-survival-v1",
+        241,
+        1,
+        slot_configs=(("c1", "human", None),),
+    )
+    service.start_match(session.admin_token, 10.0)
+    token = service.human_controller_token(session.admin_token, "c1")
+    original = service.submit_actions
+
+    def submit_then_replace(*args: object, **kwargs: object) -> object:
+        receipt = original(*args, **kwargs)
+        service.replace_controller(session.admin_token, "c1", "human", 11.0)
+        return receipt
+
+    monkeypatch.setattr(service, "submit_actions", submit_then_replace)
+    client = TestClient(create_app(service))
+
+    response = client.post(
+        f"/api/matches/{session.match_id}/actions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"turn": 0, "actions": [{"kind": "wait"}]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "resolved"
+    assert response.json()["events"]
+
+
+def test_http_status_projection_preserves_scope_and_fails_closed_on_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catches HTTP status leaking unexpected service fields through a raw dictionary."""
+    service = GameService()
+    created = service.create_match("basic-survival-v1", 251, 1)
+    token = created.controller_tokens["c1"]
+    client = TestClient(create_app(service), raise_server_exceptions=False)
+    path = f"/api/matches/{created.match_id}/status"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    assert client.get(path, headers=headers).json()["scope"] == "c1"
+    original = service.match_status
+
+    def poisoned_status(capability: str) -> dict[str, object]:
+        return {**original(capability), "admin_token": "must-not-escape"}
+
+    monkeypatch.setattr(service, "match_status", poisoned_status)
+    rejected = client.get(path, headers=headers)
+
+    assert rejected.status_code == 400
+    assert "must-not-escape" not in rejected.text
+
+
+def test_http_slot_configuration_response_is_frozen_at_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catches a later slot mutation rewriting an earlier HTTP response projection."""
+    service = GameService()
+    session = service.create_session("o" * 32, "basic-survival-v1", 271, 1)
+    original = service.configure_slot
+
+    def configure_twice(*args: object, **kwargs: object) -> object:
+        receipt = original(*args, **kwargs)
+        original(session.admin_token, "c1", "human")
+        return receipt
+
+    monkeypatch.setattr(service, "configure_slot", configure_twice)
+    client = TestClient(create_app(service))
+
+    response = client.post(
+        f"/api/sessions/{session.match_id}/slots/c1",
+        headers={"Authorization": f"Bearer {session.admin_token}"},
+        json={"controller_type": "external"},
+    )
+
+    assert response.json()["controller_type"] == "external"
+    assert response.json()["presence"] == "unassigned"
+
+
+def test_admin_snapshots_are_immutable_after_later_replacement() -> None:
+    """Catches live tenure/event references rewriting already returned projections."""
+    service = GameService()
+    session = service.create_session(
+        "o" * 32,
+        "basic-survival-v1",
+        277,
+        1,
+        slot_configs=(("c1", "human", None),),
+    )
+    service.start_match(session.admin_token, 60.0)
+    operations = service.operations_snapshot(session.admin_token, 60.0)
+    report = service.run_report(session.admin_token)
+    operations_before = json.dumps(operations, sort_keys=True)
+    report_before = json.dumps(report, sort_keys=True)
+
+    service.replace_controller(
+        session.admin_token, "c1", "baseline", 61.0, "survivalist"
+    )
+
+    assert json.dumps(operations, sort_keys=True) == operations_before
+    assert json.dumps(report, sort_keys=True) == report_before
+
+
 def test_http_contract_rejects_cross_colony_observation(service: GameService) -> None:
     """Catches HTTP adapting away the direct-service authorization rule."""
     client = TestClient(create_app(service))

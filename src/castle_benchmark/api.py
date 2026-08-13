@@ -35,6 +35,7 @@ from .schemas import (
     HeartbeatResponse,
     HumanControllerCapabilityResponse,
     LobbySnapshotResponse,
+    MatchStatusResponse,
     MutationResponse,
     OperationsSnapshotResponse,
     OperationsWebSocketTicketResponse,
@@ -45,6 +46,9 @@ from .schemas import (
     SlotConfigurationResponse,
     SubmissionResponse,
     SubmitActionsRequest,
+    project_lobby_snapshot,
+    project_match_status,
+    project_run_report,
 )
 from .service import GameService, ServiceError, UnauthorizedError
 
@@ -302,7 +306,7 @@ def create_app(
         assert_scoped(token, match_id)
         snapshot = game.lobby_status(token, clock())
         _assert_secret_free(snapshot)
-        return LobbySnapshotResponse(**_versioned(snapshot))
+        return project_lobby_snapshot(snapshot)
 
     @app.post(
         "/api/sessions/{match_id}/slots/{colony_id}",
@@ -373,8 +377,8 @@ def create_app(
     ) -> HeartbeatResponse:
         token = _bearer(authorization)
         assert_scoped(token, match_id)
-        game.heartbeat(token, request.turn, request.status, clock())
-        return HeartbeatResponse(match_id=match_id, status=request.status)
+        receipt = game.heartbeat(token, request.turn, request.status, clock())
+        return HeartbeatResponse(match_id=receipt.match_id, status=receipt.status)
 
     @app.post("/api/sessions/{match_id}/start", response_model=MutationResponse)
     def start_match(
@@ -480,7 +484,7 @@ def create_app(
         assert_scoped(token, match_id)
         payload = game.run_report(token)
         _assert_secret_free(payload)
-        return RunReportResponse(**_versioned(payload))
+        return project_run_report(payload)
 
     @app.get("/api/matches/{match_id}/observation")
     def observation(
@@ -501,21 +505,22 @@ def create_app(
         token = _bearer(authorization)
         assert_scoped(token, match_id)
         submission = game.submit_actions(token, request.turn, request.actions)
-        events = game.last_events(token) if submission.status == "resolved" else ()
         return SubmissionResponse(
             status=submission.status,  # type: ignore[arg-type]
             turn=submission.turn,
             waiting_for=submission.waiting_for,
-            events=events,
+            events=tuple(asdict(event) for event in submission.events),
         )
 
-    @app.get("/api/matches/{match_id}/status")
+    @app.get("/api/matches/{match_id}/status", response_model=MatchStatusResponse)
     def status(
         match_id: str, authorization: str | None = Header(default=None)
-    ) -> dict[str, object]:
+    ) -> MatchStatusResponse:
         token = _bearer(authorization)
         assert_scoped(token, match_id)
-        return _versioned(game.match_status(token))
+        payload = game.match_status(token)
+        _assert_secret_free(payload)
+        return project_match_status(payload)
 
     @app.websocket("/api/matches/{match_id}/operations/ws")
     async def operations_live(websocket: WebSocket, match_id: str) -> None:

@@ -10,6 +10,25 @@ from .runner import RunConfig, run_match, verify_replay
 from .scenarios import get_scenario
 
 
+_SERVE_ORIGINS_ENV = "CASTLE_BENCHMARK_SERVE_ALLOWED_ORIGINS"
+_SERVE_PROXIES_ENV = "CASTLE_BENCHMARK_SERVE_TRUSTED_PROXIES"
+_SERVE_REMOTE_ENV = "CASTLE_BENCHMARK_SERVE_REMOTE"
+
+
+def create_serve_app() -> object:
+    """Importable Uvicorn factory so reload workers reconstruct the secured app."""
+    from .api import create_app
+
+    origins = tuple(json.loads(os.environ.get(_SERVE_ORIGINS_ENV, "[]")))
+    proxies = tuple(json.loads(os.environ.get(_SERVE_PROXIES_ENV, "[]")))
+    return create_app(
+        orchestrator_token=os.environ.get("CASTLE_BENCHMARK_ORCHESTRATOR_TOKEN"),
+        allowed_origins=origins,
+        trusted_proxies=proxies,
+        remote=os.environ.get(_SERVE_REMOTE_ENV) == "1",
+    )
+
+
 def _is_loopback_host(host: str) -> bool:
     if host.lower() == "localhost":
         return True
@@ -94,8 +113,6 @@ def main() -> None:
     elif args.command == "serve":
         import uvicorn
 
-        from .api import create_app
-
         orchestrator_token = os.environ.get("CASTLE_BENCHMARK_ORCHESTRATOR_TOKEN")
         allowed_origins = tuple(args.allowed_origin)
         try:
@@ -108,16 +125,15 @@ def main() -> None:
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
 
+        os.environ[_SERVE_ORIGINS_ENV] = json.dumps(allowed_origins)
+        os.environ[_SERVE_PROXIES_ENV] = json.dumps(tuple(args.trusted_proxy))
+        os.environ[_SERVE_REMOTE_ENV] = "1" if args.remote else "0"
         uvicorn.run(
-            create_app(
-                orchestrator_token=orchestrator_token,
-                allowed_origins=allowed_origins,
-                trusted_proxies=tuple(args.trusted_proxy),
-                remote=args.remote,
-            ),
+            "castle_benchmark.cli:create_serve_app",
             host=args.host,
             port=args.port,
             reload=args.reload,
+            factory=True,
             proxy_headers=False,
         )
     elif args.command == "report":
