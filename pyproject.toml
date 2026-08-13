@@ -32,3 +32,7 @@ packages = ["src/castle_benchmark"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+filterwarnings = [
+  "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+  "ignore:Field 'lifespan' has an incomplete definition",
+]
