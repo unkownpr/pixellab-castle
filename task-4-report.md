@@ -55,3 +55,28 @@ ran 68 tests: 67 passed and one existing backend contract failed. In remote mode
 `POST /api/matches` returns 405 while `test_remote_app_disables_legacy_bulk_capability_creation`
 expects 404. Task 4 changed no backend route/schema/service file, so this remains
 for the backend owner rather than being masked by a frontend change.
+
+## Review fix wave
+
+Two Important review findings were fixed in a separate TDD wave:
+
+- The browser now enforces an explicit one-human-slot policy. Once a human slot
+  exists, other human options are disabled; direct second-human configuration
+  is rejected before any server mutation with an accessible `role="alert"`;
+  and start fails closed if a refreshed snapshot contains multiple humans.
+- Operations WebSocket recovery now covers ticket-fetch errors, socket
+  construction/open errors and close events through one retry scheduler. It
+  uses bounded exponential delays (1/2/4/8/16 seconds), prevents duplicate
+  timers when error and close arrive together, resets after open, and cancels
+  cleanly on dispose.
+
+Review RED evidence:
+
+- The second-human option remained enabled; direct configuration reached the
+  server; and a two-human session proceeded as far as capability handoff.
+- A rejected fresh-ticket request was never retried after fake time advanced.
+
+Review GREEN evidence:
+
+- `npm --prefix frontend test -- lobby.test.ts`: 22/22 passed, including fake
+  timer bounds, backoff, retry-storm prevention and dispose cancellation.

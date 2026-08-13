@@ -41,12 +41,29 @@ function snapshot(slots: LobbySnapshot["slots"], status = "draft"): LobbySnapsho
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   document.body.replaceChildren();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe("lobby projections", () => {
+  it("disables assigning a second human controller in the slot UI", () => {
+    const view = renderLobby(snapshot([
+      { ...externalSlot, colony_id: "c1", controller_type: "human", presence: "ready" },
+      { ...externalSlot, colony_id: "c2" },
+    ]));
+
+    const firstHuman = view.querySelector<HTMLOptionElement>(
+      "[data-controller-select='c1'] option[value='human']",
+    );
+    const secondHuman = view.querySelector<HTMLOptionElement>(
+      "[data-controller-select='c2'] option[value='human']",
+    );
+    expect(firstHuman?.disabled).toBe(false);
+    expect(secondHuman?.disabled).toBe(true);
+  });
+
   it("keeps lobby controls independent from human in-match action availability", () => {
     const actionGrid = document.createElement("div");
     actionGrid.id = "action-grid";
@@ -234,6 +251,171 @@ describe("typed session client", () => {
 });
 
 describe("LobbyController", () => {
+  it("rejects a second human before server configuration and announces the policy", async () => {
+    const root = document.createElement("div");
+    const configureSlot = vi.fn();
+    const api = {
+      createSession: vi.fn().mockResolvedValue({
+        schema_version: "1.1",
+        match_id: "match-1",
+        scenario_id: "basic-survival-v1",
+        status: "draft",
+        admin_token: "admin-secret",
+      }),
+      lobby: vi.fn().mockResolvedValue(snapshot([
+        { ...externalSlot, colony_id: "c1", controller_type: "human", presence: "ready" },
+        { ...externalSlot, colony_id: "c2" },
+      ])),
+      configureSlot,
+    } as unknown as LobbyApi;
+    const controller = new LobbyController(root, api);
+    await controller.create({
+      scenario_id: "basic-survival-v1",
+      seed: 17,
+      colony_count: 2,
+      deadline_seconds: 30,
+      slots: [],
+    });
+
+    await expect(controller.configure("c2", "human")).rejects.toThrow(
+      "This browser can manage only one human slot",
+    );
+
+    expect(configureSlot).not.toHaveBeenCalled();
+    expect(root.querySelector("[role='alert']")?.textContent).toContain(
+      "This browser can manage only one human slot",
+    );
+    controller.dispose();
+  });
+
+  it("does not start a session containing unmanaged additional human slots", async () => {
+    const root = document.createElement("div");
+    const startSession = vi.fn();
+    const api = {
+      createSession: vi.fn().mockResolvedValue({
+        schema_version: "1.1",
+        match_id: "match-1",
+        scenario_id: "basic-survival-v1",
+        status: "draft",
+        admin_token: "admin-secret",
+      }),
+      lobby: vi.fn().mockResolvedValue(snapshot([
+        { ...externalSlot, colony_id: "c1", controller_type: "human", presence: "ready" },
+        { ...externalSlot, colony_id: "c2", controller_type: "human", presence: "ready" },
+      ])),
+      startSession,
+    } as unknown as LobbyApi;
+    const controller = new LobbyController(root, api);
+    await controller.create({
+      scenario_id: "basic-survival-v1",
+      seed: 17,
+      colony_count: 2,
+      deadline_seconds: 30,
+      slots: [],
+    });
+
+    await expect(controller.start()).rejects.toThrow(
+      "This browser can manage only one human slot",
+    );
+
+    expect(startSession).not.toHaveBeenCalled();
+    expect(root.querySelector("[role='alert']")?.textContent).toContain(
+      "This browser can manage only one human slot",
+    );
+    controller.dispose();
+  });
+
+  it("retries fresh-ticket failures with bounded backoff and dispose cancellation", async () => {
+    vi.useFakeTimers();
+    const root = document.createElement("div");
+    const operationsTicket = vi.fn().mockRejectedValue(new Error("ticket offline"));
+    const api = {
+      createSession: vi.fn().mockResolvedValue({
+        schema_version: "1.1",
+        match_id: "match-1",
+        scenario_id: "basic-survival-v1",
+        status: "draft",
+        admin_token: "admin-secret",
+      }),
+      lobby: vi.fn().mockResolvedValue(snapshot([{ ...externalSlot }])),
+      operationsTicket,
+      openOperationsSocket: vi.fn(),
+    } as unknown as LobbyApi;
+    const controller = new LobbyController(root, api);
+
+    await controller.create({
+      scenario_id: "basic-survival-v1",
+      seed: 17,
+      colony_count: 1,
+      deadline_seconds: 30,
+      slots: [],
+    });
+    expect(operationsTicket).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(operationsTicket).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(operationsTicket).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(operationsTicket).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(operationsTicket).toHaveBeenCalledTimes(3);
+
+    await vi.advanceTimersByTimeAsync(4_000 + 8_000 + 16_000);
+    expect(operationsTicket).toHaveBeenCalledTimes(6);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(operationsTicket).toHaveBeenCalledTimes(6);
+
+    controller.dispose();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(operationsTicket).toHaveBeenCalledTimes(6);
+    vi.useRealTimers();
+  });
+
+  it("does not create retry storms when socket error and close fire together", async () => {
+    vi.useFakeTimers();
+    const root = document.createElement("div");
+    const listeners = new Map<string, EventListener>();
+    const socket = {
+      addEventListener: vi.fn((type: string, listener: EventListener) => listeners.set(type, listener)),
+      close: vi.fn(),
+    } as unknown as WebSocket;
+    const operationsTicket = vi.fn().mockResolvedValue({
+      schema_version: "1.1",
+      match_id: "match-1",
+      websocket_ticket: "ticket-secret",
+      expires_at: 1_030,
+    });
+    const api = {
+      createSession: vi.fn().mockResolvedValue({
+        schema_version: "1.1",
+        match_id: "match-1",
+        scenario_id: "basic-survival-v1",
+        status: "draft",
+        admin_token: "admin-secret",
+      }),
+      lobby: vi.fn().mockResolvedValue(snapshot([{ ...externalSlot }])),
+      operationsTicket,
+      openOperationsSocket: vi.fn().mockReturnValue(socket),
+    } as unknown as LobbyApi;
+    const controller = new LobbyController(root, api);
+    await controller.create({
+      scenario_id: "basic-survival-v1",
+      seed: 17,
+      colony_count: 1,
+      deadline_seconds: 30,
+      slots: [],
+    });
+
+    listeners.get("error")?.(new Event("error"));
+    listeners.get("close")?.(new Event("close"));
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(operationsTicket).toHaveBeenCalledTimes(2);
+    controller.dispose();
+    vi.useRealTimers();
+  });
+
   it("removes a one-time pairing code after the external slot consumes it", async () => {
     const root = document.createElement("div");
     const lobby = vi.fn()

@@ -192,7 +192,11 @@ export function lobbyRows(
   });
 }
 
-function controllerSelect(slot: LobbySlot, index: number): HTMLSelectElement {
+function controllerSelect(
+  slot: LobbySlot,
+  index: number,
+  humanColonyId: string | undefined,
+): HTMLSelectElement {
   const select = element("select");
   select.id = `slot-controller-${index}`;
   select.dataset.controllerSelect = slot.colony_id;
@@ -204,6 +208,7 @@ function controllerSelect(slot: LobbySlot, index: number): HTMLSelectElement {
     const option = element("option", label);
     option.value = value;
     option.selected = slot.controller_type === value;
+    option.disabled = value === "human" && humanColonyId !== undefined && humanColonyId !== slot.colony_id;
     select.append(option);
   }
   return select;
@@ -245,6 +250,7 @@ export function renderLobby(
   section.append(heading);
 
   const rows = lobbyRows(snapshot, nowSeconds);
+  const humanColonyId = snapshot.slots.find((slot) => slot.controller_type === "human")?.colony_id;
   const list = element("ol");
   list.className = "lobby-slots";
   for (const [index, row] of rows.entries()) {
@@ -265,7 +271,7 @@ export function renderLobby(
       item.append(identity);
     }
 
-    const assignment = controllerSelect(row.slot, index);
+    const assignment = controllerSelect(row.slot, index, humanColonyId);
     item.append(appendLabel(assignment, "Controller", assignment.id));
     const baseline = baselineSelect(row.slot, index);
     item.append(appendLabel(baseline, "Baseline", baseline.id));
@@ -381,6 +387,9 @@ export class LobbyController {
   private countdownTimer: number | null = null;
   private reconnectTimer: number | null = null;
   private liveSocket: WebSocket | null = null;
+  private reconnectAttempt = 0;
+  private disposed = false;
+  private errorMessage: string | null = null;
   private readonly endpoint: string;
   private readonly now: () => number;
 
@@ -397,17 +406,16 @@ export class LobbyController {
 
   async create(input: CreateSessionInput, orchestratorToken?: string): Promise<void> {
     this.closeLive();
+    this.disposed = false;
+    this.reconnectAttempt = 0;
+    this.errorMessage = null;
     const created = await this.api.createSession(input, orchestratorToken || undefined);
     this.matchId = created.match_id;
     this.adminToken = created.admin_token;
     this.grants.clear();
     this.providers.clear();
     await this.refresh();
-    try {
-      await this.connectLive();
-    } catch (error) {
-      this.options.onError?.(error);
-    }
+    await this.connectLive();
   }
 
   async refresh(): Promise<void> {
@@ -422,6 +430,15 @@ export class LobbyController {
     baselineKind?: BaselineKind,
   ): Promise<void> {
     const { matchId, adminToken } = this.credentials();
+    if (
+      controllerType === "human" &&
+      this.snapshot?.slots.some(
+        (slot) => slot.controller_type === "human" && slot.colony_id !== colonyId,
+      )
+    ) {
+      throw this.policyError();
+    }
+    this.errorMessage = null;
     if (this.snapshot?.status === "draft") {
       await this.api.configureSlot(matchId, colonyId, adminToken, {
         controller_type: controllerType,
@@ -448,6 +465,9 @@ export class LobbyController {
 
   async start(): Promise<void> {
     const { matchId, adminToken } = this.credentials();
+    if ((this.snapshot?.slots.filter((slot) => slot.controller_type === "human").length ?? 0) > 1) {
+      throw this.policyError();
+    }
     if (!this.snapshot || lobbyRows(this.snapshot, this.now()).some((row) => !row.ready)) {
       throw new Error("All lobby slots must be ready before starting");
     }
@@ -487,12 +507,14 @@ export class LobbyController {
   }
 
   dispose(): void {
+    this.disposed = true;
     if (this.countdownTimer !== null) window.clearInterval(this.countdownTimer);
     this.countdownTimer = null;
     this.closeLive();
     this.adminToken = null;
     this.matchId = null;
     this.snapshot = null;
+    this.errorMessage = null;
     this.grants.clear();
     this.root.replaceChildren();
   }
@@ -524,6 +546,11 @@ export class LobbyController {
         now,
       ));
     }
+    if (this.errorMessage) {
+      const alert = element("p", this.errorMessage);
+      alert.setAttribute("role", "alert");
+      lobby.prepend(alert);
+    }
     this.root.replaceChildren(lobby);
   }
 
@@ -540,24 +567,50 @@ export class LobbyController {
   }
 
   private async connectLive(): Promise<void> {
+    if (this.disposed) return;
     const ticketMethod = (this.api as Partial<LobbyApi>).operationsTicket;
     const socketMethod = (this.api as Partial<LobbyApi>).openOperationsSocket;
     if (typeof ticketMethod !== "function" || typeof socketMethod !== "function") return;
-    const { matchId, adminToken } = this.credentials();
-    const ticket = await ticketMethod.call(this.api, matchId, adminToken);
-    if (this.matchId !== matchId || this.adminToken !== adminToken) return;
-    const socket = socketMethod.call(this.api, matchId, ticket.websocket_ticket);
-    this.liveSocket = socket;
-    socket.addEventListener("message", (event) => this.handleLiveMessage(event));
-    socket.addEventListener("close", () => {
-      if (this.liveSocket !== socket) return;
-      this.liveSocket = null;
-      if (!this.matchId || !this.adminToken || this.reconnectTimer !== null) return;
-      this.reconnectTimer = window.setTimeout(() => {
-        this.reconnectTimer = null;
-        void this.connectLive().catch((error) => this.options.onError?.(error));
-      }, 1_000);
-    });
+    try {
+      const { matchId, adminToken } = this.credentials();
+      const ticket = await ticketMethod.call(this.api, matchId, adminToken);
+      if (this.disposed || this.matchId !== matchId || this.adminToken !== adminToken) return;
+      const socket = socketMethod.call(this.api, matchId, ticket.websocket_ticket);
+      this.liveSocket = socket;
+      socket.addEventListener("open", () => {
+        if (this.liveSocket === socket) this.reconnectAttempt = 0;
+      });
+      socket.addEventListener("message", (event) => this.handleLiveMessage(event));
+      socket.addEventListener("error", () => this.socketFailed(socket, true));
+      socket.addEventListener("close", () => this.socketFailed(socket, false));
+    } catch (error) {
+      this.options.onError?.(error);
+      this.scheduleReconnect();
+    }
+  }
+
+  private socketFailed(socket: WebSocket, closeSocket: boolean): void {
+    if (this.liveSocket !== socket) return;
+    this.liveSocket = null;
+    if (closeSocket) socket.close();
+    this.scheduleReconnect();
+  }
+
+  private scheduleReconnect(): void {
+    const maximumAttempts = 5;
+    if (
+      this.disposed ||
+      !this.matchId ||
+      !this.adminToken ||
+      this.reconnectTimer !== null ||
+      this.reconnectAttempt >= maximumAttempts
+    ) return;
+    const delay = Math.min(1_000 * (2 ** this.reconnectAttempt), 16_000);
+    this.reconnectAttempt += 1;
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.connectLive();
+    }, delay);
   }
 
   private handleLiveMessage(event: MessageEvent): void {
@@ -582,6 +635,13 @@ export class LobbyController {
     const socket = this.liveSocket;
     this.liveSocket = null;
     socket?.close();
+  }
+
+  private policyError(): Error {
+    const error = new Error("This browser can manage only one human slot");
+    this.errorMessage = error.message;
+    this.render();
+    return error;
   }
 
   private control<T extends HTMLSelectElement>(attribute: "controllerSelect" | "baselineSelect", colonyId: string): T | null {
