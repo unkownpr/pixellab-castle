@@ -48,3 +48,34 @@
 - MCP wrapper call instrumentation belongs to Task 3; this task exposes the
   server-measured report field while retaining `record_mcp_call` as its service
   boundary.
+
+## Review fix wave
+
+### Root causes and fixes
+
+- `submit_actions` and `close_deadline` independently mutated and cleared
+  `LiveMatch.pending`. A deterministic threaded regression paused `SimCore`
+  resolution and demonstrated two resolves for one turn. Both paths now hold a
+  per-match turn lock through batch insertion, missing-slot calculation, and
+  the single barrier resolution; submission re-authorizes under that lock to
+  reject a capability revoked by a concurrent takeover.
+- `pending_controller_ids` was cleared at resolution with no durable handoff.
+  Resolved turns now retain immutable batch/controller-ID attribution in the
+  live match. `write_resolved_turns()` persists them through `ArtifactWriter`
+  and updates controller tenure metadata; replay continues to read only action
+  batches.
+- Usage was only accumulated per colony, and heartbeats emitted connected events
+  for every normal heartbeat. Reports now retain compatible colony totals plus
+  tenure/controller-ID `server_measured` (MCP, timeout, reconnect) and
+  `adapter_reported_model_usage` sections. A connected event is emitted only
+  after a disconnected/timed-out transition.
+- Ready local slots previously had no executable path. Baselines now generate
+  deterministic batches before either a controller submission or deadline
+  closure. Human slots receive an admin-only, colony-scoped capability handoff
+  after start/takeover; the admin capability itself remains unable to submit.
+
+### Review verification
+
+- `uv run pytest tests/test_deadlines.py tests/test_replay.py tests/test_lobby.py tests/test_contracts.py tests/test_invariants.py -q` — 32 passed
+- `uv run pytest -q` — 75 passed
+- `git diff --check` — clean

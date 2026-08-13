@@ -226,6 +226,12 @@ class ArtifactWriter:
         with self.snapshots_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(canonical_snapshot(result.state), sort_keys=True) + "\n")
 
+    def set_controller_tenures(self, controller_tenures: list[dict[str, object]]) -> None:
+        """Update exported controller history without affecting replay action batches."""
+        metadata = json.loads(self.metadata_path.read_text())
+        metadata["controller_tenures"] = controller_tenures
+        self.metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+
     def finish(self, state: MatchState, metrics: dict[str, object]) -> None:
         report = {
             "scenario_id": state.scenario_id,
