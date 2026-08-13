@@ -139,8 +139,8 @@ describe("operations projections", () => {
       },
     });
 
-    expect(before[0]).toMatchObject({ latencyMs: null, latencyText: "—", latencyColumn: true });
-    expect(after[0]).toMatchObject({ latencyMs: 480, latencyText: "480 ms", latencyColumn: true });
+    expect(before[0]).toMatchObject({ latencyMs: null, latencyText: "—" });
+    expect(after[0]).toMatchObject({ latencyMs: 480, latencyText: "480 ms" });
   });
 
   it("sorts and deduplicates events while exposing takeover tenure boundaries", () => {
@@ -155,6 +155,33 @@ describe("operations projections", () => {
       [9, "c2:1", false],
       [10, "c2:2", true],
       [12, "c2:2", false],
+    ]);
+  });
+
+  it("marks a presence-derived takeover as a tenure boundary", () => {
+    const items = timelineItems([
+      event(1, "controller_presence_changed", "c2", { current: "taken_over", generation: 2 }),
+    ]);
+
+    expect(items[0]).toMatchObject({ boundary: true, segmentId: "c2:2" });
+  });
+
+  it("surfaces the raw growth axis present in the report", () => {
+    const report: RunReport = {
+      schema_version: "1.1",
+      status: {},
+      latest_events: [],
+      metrics: {
+        growth: { c1: { initial_population: 3, peak_population: 8, housing: 5 } },
+      },
+    };
+
+    const series = metricSeries(report);
+
+    expect(series.find(({ axis }) => axis === "growth")?.values).toEqual([
+      { colonyId: "c1", metric: "initial_population", value: 3 },
+      { colonyId: "c1", metric: "peak_population", value: 8 },
+      { colonyId: "c1", metric: "housing", value: 5 },
     ]);
   });
 
@@ -371,6 +398,28 @@ describe("OperationsController", () => {
     expect(controller.roster).toHaveLength(1);
     expect(controller.state.announcement).toBe("Operations live feed disconnected; retained data remains visible.");
   });
+
+  it("applies metric.updated messages to both the timeline and the report metrics", () => {
+    const controller = new OperationsController();
+    controller.applySnapshot(snapshot([slot("c1", "connected")], [event(1, "turn_opened")]));
+    const message: AdminWebSocketMessage = {
+      schema_version: "1.1",
+      type: "metric.updated",
+      payload: {
+        event: event(2, "metric_updated"),
+        metrics: { server_measured: { mcp_calls: { c1: 9 } } },
+      },
+    };
+
+    expect(controller.applyMessage(message)).toBe("applied");
+    expect(controller.timeline.map(({ sequence, kind }) => [sequence, kind])).toEqual([
+      [1, "turn_opened"],
+      [2, "metric_updated"],
+    ]);
+    expect(controller.metrics.find(({ axis }) => axis === "server-mcp")?.values).toEqual([
+      { colonyId: "c1", metric: "mcp_calls", value: 9 },
+    ]);
+  });
 });
 
 describe("operations DOM", () => {
@@ -431,6 +480,55 @@ describe("operations DOM", () => {
     renderOperationsRoom(root, controller);
 
     expect(root.querySelector("[data-live-number]")?.textContent).toBe("3");
+  });
+
+  it("keeps keyboard focus on the roster across live metric re-renders", () => {
+    const root = document.createElement("section");
+    document.body.append(root);
+    let controller!: OperationsController;
+    controller = new OperationsController({ onChange: () => renderOperationsRoom(root, controller) });
+    controller.applySnapshot(snapshot([slot("c1", "connected"), slot("c2", "thinking")]));
+    controller.selectAgent("c2");
+    renderOperationsRoom(root, controller);
+    bindOperationsRoom(root, controller);
+
+    root.querySelector<HTMLElement>("[data-agent-id='c2']")!.focus();
+    expect(document.activeElement?.getAttribute("data-agent-id")).toBe("c2");
+
+    controller.setReport({
+      schema_version: "1.1",
+      status: {},
+      latest_events: [],
+      metrics: { adapter_reported_model_usage: { c2: { latency_ms: 25 } } },
+    });
+
+    expect(document.activeElement?.getAttribute("data-agent-id")).toBe("c2");
+  });
+
+  it("surfaces tenure takeover boundaries on roster rows", () => {
+    const root = document.createElement("section");
+    const controller = new OperationsController();
+    controller.applySnapshot(snapshot(
+      [slot("c1", "connected", { generation: 2 })],
+      [],
+      { c1: [tenure("c1", 1), tenure("c1", 2)] },
+    ));
+
+    renderOperationsRoom(root, controller);
+
+    expect(root.querySelector("[data-agent-id='c1']")?.hasAttribute("data-tenure-boundary")).toBe(true);
+  });
+
+  it("keeps empty-state messages outside the listbox", () => {
+    const root = document.createElement("section");
+    const controller = new OperationsController();
+
+    renderOperationsRoom(root, controller);
+
+    const listbox = root.querySelector("[role='listbox']");
+    expect(listbox).not.toBeNull();
+    expect(listbox?.querySelector("p")).toBeNull();
+    expect(root.textContent).toContain("No sanitized controller snapshot yet.");
   });
 
   it("moves roster and tab focus with arrow keys", async () => {

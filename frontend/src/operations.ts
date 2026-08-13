@@ -31,7 +31,6 @@ export interface AgentRosterRow {
   readonly takenOver: boolean;
   readonly latencyMs: number | null;
   readonly latencyText: string;
-  readonly latencyColumn: true;
 }
 
 const STATE_PRESENTATION: Readonly<Record<AgentRosterState, readonly [string, StatusShape]>> = {
@@ -96,7 +95,6 @@ export function agentRosterRows(snapshot: OperationsSnapshot, report: RunReport 
         takenOver: state === "taken-over" || (snapshot.tenures[slot.colony_id]?.length ?? 0) > 1,
         latencyMs,
         latencyText: latencyMs === null ? "—" : `${new Intl.NumberFormat("en-US").format(latencyMs)} ms`,
-        latencyColumn: true,
       };
     });
 }
@@ -179,6 +177,7 @@ export function timelineItems(events: readonly OperationalEvent[]): readonly Tim
 
 export type MetricAxis =
   | "survival"
+  | "growth"
   | "prosperity"
   | "diplomacy"
   | "resilience"
@@ -309,6 +308,12 @@ export function metricSeries(report: RunReport): readonly MetricSeries[] {
       label: "Survival",
       provenance: "simulation-raw",
       values: valuesFromNested(metrics.survival, ["turns", "population"]),
+    },
+    {
+      axis: "growth",
+      label: "Growth · population trajectory",
+      provenance: "simulation-raw",
+      values: valuesFromNested(metrics.growth, ["initial_population", "peak_population", "housing"]),
     },
     {
       axis: "prosperity",
@@ -651,6 +656,7 @@ function renderRoster(host: HTMLElement, controller: OperationsController): void
     option.type = "button";
     option.dataset.agentId = row.colonyId;
     option.dataset.state = row.state;
+    if (row.takenOver) option.dataset.tenureBoundary = "";
     option.setAttribute("role", "option");
     option.setAttribute("aria-selected", String(selected));
     option.tabIndex = selected ? 0 : -1;
@@ -669,10 +675,10 @@ function renderRoster(host: HTMLElement, controller: OperationsController): void
     option.append(shape, identity, state, latency);
     list.append(option);
   }
-  if (!controller.roster.length) {
-    list.append(element("p", "operations-empty", "No sanitized controller snapshot yet."));
-  }
   host.replaceChildren(title, list);
+  if (!controller.roster.length) {
+    host.append(element("p", "operations-empty", "No sanitized controller snapshot yet."));
+  }
 }
 
 function renderTabs(host: HTMLElement, controller: OperationsController): void {
@@ -818,6 +824,7 @@ function renderMetrics(host: HTMLElement, controller: OperationsController): voi
 }
 
 export function renderOperationsRoom(root: HTMLElement, controller: OperationsController): void {
+  const restoreSelector = focusedOperationsSelector(document.activeElement);
   ensureOperationsHosts(root);
   const live = operationsHost(root, "live");
   if (live) {
@@ -836,6 +843,20 @@ export function renderOperationsRoom(root: HTMLElement, controller: OperationsCo
   if (inspector) renderInspector(inspector, controller);
   if (timeline) renderTimeline(timeline, controller);
   if (metrics) renderMetrics(metrics, controller);
+  if (restoreSelector) {
+    root.querySelector<HTMLElement>(restoreSelector)?.focus({ preventScroll: true });
+  }
+}
+
+function focusedOperationsSelector(active: Element | null): string | null {
+  if (!active) return null;
+  const agent = active.closest<HTMLElement>("[data-agent-id]");
+  if (agent?.dataset.agentId) return `[data-agent-id='${agent.dataset.agentId}']`;
+  const tab = active.closest<HTMLElement>("[data-tab]");
+  if (tab?.dataset.tab) return `[data-tab='${tab.dataset.tab}']`;
+  const timeline = active.closest<HTMLElement>("[data-sequence]");
+  if (timeline?.dataset.sequence) return `[data-sequence='${timeline.dataset.sequence}']`;
+  return null;
 }
 
 function focusSelected(root: HTMLElement, selector: string): void {
