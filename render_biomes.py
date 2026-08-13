@@ -52,8 +52,13 @@ snow = dict(
     people=36,
 )
 
-for name, cfg in (("village_river", village), ("desert_castle", desert), ("snow_village", snow)):
-    img = build(cfg).convert("RGB")
-    img.save(name + ".png")
-    img.resize((img.width // 2, img.height // 2), Image.LANCZOS).save(name + "_half.png")
-    print("rendered", name, img.size)
+def main():
+    for name, cfg in (("village_river", village), ("desert_castle", desert), ("snow_village", snow)):
+        img = build(cfg).convert("RGB")
+        img.save(name + ".png")
+        img.resize((img.width // 2, img.height // 2), Image.LANCZOS).save(name + "_half.png")
+        print("rendered", name, img.size)
+
+
+if __name__ == "__main__":
+    main()

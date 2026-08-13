@@ -1,0 +1,4728 @@
+{
+  "assets": {
+    "character.blacksmith.idle.east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frames": 1,
+      "path": "chars/blacksmith/east.png",
+      "role": "blacksmith",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.blacksmith.idle.north": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frames": 1,
+      "path": "chars/blacksmith/north.png",
+      "role": "blacksmith",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.blacksmith.idle.north-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frames": 1,
+      "path": "chars/blacksmith/north-east.png",
+      "role": "blacksmith",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.blacksmith.idle.north-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frames": 1,
+      "path": "chars/blacksmith/north-west.png",
+      "role": "blacksmith",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.blacksmith.idle.south": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frames": 1,
+      "path": "chars/blacksmith/south.png",
+      "role": "blacksmith",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.blacksmith.idle.south-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frames": 1,
+      "path": "chars/blacksmith/south-east.png",
+      "role": "blacksmith",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.blacksmith.idle.south-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frames": 1,
+      "path": "chars/blacksmith/south-west.png",
+      "role": "blacksmith",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.blacksmith.idle.west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frames": 1,
+      "path": "chars/blacksmith/west.png",
+      "role": "blacksmith",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.child.idle.east": {
+      "anchor": [
+        18,
+        32
+      ],
+      "category": "character",
+      "direction": "east",
+      "frames": 1,
+      "path": "chars/child/east.png",
+      "role": "child",
+      "size": [
+        36,
+        36
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.child.idle.north": {
+      "anchor": [
+        18,
+        32
+      ],
+      "category": "character",
+      "direction": "north",
+      "frames": 1,
+      "path": "chars/child/north.png",
+      "role": "child",
+      "size": [
+        36,
+        36
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.child.idle.north-east": {
+      "anchor": [
+        18,
+        32
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frames": 1,
+      "path": "chars/child/north-east.png",
+      "role": "child",
+      "size": [
+        36,
+        36
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.child.idle.north-west": {
+      "anchor": [
+        18,
+        32
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frames": 1,
+      "path": "chars/child/north-west.png",
+      "role": "child",
+      "size": [
+        36,
+        36
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.child.idle.south": {
+      "anchor": [
+        18,
+        32
+      ],
+      "category": "character",
+      "direction": "south",
+      "frames": 1,
+      "path": "chars/child/south.png",
+      "role": "child",
+      "size": [
+        36,
+        36
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.child.idle.south-east": {
+      "anchor": [
+        18,
+        32
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frames": 1,
+      "path": "chars/child/south-east.png",
+      "role": "child",
+      "size": [
+        36,
+        36
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.child.idle.south-west": {
+      "anchor": [
+        18,
+        32
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frames": 1,
+      "path": "chars/child/south-west.png",
+      "role": "child",
+      "size": [
+        36,
+        36
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.child.idle.west": {
+      "anchor": [
+        18,
+        32
+      ],
+      "category": "character",
+      "direction": "west",
+      "frames": 1,
+      "path": "chars/child/west.png",
+      "role": "child",
+      "size": [
+        36,
+        36
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.farmer.idle.east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frames": 1,
+      "path": "chars/farmer/east.png",
+      "role": "farmer",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.farmer.idle.north": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frames": 1,
+      "path": "chars/farmer/north.png",
+      "role": "farmer",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.farmer.idle.north-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frames": 1,
+      "path": "chars/farmer/north-east.png",
+      "role": "farmer",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.farmer.idle.north-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frames": 1,
+      "path": "chars/farmer/north-west.png",
+      "role": "farmer",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.farmer.idle.south": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frames": 1,
+      "path": "chars/farmer/south.png",
+      "role": "farmer",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.farmer.idle.south-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frames": 1,
+      "path": "chars/farmer/south-east.png",
+      "role": "farmer",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.farmer.idle.south-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frames": 1,
+      "path": "chars/farmer/south-west.png",
+      "role": "farmer",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.farmer.idle.west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frames": 1,
+      "path": "chars/farmer/west.png",
+      "role": "farmer",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.guard_red.idle.east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frames": 1,
+      "path": "chars/guard_red/east.png",
+      "role": "guard_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.guard_red.idle.north": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frames": 1,
+      "path": "chars/guard_red/north.png",
+      "role": "guard_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.guard_red.idle.north-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frames": 1,
+      "path": "chars/guard_red/north-east.png",
+      "role": "guard_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.guard_red.idle.north-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frames": 1,
+      "path": "chars/guard_red/north-west.png",
+      "role": "guard_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.guard_red.idle.south": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frames": 1,
+      "path": "chars/guard_red/south.png",
+      "role": "guard_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.guard_red.idle.south-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frames": 1,
+      "path": "chars/guard_red/south-east.png",
+      "role": "guard_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.guard_red.idle.south-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frames": 1,
+      "path": "chars/guard_red/south-west.png",
+      "role": "guard_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.guard_red.idle.west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frames": 1,
+      "path": "chars/guard_red/west.png",
+      "role": "guard_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.merchant.idle.east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frames": 1,
+      "path": "chars/merchant/east.png",
+      "role": "merchant",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.merchant.idle.north": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frames": 1,
+      "path": "chars/merchant/north.png",
+      "role": "merchant",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.merchant.idle.north-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frames": 1,
+      "path": "chars/merchant/north-east.png",
+      "role": "merchant",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.merchant.idle.north-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frames": 1,
+      "path": "chars/merchant/north-west.png",
+      "role": "merchant",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.merchant.idle.south": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frames": 1,
+      "path": "chars/merchant/south.png",
+      "role": "merchant",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.merchant.idle.south-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frames": 1,
+      "path": "chars/merchant/south-east.png",
+      "role": "merchant",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.merchant.idle.south-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frames": 1,
+      "path": "chars/merchant/south-west.png",
+      "role": "merchant",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.merchant.idle.west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frames": 1,
+      "path": "chars/merchant/west.png",
+      "role": "merchant",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.reference.idle.east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frames": 1,
+      "path": "anim/Idle/rotations/east.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle_reference"
+    },
+    "character.reference.idle.north": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frames": 1,
+      "path": "anim/Idle/rotations/north.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle_reference"
+    },
+    "character.reference.idle.north-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frames": 1,
+      "path": "anim/Idle/rotations/north-east.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle_reference"
+    },
+    "character.reference.idle.north-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frames": 1,
+      "path": "anim/Idle/rotations/north-west.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle_reference"
+    },
+    "character.reference.idle.south": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frames": 1,
+      "path": "anim/Idle/rotations/south.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle_reference"
+    },
+    "character.reference.idle.south-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frames": 1,
+      "path": "anim/Idle/rotations/south-east.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle_reference"
+    },
+    "character.reference.idle.south-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frames": 1,
+      "path": "anim/Idle/rotations/south-west.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle_reference"
+    },
+    "character.reference.idle.west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frames": 1,
+      "path": "anim/Idle/rotations/west.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle_reference"
+    },
+    "character.reference.walk.east.0": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frame": 0,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/east/frame_000.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.east.1": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frame": 1,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/east/frame_001.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.east.2": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frame": 2,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/east/frame_002.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.east.3": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frame": 3,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/east/frame_003.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.east.4": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frame": 4,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/east/frame_004.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.east.5": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frame": 5,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/east/frame_005.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north-east.0": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frame": 0,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north-east/frame_000.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north-east.1": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frame": 1,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north-east/frame_001.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north-east.2": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frame": 2,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north-east/frame_002.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north-east.3": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frame": 3,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north-east/frame_003.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north-east.4": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frame": 4,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north-east/frame_004.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north-east.5": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frame": 5,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north-east/frame_005.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north-west.0": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frame": 0,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north-west/frame_000.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north-west.1": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frame": 1,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north-west/frame_001.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north-west.2": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frame": 2,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north-west/frame_002.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north-west.3": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frame": 3,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north-west/frame_003.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north-west.4": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frame": 4,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north-west/frame_004.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north-west.5": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frame": 5,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north-west/frame_005.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north.0": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frame": 0,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north/frame_000.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north.1": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frame": 1,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north/frame_001.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north.2": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frame": 2,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north/frame_002.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north.3": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frame": 3,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north/frame_003.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north.4": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frame": 4,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north/frame_004.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.north.5": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frame": 5,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/north/frame_005.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south-east.0": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frame": 0,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south-east/frame_000.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south-east.1": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frame": 1,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south-east/frame_001.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south-east.2": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frame": 2,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south-east/frame_002.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south-east.3": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frame": 3,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south-east/frame_003.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south-east.4": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frame": 4,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south-east/frame_004.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south-east.5": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frame": 5,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south-east/frame_005.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south-west.0": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frame": 0,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south-west/frame_000.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south-west.1": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frame": 1,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south-west/frame_001.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south-west.2": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frame": 2,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south-west/frame_002.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south-west.3": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frame": 3,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south-west/frame_003.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south-west.4": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frame": 4,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south-west/frame_004.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south-west.5": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frame": 5,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south-west/frame_005.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south.0": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frame": 0,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south/frame_000.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south.1": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frame": 1,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south/frame_001.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south.2": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frame": 2,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south/frame_002.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south.3": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frame": 3,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south/frame_003.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south.4": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frame": 4,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south/frame_004.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.south.5": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frame": 5,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/south/frame_005.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.west.0": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frame": 0,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/west/frame_000.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.west.1": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frame": 1,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/west/frame_001.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.west.2": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frame": 2,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/west/frame_002.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.west.3": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frame": 3,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/west/frame_003.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.west.4": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frame": 4,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/west/frame_004.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.reference.walk.west.5": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frame": 5,
+      "frame_duration_ms": 120,
+      "frames": 6,
+      "path": "anim/Idle/animations/walk/west/frame_005.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "walk"
+    },
+    "character.villager_blue.idle.east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frames": 1,
+      "path": "chars/villager_blue/east.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_blue.idle.north": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frames": 1,
+      "path": "chars/villager_blue/north.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_blue.idle.north-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frames": 1,
+      "path": "chars/villager_blue/north-east.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_blue.idle.north-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frames": 1,
+      "path": "chars/villager_blue/north-west.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_blue.idle.south": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frames": 1,
+      "path": "chars/villager_blue/south.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_blue.idle.south-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frames": 1,
+      "path": "chars/villager_blue/south-east.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_blue.idle.south-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frames": 1,
+      "path": "chars/villager_blue/south-west.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_blue.idle.west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frames": 1,
+      "path": "chars/villager_blue/west.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_brown.idle.east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frames": 1,
+      "path": "chars/villager_brown/east.png",
+      "role": "villager_brown",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_brown.idle.north": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frames": 1,
+      "path": "chars/villager_brown/north.png",
+      "role": "villager_brown",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_brown.idle.north-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frames": 1,
+      "path": "chars/villager_brown/north-east.png",
+      "role": "villager_brown",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_brown.idle.north-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frames": 1,
+      "path": "chars/villager_brown/north-west.png",
+      "role": "villager_brown",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_brown.idle.south": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frames": 1,
+      "path": "chars/villager_brown/south.png",
+      "role": "villager_brown",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_brown.idle.south-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frames": 1,
+      "path": "chars/villager_brown/south-east.png",
+      "role": "villager_brown",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_brown.idle.south-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frames": 1,
+      "path": "chars/villager_brown/south-west.png",
+      "role": "villager_brown",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_brown.idle.west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frames": 1,
+      "path": "chars/villager_brown/west.png",
+      "role": "villager_brown",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_red.idle.east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frames": 1,
+      "path": "chars/villager_red/east.png",
+      "role": "villager_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_red.idle.north": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frames": 1,
+      "path": "chars/villager_red/north.png",
+      "role": "villager_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_red.idle.north-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frames": 1,
+      "path": "chars/villager_red/north-east.png",
+      "role": "villager_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_red.idle.north-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frames": 1,
+      "path": "chars/villager_red/north-west.png",
+      "role": "villager_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_red.idle.south": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frames": 1,
+      "path": "chars/villager_red/south.png",
+      "role": "villager_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_red.idle.south-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frames": 1,
+      "path": "chars/villager_red/south-east.png",
+      "role": "villager_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_red.idle.south-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frames": 1,
+      "path": "chars/villager_red/south-west.png",
+      "role": "villager_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_red.idle.west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frames": 1,
+      "path": "chars/villager_red/west.png",
+      "role": "villager_red",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_teal.idle.east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frames": 1,
+      "path": "chars/villager_teal/east.png",
+      "role": "villager_teal",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_teal.idle.north": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frames": 1,
+      "path": "chars/villager_teal/north.png",
+      "role": "villager_teal",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_teal.idle.north-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frames": 1,
+      "path": "chars/villager_teal/north-east.png",
+      "role": "villager_teal",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_teal.idle.north-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frames": 1,
+      "path": "chars/villager_teal/north-west.png",
+      "role": "villager_teal",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_teal.idle.south": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frames": 1,
+      "path": "chars/villager_teal/south.png",
+      "role": "villager_teal",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_teal.idle.south-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frames": 1,
+      "path": "chars/villager_teal/south-east.png",
+      "role": "villager_teal",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_teal.idle.south-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frames": 1,
+      "path": "chars/villager_teal/south-west.png",
+      "role": "villager_teal",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.villager_teal.idle.west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frames": 1,
+      "path": "chars/villager_teal/west.png",
+      "role": "villager_teal",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.woman_green.idle.east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frames": 1,
+      "path": "chars/woman_green/east.png",
+      "role": "woman_green",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.woman_green.idle.north": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frames": 1,
+      "path": "chars/woman_green/north.png",
+      "role": "woman_green",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.woman_green.idle.north-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frames": 1,
+      "path": "chars/woman_green/north-east.png",
+      "role": "woman_green",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.woman_green.idle.north-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frames": 1,
+      "path": "chars/woman_green/north-west.png",
+      "role": "woman_green",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.woman_green.idle.south": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frames": 1,
+      "path": "chars/woman_green/south.png",
+      "role": "woman_green",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.woman_green.idle.south-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frames": 1,
+      "path": "chars/woman_green/south-east.png",
+      "role": "woman_green",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.woman_green.idle.south-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frames": 1,
+      "path": "chars/woman_green/south-west.png",
+      "role": "woman_green",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.woman_green.idle.west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frames": 1,
+      "path": "chars/woman_green/west.png",
+      "role": "woman_green",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "effect.construction": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "job_id": "7e61b2fc-c771-4ee5-beef-07a374e03b6d",
+      "path": "assets/generated/effects/construction.png",
+      "seed": 8122,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "effect.fire.base": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "job_id": "559f44e6-b3cf-4dd9-a3df-1ff588b85245",
+      "path": "assets/generated/effects/fire_base.png",
+      "seed": 8120,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "effect.fire.loop.0": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "frame": 0,
+      "frame_duration_ms": 120,
+      "frames": 9,
+      "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+      "path": "assets/generated/effects/fire/frame_0.png",
+      "seed": 8123,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "effect.fire.loop.1": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "frame": 1,
+      "frame_duration_ms": 120,
+      "frames": 9,
+      "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+      "path": "assets/generated/effects/fire/frame_1.png",
+      "seed": 8123,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "effect.fire.loop.2": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "frame": 2,
+      "frame_duration_ms": 120,
+      "frames": 9,
+      "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+      "path": "assets/generated/effects/fire/frame_2.png",
+      "seed": 8123,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "effect.fire.loop.3": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "frame": 3,
+      "frame_duration_ms": 120,
+      "frames": 9,
+      "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+      "path": "assets/generated/effects/fire/frame_3.png",
+      "seed": 8123,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "effect.fire.loop.4": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "frame": 4,
+      "frame_duration_ms": 120,
+      "frames": 9,
+      "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+      "path": "assets/generated/effects/fire/frame_4.png",
+      "seed": 8123,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "effect.fire.loop.5": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "frame": 5,
+      "frame_duration_ms": 120,
+      "frames": 9,
+      "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+      "path": "assets/generated/effects/fire/frame_5.png",
+      "seed": 8123,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "effect.fire.loop.6": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "frame": 6,
+      "frame_duration_ms": 120,
+      "frames": 9,
+      "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+      "path": "assets/generated/effects/fire/frame_6.png",
+      "seed": 8123,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "effect.fire.loop.7": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "frame": 7,
+      "frame_duration_ms": 120,
+      "frames": 9,
+      "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+      "path": "assets/generated/effects/fire/frame_7.png",
+      "seed": 8123,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "effect.fire.loop.8": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "frame": 8,
+      "frame_duration_ms": 120,
+      "frames": 9,
+      "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+      "path": "assets/generated/effects/fire/frame_8.png",
+      "seed": 8123,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.0": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_0.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.1": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_1.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.10": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_10.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.11": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_11.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.12": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_12.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.13": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_13.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.14": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_14.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.15": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_15.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.16": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_16.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.17": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_17.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.18": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_18.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.19": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_19.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.2": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_2.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.20": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_20.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.21": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_21.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.22": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_22.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.23": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_23.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.24": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_24.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.25": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_25.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.26": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_26.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.27": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_27.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.28": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_28.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.29": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_29.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.3": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_3.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.30": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_30.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.31": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_31.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.32": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_32.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.33": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_33.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.34": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_34.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.35": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_35.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.36": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_36.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.37": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_37.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.38": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_38.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.39": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_39.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.4": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_4.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.40": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_40.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.41": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_41.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.42": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_42.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.43": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_43.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.44": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_44.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.45": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_45.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.46": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_46.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.47": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_47.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.48": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_48.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.49": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_49.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.5": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_5.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.50": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_50.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.51": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_51.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.52": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_52.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.53": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_53.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.54": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_54.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.55": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_55.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.56": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_56.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.57": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_57.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.6": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_6.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.7": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_7.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.8": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_8.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "kit.tile.9": {
+      "anchor": [
+        14,
+        55
+      ],
+      "category": "building_kit",
+      "path": "kit/tile_9.png",
+      "size": [
+        76,
+        86
+      ],
+      "source": "pixellab"
+    },
+    "prop.bush": {
+      "anchor": [
+        16,
+        26
+      ],
+      "category": "prop",
+      "path": "bush_s.png",
+      "size": [
+        32,
+        32
+      ],
+      "source": "pixellab"
+    },
+    "prop.monument": {
+      "anchor": [
+        20,
+        58
+      ],
+      "category": "prop",
+      "path": "monument_s.png",
+      "size": [
+        40,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "prop.pine.grass": {
+      "anchor": [
+        20,
+        58
+      ],
+      "category": "prop",
+      "path": "pine_s.png",
+      "size": [
+        40,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "prop.pine.grass.small": {
+      "anchor": [
+        16,
+        42
+      ],
+      "category": "prop",
+      "path": "pine_small.png",
+      "size": [
+        32,
+        48
+      ],
+      "source": "pixellab"
+    },
+    "prop.pine.snow": {
+      "anchor": [
+        20,
+        58
+      ],
+      "category": "prop",
+      "path": "pine_snow.png",
+      "size": [
+        40,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "prop.pine.snow.small": {
+      "anchor": [
+        16,
+        42
+      ],
+      "category": "prop",
+      "path": "pine_small_snow.png",
+      "size": [
+        32,
+        48
+      ],
+      "source": "pixellab"
+    },
+    "prop.rock": {
+      "anchor": [
+        24,
+        34
+      ],
+      "category": "prop",
+      "path": "rock_s.png",
+      "size": [
+        48,
+        40
+      ],
+      "source": "pixellab"
+    },
+    "structure.barracks.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "70aed882-12dc-4eb0-a344-c316c19288ff",
+      "path": "assets/generated/buildings/barracks.png",
+      "seed": 8110,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.clinic.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "2c346f25-00b3-4c13-b3b0-364bb8d496d1",
+      "path": "assets/generated/buildings/clinic.png",
+      "seed": 8109,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.farm.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "1817f04c-9ebc-46ee-b898-fdf7b77c08de",
+      "path": "assets/generated/buildings/farm.png",
+      "seed": 8103,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.gate.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "e825a8f1-8985-4694-8f38-1bc6ec920fe0",
+      "path": "assets/generated/buildings/gate.png",
+      "seed": 8112,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.generic.ruined": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "c204cb23-5f3a-42b1-bd67-b68e348fe8f1",
+      "path": "assets/generated/effects/ruin.png",
+      "seed": 8121,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.headquarters.operational": {
+      "anchor": [
+        48,
+        90
+      ],
+      "category": "structure",
+      "path": "keep_s.png",
+      "size": [
+        96,
+        96
+      ],
+      "source": "pixellab"
+    },
+    "structure.house.desert.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "path": "house_desert.png",
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.house.grass.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "path": "house_s.png",
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.lumber_camp.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "836a89a2-026e-41ef-985a-7b11959e9435",
+      "path": "assets/generated/buildings/lumber_camp.png",
+      "seed": 8104,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.market.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "359172f2-faa8-4176-a638-a5873203ee8e",
+      "path": "assets/generated/buildings/market.png",
+      "seed": 8107,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.mine.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "c25b74e9-69ef-46d5-a93e-6d8041b1211b",
+      "path": "assets/generated/buildings/mine.png",
+      "seed": 8106,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.quarry.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "b9b09f95-14ab-4d6f-b161-995dcbcb53b7",
+      "path": "assets/generated/buildings/quarry.png",
+      "seed": 8105,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.wall.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "03529795-71db-453b-a673-86db0251f9aa",
+      "path": "assets/generated/buildings/wall.png",
+      "seed": 8113,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.warehouse.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "f548448c-0114-4506-98a2-6478579bd603",
+      "path": "assets/generated/buildings/warehouse.png",
+      "seed": 8101,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.watchtower.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "adc24de9-97ac-47ad-bd5f-fdeb7323184b",
+      "path": "assets/generated/buildings/watchtower.png",
+      "seed": 8111,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.well.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "87256ba1-2482-4a7f-82a8-a0cbd7a6500e",
+      "path": "assets/generated/buildings/well.png",
+      "seed": 8102,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.workshop.operational": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "structure",
+      "job_id": "ec425b4c-8783-465c-a8fb-65de4f27f483",
+      "path": "assets/generated/buildings/workshop.png",
+      "seed": 8108,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "terrain.dirt.base": {
+      "anchor": [
+        24,
+        42
+      ],
+      "category": "terrain",
+      "path": "dirt_tile.png",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab"
+    },
+    "terrain.grass.base": {
+      "anchor": [
+        24,
+        42
+      ],
+      "category": "terrain",
+      "path": "grass_tile.png",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab"
+    },
+    "terrain.grass.wang.0": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_0.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 0
+    },
+    "terrain.grass.wang.1": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_1.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 1
+    },
+    "terrain.grass.wang.10": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_10.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 10
+    },
+    "terrain.grass.wang.11": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_11.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 11
+    },
+    "terrain.grass.wang.12": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_12.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 12
+    },
+    "terrain.grass.wang.13": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_13.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 13
+    },
+    "terrain.grass.wang.14": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_14.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 14
+    },
+    "terrain.grass.wang.15": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_15.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 15
+    },
+    "terrain.grass.wang.2": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_2.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 2
+    },
+    "terrain.grass.wang.3": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_3.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 3
+    },
+    "terrain.grass.wang.4": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_4.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 4
+    },
+    "terrain.grass.wang.5": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_5.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 5
+    },
+    "terrain.grass.wang.6": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_6.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 6
+    },
+    "terrain.grass.wang.7": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_7.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 7
+    },
+    "terrain.grass.wang.8": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_8.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 8
+    },
+    "terrain.grass.wang.9": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "grass",
+      "category": "terrain",
+      "path": "ws_grass/tile_9.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 9
+    },
+    "terrain.sand.base": {
+      "anchor": [
+        24,
+        42
+      ],
+      "category": "terrain",
+      "path": "sand_tile.png",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab"
+    },
+    "terrain.sand.wang.0": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_0.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 0
+    },
+    "terrain.sand.wang.1": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_1.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 1
+    },
+    "terrain.sand.wang.10": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_10.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 10
+    },
+    "terrain.sand.wang.11": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_11.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 11
+    },
+    "terrain.sand.wang.12": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_12.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 12
+    },
+    "terrain.sand.wang.13": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_13.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 13
+    },
+    "terrain.sand.wang.14": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_14.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 14
+    },
+    "terrain.sand.wang.15": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_15.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 15
+    },
+    "terrain.sand.wang.2": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_2.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 2
+    },
+    "terrain.sand.wang.3": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_3.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 3
+    },
+    "terrain.sand.wang.4": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_4.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 4
+    },
+    "terrain.sand.wang.5": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_5.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 5
+    },
+    "terrain.sand.wang.6": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_6.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 6
+    },
+    "terrain.sand.wang.7": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_7.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 7
+    },
+    "terrain.sand.wang.8": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_8.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 8
+    },
+    "terrain.sand.wang.9": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "sand",
+      "category": "terrain",
+      "path": "ws_sand/tile_9.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 9
+    },
+    "terrain.snow.base": {
+      "anchor": [
+        24,
+        42
+      ],
+      "category": "terrain",
+      "path": "snow_tile.png",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab"
+    },
+    "terrain.snow.wang.0": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_0.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 0
+    },
+    "terrain.snow.wang.1": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_1.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 1
+    },
+    "terrain.snow.wang.10": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_10.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 10
+    },
+    "terrain.snow.wang.11": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_11.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 11
+    },
+    "terrain.snow.wang.12": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_12.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 12
+    },
+    "terrain.snow.wang.13": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_13.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 13
+    },
+    "terrain.snow.wang.14": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_14.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 14
+    },
+    "terrain.snow.wang.15": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_15.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 15
+    },
+    "terrain.snow.wang.2": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_2.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 2
+    },
+    "terrain.snow.wang.3": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_3.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 3
+    },
+    "terrain.snow.wang.4": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_4.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 4
+    },
+    "terrain.snow.wang.5": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_5.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 5
+    },
+    "terrain.snow.wang.6": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_6.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 6
+    },
+    "terrain.snow.wang.7": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_7.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 7
+    },
+    "terrain.snow.wang.8": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_8.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 8
+    },
+    "terrain.snow.wang.9": {
+      "anchor": [
+        0,
+        12
+      ],
+      "biome": "snow",
+      "category": "terrain",
+      "path": "ws_snow/tile_9.png",
+      "size": [
+        48,
+        36
+      ],
+      "source": "pixellab",
+      "wang_mask": 9
+    },
+    "terrain.wheat.base": {
+      "anchor": [
+        24,
+        42
+      ],
+      "category": "terrain",
+      "path": "wheat_tile.png",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab"
+    }
+  },
+  "painter_order": [
+    "x_plus_y",
+    "x"
+  ],
+  "pixellab": {
+    "generated_states": [
+      {
+        "job_id": "f548448c-0114-4506-98a2-6478579bd603",
+        "key": "structure.warehouse.operational",
+        "path": "assets/generated/buildings/warehouse.png",
+        "prompt": "compact medieval timber warehouse with crates and double doors, readable isometric game building sprite",
+        "seed": 8101
+      },
+      {
+        "job_id": "87256ba1-2482-4a7f-82a8-a0cbd7a6500e",
+        "key": "structure.well.operational",
+        "path": "assets/generated/buildings/well.png",
+        "prompt": "compact medieval stone water well with timber roof and bucket, readable isometric game building sprite",
+        "seed": 8102
+      },
+      {
+        "job_id": "1817f04c-9ebc-46ee-b898-fdf7b77c08de",
+        "key": "structure.farm.operational",
+        "path": "assets/generated/buildings/farm.png",
+        "prompt": "compact medieval farm plot with wheat rows, fence and tiny tool shed, readable isometric game building sprite",
+        "seed": 8103
+      },
+      {
+        "job_id": "836a89a2-026e-41ef-985a-7b11959e9435",
+        "key": "structure.lumber_camp.operational",
+        "path": "assets/generated/buildings/lumber_camp.png",
+        "prompt": "compact medieval lumber camp with stacked logs, chopping block and canvas shelter, readable isometric game building sprite",
+        "seed": 8104
+      },
+      {
+        "job_id": "b9b09f95-14ab-4d6f-b161-995dcbcb53b7",
+        "key": "structure.quarry.operational",
+        "path": "assets/generated/buildings/quarry.png",
+        "prompt": "compact medieval stone quarry with cut blocks, pulley and timber supports, readable isometric game building sprite",
+        "seed": 8105
+      },
+      {
+        "job_id": "c25b74e9-69ef-46d5-a93e-6d8041b1211b",
+        "key": "structure.mine.operational",
+        "path": "assets/generated/buildings/mine.png",
+        "prompt": "compact medieval stone mine entrance with timber supports, ore cart and dark tunnel, readable game building sprite",
+        "seed": 8106
+      },
+      {
+        "job_id": "359172f2-faa8-4176-a638-a5873203ee8e",
+        "key": "structure.market.operational",
+        "path": "assets/generated/buildings/market.png",
+        "prompt": "compact medieval open air market with striped cloth awning, crates and trading stall, readable game building sprite",
+        "seed": 8107
+      },
+      {
+        "job_id": "ec425b4c-8783-465c-a8fb-65de4f27f483",
+        "key": "structure.workshop.operational",
+        "path": "assets/generated/buildings/workshop.png",
+        "prompt": "compact medieval artisan workshop with timber frame, chimney, tools and workbench, readable game building sprite",
+        "seed": 8108
+      },
+      {
+        "job_id": "2c346f25-00b3-4c13-b3b0-364bb8d496d1",
+        "key": "structure.clinic.operational",
+        "path": "assets/generated/buildings/clinic.png",
+        "prompt": "compact medieval healer clinic with pale canvas awning, herb sign and timber frame, readable game building sprite",
+        "seed": 8109
+      },
+      {
+        "job_id": "70aed882-12dc-4eb0-a344-c316c19288ff",
+        "key": "structure.barracks.operational",
+        "path": "assets/generated/buildings/barracks.png",
+        "prompt": "compact fortified medieval barracks with timber and stone walls, weapon rack and red pennant, readable game building sprite",
+        "seed": 8110
+      },
+      {
+        "job_id": "adc24de9-97ac-47ad-bd5f-fdeb7323184b",
+        "key": "structure.watchtower.operational",
+        "path": "assets/generated/buildings/watchtower.png",
+        "prompt": "compact medieval timber watchtower with stone base, ladder and lookout platform, readable game building sprite",
+        "seed": 8111
+      },
+      {
+        "job_id": "e825a8f1-8985-4694-8f38-1bc6ec920fe0",
+        "key": "structure.gate.operational",
+        "path": "assets/generated/buildings/gate.png",
+        "prompt": "compact medieval fortified gatehouse with raised portcullis and timber doors, readable game building sprite",
+        "seed": 8112
+      },
+      {
+        "job_id": "03529795-71db-453b-a673-86db0251f9aa",
+        "key": "structure.wall.operational",
+        "path": "assets/generated/buildings/wall.png",
+        "prompt": "short compact medieval stone defensive wall segment with timber braces, readable game building sprite",
+        "seed": 8113
+      },
+      {
+        "job_id": "c204cb23-5f3a-42b1-bd67-b68e348fe8f1",
+        "key": "structure.generic.ruined",
+        "path": "assets/generated/effects/ruin.png",
+        "prompt": "same medieval building collapsed into charred broken beams, cracked stones and ash, ruined game building sprite",
+        "seed": 8121
+      },
+      {
+        "job_id": "559f44e6-b3cf-4dd9-a3df-1ff588b85245",
+        "key": "effect.fire.base",
+        "path": "assets/generated/effects/fire_base.png",
+        "prompt": "small orange ember flame with wisps of dark smoke for a burning medieval building, isolated pixel art effect sprite",
+        "seed": 8120
+      },
+      {
+        "job_id": "7e61b2fc-c771-4ee5-beef-07a374e03b6d",
+        "key": "effect.construction",
+        "path": "assets/generated/effects/construction.png",
+        "prompt": "wooden scaffold with rope, planks and drifting construction dust, isolated medieval pixel art effect sprite",
+        "seed": 8122
+      },
+      {
+        "frame": 0,
+        "frame_duration_ms": 120,
+        "frames": 9,
+        "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+        "key": "effect.fire.loop.0",
+        "path": "assets/generated/effects/fire/frame_0.png",
+        "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
+        "seed": 8123
+      },
+      {
+        "frame": 1,
+        "frame_duration_ms": 120,
+        "frames": 9,
+        "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+        "key": "effect.fire.loop.1",
+        "path": "assets/generated/effects/fire/frame_1.png",
+        "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
+        "seed": 8123
+      },
+      {
+        "frame": 2,
+        "frame_duration_ms": 120,
+        "frames": 9,
+        "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+        "key": "effect.fire.loop.2",
+        "path": "assets/generated/effects/fire/frame_2.png",
+        "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
+        "seed": 8123
+      },
+      {
+        "frame": 3,
+        "frame_duration_ms": 120,
+        "frames": 9,
+        "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+        "key": "effect.fire.loop.3",
+        "path": "assets/generated/effects/fire/frame_3.png",
+        "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
+        "seed": 8123
+      },
+      {
+        "frame": 4,
+        "frame_duration_ms": 120,
+        "frames": 9,
+        "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+        "key": "effect.fire.loop.4",
+        "path": "assets/generated/effects/fire/frame_4.png",
+        "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
+        "seed": 8123
+      },
+      {
+        "frame": 5,
+        "frame_duration_ms": 120,
+        "frames": 9,
+        "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+        "key": "effect.fire.loop.5",
+        "path": "assets/generated/effects/fire/frame_5.png",
+        "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
+        "seed": 8123
+      },
+      {
+        "frame": 6,
+        "frame_duration_ms": 120,
+        "frames": 9,
+        "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+        "key": "effect.fire.loop.6",
+        "path": "assets/generated/effects/fire/frame_6.png",
+        "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
+        "seed": 8123
+      },
+      {
+        "frame": 7,
+        "frame_duration_ms": 120,
+        "frames": 9,
+        "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+        "key": "effect.fire.loop.7",
+        "path": "assets/generated/effects/fire/frame_7.png",
+        "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
+        "seed": 8123
+      },
+      {
+        "frame": 8,
+        "frame_duration_ms": 120,
+        "frames": 9,
+        "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
+        "key": "effect.fire.loop.8",
+        "path": "assets/generated/effects/fire/frame_8.png",
+        "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
+        "seed": 8123
+      }
+    ],
+    "inventory_checked_at": "2026-08-13",
+    "known_isometric_tile_ids": [
+      {
+        "id": "e7492368-8085-42db-a091-8d54b53c59a6",
+        "prompt": "golden yellow desert sand ground, flat cartoon",
+        "seed": 0
+      },
+      {
+        "id": "39ef93ca-86e8-427f-bb24-640f5fea099b",
+        "prompt": "flat plain brown dirt ground, bare soil, no bricks",
+        "seed": 42
+      },
+      {
+        "id": "c8c884c7-343b-4419-b77f-406f89b5bb1f",
+        "prompt": "dirt path road, packed brown earth",
+        "seed": 0
+      },
+      {
+        "id": "95c03461-15d0-48b8-a831-935ca3e961db",
+        "prompt": "golden yellow wheat crop field, flat cartoon low poly style",
+        "seed": 0
+      },
+      {
+        "id": "facc87ed-a414-480d-9ce7-69e3f6269e6c",
+        "prompt": "bright green grass field on dirt, flat cartoon low poly style",
+        "seed": 0
+      }
+    ],
+    "project_tag": "pixellab-castle"
+  },
+  "projection": "isometric",
+  "tile_geometry": {
+    "height": 24,
+    "width": 48
+  },
+  "version": "1.0"
+}
