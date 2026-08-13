@@ -122,6 +122,8 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
   controller_timed_out: "Controller timed out",
   controller_replaced: "Controller replaced",
   controller_claimed: "Controller claimed",
+  heartbeat_rejected: "Heartbeat rejected",
+  pairing_rejected: "Pairing rejected",
   match_completed: "Match completed",
 };
 

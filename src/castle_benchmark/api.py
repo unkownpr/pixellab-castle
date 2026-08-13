@@ -12,7 +12,7 @@ from pathlib import Path
 from hashlib import sha256
 from threading import RLock
 
-from fastapi import FastAPI, Header, Query, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -597,6 +597,11 @@ def create_app(
                     "turn_resolved": "turn.resolved",
                     "metric_updated": "metric.updated",
                     "match_completed": "match.completed",
+                    "controller_claimed": "controller.claimed",
+                    "pairing_rejected": "pairing.rejected",
+                    "heartbeat_rejected": "controller.heartbeat_rejected",
+                    "controller_timed_out": "controller.timed_out",
+                    "controller_replaced": "controller.replaced",
                 }
                 for event in current_events:  # type: ignore[union-attr]
                     sequence = int(event["sequence"])
@@ -666,6 +671,14 @@ def create_app(
 
     if not remote:
         app.websocket("/api/matches/{match_id}/ws")(live)
+
+    @app.api_route(
+        "/api/{path:path}",
+        methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+        include_in_schema=False,
+    )
+    def api_route_not_found(path: str) -> Response:
+        raise HTTPException(status_code=404, detail="not found")
 
     client_dir = (
         Path(static_dir)

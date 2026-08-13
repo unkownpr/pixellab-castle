@@ -176,7 +176,7 @@ export interface OperationsWebSocketTicket {
 
 export type AdminWebSocketMessage =
   | { readonly schema_version: SchemaVersion; readonly type: "lobby.snapshot"; readonly payload: OperationsSnapshot }
-  | { readonly schema_version: SchemaVersion; readonly type: "controller.presence_changed" | "turn.opened" | "controller.submitted" | "turn.resolved" | "match.completed"; readonly payload: OperationalEvent }
+  | { readonly schema_version: SchemaVersion; readonly type: "controller.presence_changed" | "turn.opened" | "controller.submitted" | "turn.resolved" | "match.completed" | "controller.claimed" | "pairing.rejected" | "controller.heartbeat_rejected" | "controller.timed_out" | "controller.replaced"; readonly payload: OperationalEvent }
   | { readonly schema_version: SchemaVersion; readonly type: "metric.updated"; readonly payload: { readonly event: OperationalEvent; readonly metrics: Readonly<Record<string, unknown>> } };
 
 export type WebSocketConstructor = new (url: string, protocols?: string | string[]) => WebSocket;

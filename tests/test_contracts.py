@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from castle_benchmark.api import create_app
 from castle_benchmark.lobby import ControllerIdentity
-from castle_benchmark.service import ForbiddenError, GameService
+from castle_benchmark.service import ConflictError, ForbiddenError, GameService, ServiceError
 
 
 @pytest.fixture
@@ -607,6 +607,60 @@ def test_operations_websocket_emits_presence_and_terminal_turn_sequence() -> Non
     assert pushed_types[0] == "controller.submitted"
     assert "controller.presence_changed" in pushed_types
     assert pushed_types[-3:] == ["turn.resolved", "metric.updated", "match.completed"]
+
+
+def test_operations_websocket_maps_claim_reject_heartbeat_timeout_and_replacement() -> None:
+    """Catches unmapped operational kinds going silent until a later gap refresh."""
+    service = GameService()
+    session = service.create_session("direct", "basic-survival-v1", 193, 1)
+    service.configure_slot(session.admin_token, "c1", "external")
+    pairing = service.create_pairing(session.admin_token, "c1", now=1.0)
+    client = TestClient(create_app(service, clock=lambda: 5.0))
+
+    with client.websocket_connect(
+        f"/api/matches/{session.match_id}/operations/ws",
+        headers={"Authorization": f"Bearer {session.admin_token}"},
+    ) as websocket:
+        assert websocket.receive_json()["type"] == "lobby.snapshot"
+
+        with pytest.raises(ServiceError):
+            service.claim_slot(
+                pairing.code or "",
+                ControllerIdentity("x" * 200, "p", "m"),
+                now=1.0,
+            )
+        claimed = service.claim_slot_contract(
+            pairing.code or "", ControllerIdentity("Live", "p", "m"), now=2.0
+        )
+        token = str(claimed["controller_token"])
+        service.heartbeat(token, 0, "connected", now=2.0)
+        with pytest.raises(ConflictError):
+            service.heartbeat(token, 0, "connected", now=2.05)
+
+        now = 5.0
+        service.start_match(session.admin_token, now=now)
+        now = 35.0
+        service.close_deadline(session.admin_token, now=now)
+        service.replace_controller(session.admin_token, "c1", "baseline", now=now)
+        while not service.match_status(session.admin_token)["terminal"]:
+            now += 30.0
+            service.close_deadline(session.admin_token, now=now)
+
+        expected = {
+            "pairing.rejected",
+            "controller.claimed",
+            "controller.heartbeat_rejected",
+            "controller.timed_out",
+            "controller.replaced",
+        }
+        seen: set[str] = set()
+        while True:
+            message = websocket.receive_json()
+            seen.add(message["type"])
+            if message["type"] == "match.completed":
+                break
+
+    assert expected <= seen
 
 
 def test_controller_cannot_use_admin_http_mutations(service: GameService) -> None:

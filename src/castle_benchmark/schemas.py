@@ -362,6 +362,31 @@ class MatchCompletedMessage(VersionedModel):
     payload: OperationalEventResponse
 
 
+class ControllerClaimedMessage(VersionedModel):
+    type: Literal["controller.claimed"]
+    payload: OperationalEventResponse
+
+
+class PairingRejectedMessage(VersionedModel):
+    type: Literal["pairing.rejected"]
+    payload: OperationalEventResponse
+
+
+class ControllerHeartbeatRejectedMessage(VersionedModel):
+    type: Literal["controller.heartbeat_rejected"]
+    payload: OperationalEventResponse
+
+
+class ControllerTimedOutMessage(VersionedModel):
+    type: Literal["controller.timed_out"]
+    payload: OperationalEventResponse
+
+
+class ControllerReplacedMessage(VersionedModel):
+    type: Literal["controller.replaced"]
+    payload: OperationalEventResponse
+
+
 AdminWebSocketMessage = Annotated[
     LobbySnapshotMessage
     | ControllerPresenceMessage
@@ -369,7 +394,12 @@ AdminWebSocketMessage = Annotated[
     | ControllerSubmittedMessage
     | TurnResolvedMessage
     | MetricUpdatedMessage
-    | MatchCompletedMessage,
+    | MatchCompletedMessage
+    | ControllerClaimedMessage
+    | PairingRejectedMessage
+    | ControllerHeartbeatRejectedMessage
+    | ControllerTimedOutMessage
+    | ControllerReplacedMessage,
     Field(discriminator="type"),
 ]
 
