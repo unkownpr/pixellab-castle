@@ -31,6 +31,21 @@
 - `uv run pytest -q` — 69 passed
 - `git diff --check` — clean
 
+## Final replacement locking fix
+
+- `replace_controller()` now acquires the target match's turn lock before it
+  rechecks admin authorization and performs tenure closure, capability
+  revocation, slot mutation, and replacement event emission. This matches the
+  lock held by action submission and deadline closure, without introducing a
+  lobby-lock/turn-lock inversion.
+- Added a deterministic threaded regression that pauses a submitted turn inside
+  `SimCore.resolve`, starts a replacement concurrently, proves replacement has
+  not completed while resolution holds the lock, then verifies the resolved
+  action remains attributed to the original controller ID.
+
+Verification: `uv run pytest tests/test_deadlines.py tests/test_replay.py tests/test_lobby.py tests/test_contracts.py tests/test_invariants.py -q` — 33 passed;
+`uv run pytest -q` — 76 passed; `git diff --check` — clean.
+
 ## Self-review
 
 - No raw pairing, controller, or admin capability/digest is added to snapshots,

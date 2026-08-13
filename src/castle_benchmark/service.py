@@ -564,44 +564,46 @@ class GameService:
         now: float,
     ) -> ControllerSlot:
         """End the current tenure, revoke its capability, and install a takeover slot."""
-        session, match = self._lobby_for_admin(admin_token)
-        if session.status not in {SessionStatus.LOBBY, SessionStatus.RUNNING}:
-            raise ConflictError("invalid_session_status", code="invalid_session_status")
-        try:
-            replacement_type = ControllerType(replacement)
-        except ValueError as exc:
-            raise ServiceError("unknown controller type") from exc
-        slot = self._slot(session, colony_id)
-        self._end_tenure(match, colony_id, now)
-        for token, access in tuple(self._access.items()):
-            if not access.admin and access.match_id == match.id and access.colony_id == colony_id:
-                del self._access[token]
-        slot.generation += 1
-        slot.controller_type = replacement_type
-        slot.baseline_kind = None
-        slot.identity = None
-        slot.capability_digest = None
-        slot.pairing_digest = None
-        slot.pairing_expires_at = None
-        slot.pairing_consumed = False
-        slot.pairing_attempts = 0
-        slot.last_heartbeat_at = None
-        slot.last_heartbeat_turn = None
-        slot.controller_id = (
-            uuid.uuid4().hex if replacement_type is not ControllerType.EXTERNAL else None
-        )
-        slot.presence = (
-            PresenceStatus.TAKEN_OVER
-            if replacement_type in {ControllerType.HUMAN, ControllerType.BASELINE}
-            else PresenceStatus.UNASSIGNED
-        )
-        self._begin_tenure(match, slot, now)
-        if replacement_type is ControllerType.HUMAN and session.status is SessionStatus.RUNNING:
-            self._mint_controller_capability(match, slot)
-        self._record_controller_event(
-            match, "controller_replaced", slot, now, replacement_type=replacement_type.value
-        )
-        return slot
+        _, authorized_match = self._authorize(admin_token)
+        with authorized_match.turn_lock:
+            session, match = self._lobby_for_admin(admin_token)
+            if session.status not in {SessionStatus.LOBBY, SessionStatus.RUNNING}:
+                raise ConflictError("invalid_session_status", code="invalid_session_status")
+            try:
+                replacement_type = ControllerType(replacement)
+            except ValueError as exc:
+                raise ServiceError("unknown controller type") from exc
+            slot = self._slot(session, colony_id)
+            self._end_tenure(match, colony_id, now)
+            for token, access in tuple(self._access.items()):
+                if not access.admin and access.match_id == match.id and access.colony_id == colony_id:
+                    del self._access[token]
+            slot.generation += 1
+            slot.controller_type = replacement_type
+            slot.baseline_kind = None
+            slot.identity = None
+            slot.capability_digest = None
+            slot.pairing_digest = None
+            slot.pairing_expires_at = None
+            slot.pairing_consumed = False
+            slot.pairing_attempts = 0
+            slot.last_heartbeat_at = None
+            slot.last_heartbeat_turn = None
+            slot.controller_id = (
+                uuid.uuid4().hex if replacement_type is not ControllerType.EXTERNAL else None
+            )
+            slot.presence = (
+                PresenceStatus.TAKEN_OVER
+                if replacement_type in {ControllerType.HUMAN, ControllerType.BASELINE}
+                else PresenceStatus.UNASSIGNED
+            )
+            self._begin_tenure(match, slot, now)
+            if replacement_type is ControllerType.HUMAN and session.status is SessionStatus.RUNNING:
+                self._mint_controller_capability(match, slot)
+            self._record_controller_event(
+                match, "controller_replaced", slot, now, replacement_type=replacement_type.value
+            )
+            return slot
 
     def human_controller_token(self, admin_token: str, colony_id: str) -> str:
         """Admin-only handoff of the current locally controlled colony capability."""

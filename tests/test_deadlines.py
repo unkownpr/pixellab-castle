@@ -175,6 +175,58 @@ def test_submit_and_deadline_close_cannot_resolve_one_turn_twice(
     assert closed and isinstance(closed[0], ConflictError)
 
 
+def test_replacement_waits_for_submit_resolution_before_changing_tenure(
+    clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Catches takeover mutation racing a resolving action into the replacement tenure."""
+    service = GameService()
+    session = service.create_session("orch", "basic-survival-v1", 43, 1)
+    pairing = service.create_pairing(session.admin_token, "c1", clock.now)
+    claimed = service.claim_slot(pairing.code or "", _identity(), clock.now)
+    token = claimed.controller_token
+    assert token is not None
+    service.heartbeat(token, 0, "connected", clock.now)
+    service.start_match(session.admin_token, clock.now)
+    match = service._matches[session.match_id]
+    original_controller_id = service._lobbies[session.match_id].slots[0].controller_id
+    entered_resolve = Event()
+    release_resolve = Event()
+    replacement_done = Event()
+    original_resolve = match.sim.resolve
+
+    def paused_resolve(batches):  # type: ignore[no-untyped-def]
+        entered_resolve.set()
+        assert release_resolve.wait(timeout=2)
+        return original_resolve(batches)
+
+    monkeypatch.setattr(match.sim, "resolve", paused_resolve)
+    submitter = Thread(
+        target=lambda: service.submit_actions(
+            token,
+            0,
+            ({"kind": "set_policy", "policy": "rationing", "value": "low"},),
+        )
+    )
+
+    def replace() -> None:
+        service.replace_controller(session.admin_token, "c1", "baseline", clock.now + 1)
+        replacement_done.set()
+
+    replacer = Thread(target=replace)
+    submitter.start()
+    assert entered_resolve.wait(timeout=2)
+    replacer.start()
+    assert not replacement_done.wait(timeout=0.1)
+    release_resolve.set()
+    submitter.join(timeout=2)
+    replacer.join(timeout=2)
+
+    assert not submitter.is_alive()
+    assert not replacer.is_alive()
+    assert replacement_done.is_set()
+    assert match.resolved_turns[0].action_controller_ids == {"c1": original_controller_id}
+
+
 def test_normal_heartbeats_do_not_duplicate_connected_events(
     live_session: tuple[GameService, object, str], clock: Clock
 ) -> None:
