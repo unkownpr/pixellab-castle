@@ -1,10 +1,11 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from castle_benchmark.api import create_app
 from castle_benchmark.runner import RunConfig, run_match, verify_replay
-from castle_benchmark.scenarios import BASIC_SURVIVAL
+from castle_benchmark.scenarios import BASIC_SURVIVAL, OFFICIAL_SCENARIOS
 
 
 def test_http_human_turn_and_complete_replayable_baseline_match(tmp_path: Path) -> None:
@@ -62,5 +63,21 @@ def test_http_human_turn_and_complete_replayable_baseline_match(tmp_path: Path) 
             controller_kinds=("survivalist", "trader", "expansionist", "militarist"),
         )
     )
+    assert run.termination_reason in {"turn_limit", "extinction"}
+    assert verify_replay(run.run_dir).ok
+
+
+@pytest.mark.parametrize("scenario", OFFICIAL_SCENARIOS, ids=lambda scenario: scenario.id)
+def test_four_baselines_finish_every_official_scenario(tmp_path: Path, scenario) -> None:
+    run = run_match(
+        RunConfig(
+            scenario,
+            seed=17,
+            colony_count=4,
+            output_dir=tmp_path,
+            controller_kinds=("survivalist", "trader", "expansionist", "militarist"),
+        )
+    )
+
     assert run.termination_reason in {"turn_limit", "extinction"}
     assert verify_replay(run.run_dir).ok

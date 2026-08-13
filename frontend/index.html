@@ -24,9 +24,17 @@
             <label>Senaryo<select id="scenario-select" name="scenario"></select></label>
             <div class="field-pair">
               <label>Seed<input id="seed-input" name="seed" type="number" value="17" /></label>
-              <label>Koloni<input id="colony-input" name="colonies" type="number" min="1" max="8" value="1" /></label>
+              <label>Koloni<input id="colony-input" name="colonies" type="number" min="1" max="8" value="4" /></label>
             </div>
             <button class="primary" type="submit">Yeni karşılaşma başlat</button>
+            <label class="replay-import">Replay snapshots.jsonl
+              <input id="replay-input" type="file" accept=".jsonl,application/json" />
+            </label>
+            <div id="replay-controls" class="replay-controls" hidden>
+              <button id="replay-prev" type="button" aria-label="Önceki replay turu">←</button>
+              <input id="replay-range" type="range" min="0" max="0" value="0" aria-label="Replay turu" />
+              <button id="replay-next" type="button" aria-label="Sonraki replay turu">→</button>
+            </div>
           </form>
           <section class="ledger" aria-labelledby="ledger-title">
             <div class="section-label"><span id="ledger-title">Koloni defteri</span><output id="turn-output">T–</output></div>

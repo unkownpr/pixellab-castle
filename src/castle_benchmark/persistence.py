@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,18 @@ from .domain import MatchState, Position, StructureKind
 from .engine import TurnResult
 from .events import canonical_snapshot, state_hash
 from .scenarios import Scenario
+
+
+REPOSITORY_ROOT = Path(__file__).parents[2]
+
+
+def _dependency_lock_hashes() -> dict[str, str]:
+    hashes: dict[str, str] = {}
+    for relative in ("uv.lock", "frontend/package-lock.json"):
+        path = REPOSITORY_ROOT / relative
+        if path.exists():
+            hashes[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashes
 
 
 def scenario_to_dict(scenario: Scenario) -> dict[str, object]:
@@ -169,6 +182,8 @@ class ArtifactWriter:
             "seed": seed,
             "colony_count": colony_count,
             "controllers": controller_names,
+            "dependency_lock_hashes": _dependency_lock_hashes(),
+            "seat_rotation": 0,
         }
         writer.metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
         return writer
@@ -225,4 +240,3 @@ class ArtifactWriter:
             database.commit()
         finally:
             database.close()
-

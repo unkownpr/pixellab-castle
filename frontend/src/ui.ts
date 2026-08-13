@@ -6,7 +6,12 @@ import {
   type ScenarioSummary,
   type VisibleCell,
 } from "./api";
-import { CastleRenderer, type ControllerAction } from "./game";
+import {
+  CastleRenderer,
+  snapshotToObservation,
+  type ControllerAction,
+  type ReplaySnapshot,
+} from "./game";
 
 type ActionKind = "wait" | "gather" | "build" | "policy" | "diplomacy" | "trade" | "raid";
 
@@ -22,6 +27,7 @@ export class BenchmarkWorkbench {
   private match: MatchCreated | null = null;
   private observation: Observation | null = null;
   private selectedCell: VisibleCell | null = null;
+  private replayFrames: readonly ReplaySnapshot[] = [];
   private busy = false;
 
   async init(): Promise<void> {
@@ -37,6 +43,14 @@ export class BenchmarkWorkbench {
     required<HTMLButtonElement>("#clear-events").addEventListener("click", () => {
       required<HTMLOListElement>("#event-log").replaceChildren();
     });
+    required<HTMLInputElement>("#replay-input").addEventListener("change", (event) => {
+      void this.loadReplay((event.currentTarget as HTMLInputElement).files?.[0]);
+    });
+    required<HTMLInputElement>("#replay-range").addEventListener("input", (event) => {
+      void this.renderReplay(Number((event.currentTarget as HTMLInputElement).value));
+    });
+    required<HTMLButtonElement>("#replay-prev").addEventListener("click", () => void this.stepReplay(-1));
+    required<HTMLButtonElement>("#replay-next").addEventListener("click", () => void this.stepReplay(1));
   }
 
   private async loadScenarios(): Promise<void> {
@@ -69,6 +83,8 @@ export class BenchmarkWorkbench {
         colony_count: Number(required<HTMLInputElement>("#colony-input").value),
       });
       this.selectedCell = null;
+      this.replayFrames = [];
+      required<HTMLElement>("#replay-controls").hidden = true;
       this.replaceLog("Karşılaşma oluşturuldu; c1 insan kontrolünde, diğer koloniler deterministik baseline.");
       await this.refreshObservation();
       this.enableActions(true);
@@ -164,6 +180,46 @@ export class BenchmarkWorkbench {
     this.observation = await this.api.observe(this.match.match_id, "c1", token);
     await this.renderer.render(this.observation);
     this.renderStats(this.observation);
+  }
+
+  private async loadReplay(file: File | undefined): Promise<void> {
+    if (!file) return;
+    try {
+      const frames = (await file.text())
+        .split(/\r?\n/)
+        .filter((line) => line.trim())
+        .map((line) => JSON.parse(line) as ReplaySnapshot);
+      if (!frames.length) throw new Error("Replay dosyasında tamamlanmış snapshot yok");
+      this.replayFrames = frames;
+      this.match = null;
+      const range = required<HTMLInputElement>("#replay-range");
+      range.max = String(frames.length - 1);
+      range.value = "0";
+      required<HTMLElement>("#replay-controls").hidden = false;
+      this.enableActions(false);
+      this.replaceLog(`${frames.length} replay turu yüklendi; görünüm omniscient.`);
+      await this.renderReplay(0);
+    } catch (error) {
+      this.logError(error);
+    }
+  }
+
+  private async renderReplay(index: number): Promise<void> {
+    const frame = this.replayFrames[index];
+    if (!frame) return;
+    const colonyId = Object.keys(frame.colonies).sort()[0];
+    if (!colonyId) throw new Error("Replay kolonisi bulunamadı");
+    this.observation = snapshotToObservation(frame, colonyId);
+    await this.renderer.render(this.observation);
+    this.renderStats(this.observation);
+    required("#fog-label").textContent = `REPLAY · ${index + 1}/${this.replayFrames.length}`;
+  }
+
+  private stepReplay(delta: number): void {
+    const range = required<HTMLInputElement>("#replay-range");
+    const next = Math.max(0, Math.min(this.replayFrames.length - 1, Number(range.value) + delta));
+    range.value = String(next);
+    void this.renderReplay(next);
   }
 
   private renderStats(observation: Observation): void {

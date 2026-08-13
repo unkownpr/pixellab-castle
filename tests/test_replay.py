@@ -39,6 +39,9 @@ def test_replay_reproduces_hash_sequence(tmp_path) -> None:
 
     assert verification.ok
     assert verification.actual_hashes == verification.expected_hashes
+    metadata = json.loads(writer.metadata_path.read_text())
+    assert set(metadata["dependency_lock_hashes"]) == {"uv.lock", "frontend/package-lock.json"}
+    assert all(len(value) == 64 for value in metadata["dependency_lock_hashes"].values())
 
 
 def test_replay_fails_closed_when_hash_is_corrupted(tmp_path) -> None:
@@ -64,4 +67,3 @@ def test_replay_fails_closed_when_hash_is_corrupted(tmp_path) -> None:
 
     assert not verification.ok
     assert verification.first_mismatch_turn == 0
-

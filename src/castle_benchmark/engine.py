@@ -252,7 +252,14 @@ class SimCore:
             progress=0,
             required_progress=BUILD_TURNS[action.structure],
         )
-        structures = dict(self.state.structures)
+        structures = {
+            structure_id: existing
+            for structure_id, existing in self.state.structures.items()
+            if not (
+                existing.position == action.position
+                and existing.status == StructureStatus.RUINED
+            )
+        }
         structures[structure_id] = structure
         self.state = replace(self.state, structures=structures)
         events.append(
@@ -370,6 +377,34 @@ class SimCore:
         )
         current_attacker = self.state.colonies[colony_id]
         self._update_colony(colony_id, resources=current_attacker.resources.apply({"food": stolen}))
+        targets = [
+            structure
+            for structure in sorted(self.state.structures.values(), key=lambda item: item.id)
+            if structure.colony_id == action.target_colony_id
+            and structure.status in {StructureStatus.OPERATIONAL, StructureStatus.DAMAGED}
+        ]
+        if targets:
+            target = targets[0]
+            condition = max(0, target.condition - 20)
+            status = StructureStatus.RUINED if condition == 0 else StructureStatus.DAMAGED
+            structures = dict(self.state.structures)
+            structures[target.id] = replace(target, condition=condition, status=status)
+            self.state = replace(self.state, structures=structures)
+            events.append(
+                DomainEvent(
+                    self.state.turn,
+                    "combat_damage",
+                    colony_id,
+                    {
+                        "target_colony_id": action.target_colony_id,
+                        "structure_id": target.id,
+                        "condition": condition,
+                        "status": status.value,
+                        "x": target.position.x,
+                        "y": target.position.y,
+                    },
+                )
+            )
         events.append(
             DomainEvent(
                 self.state.turn,

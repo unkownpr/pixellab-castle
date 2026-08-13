@@ -88,6 +88,13 @@ def test_surprise_raid_changes_relation_and_costs_influence() -> None:
     assert result.state.colonies["c1"].relations["c2"] == RelationStatus.WAR
     assert result.state.colonies["c1"].resources.influence < influence_before
     assert any(event.kind == "surprise_raid" for event in result.events)
+    damaged = [
+        structure
+        for structure in result.state.structures.values()
+        if structure.colony_id == "c2" and structure.status == StructureStatus.DAMAGED
+    ]
+    assert damaged
+    assert any(event.kind == "combat_damage" for event in result.events)
 
 
 def test_policy_change_has_cooldown() -> None:

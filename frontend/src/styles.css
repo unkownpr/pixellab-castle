@@ -65,6 +65,11 @@ select, input { width: 100%; border: var(--line) solid var(--color-rule); border
 .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .primary { border: 0; border-radius: var(--radius); padding: 0 var(--space-4); background: var(--color-accent); color: var(--color-accent-ink); font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
 .primary:hover { filter: brightness(1.08); }
+.replay-import input { padding: var(--space-2); font-size: 0.65rem; }
+.replay-controls { grid-template-columns: 44px 1fr 44px; gap: var(--space-2); align-items: center; }
+.replay-controls:not([hidden]) { display: grid; }
+.replay-controls button { border: var(--line) solid var(--color-rule); background: var(--color-canvas); color: var(--color-ink); }
+.replay-controls input { min-height: 44px; padding: 0; accent-color: var(--color-accent); }
 
 .ledger, .selection, .event-section { padding-top: var(--space-5); }
 .section-label { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); color: var(--color-muted); font-family: var(--font-mono); font-size: 0.63rem; letter-spacing: 0.1em; text-transform: uppercase; }

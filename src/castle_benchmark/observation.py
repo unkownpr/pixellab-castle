@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .domain import MatchState, StructureStatus
+from .domain import MatchState
 from .world import WorldState
 
 
@@ -53,7 +53,7 @@ def project_observation(state: MatchState, colony_id: str) -> Observation:
             "y": structure.position.y,
         }
         for structure in sorted(state.structures.values(), key=lambda item: item.id)
-        if structure.position in colony.known_cells and structure.status != StructureStatus.RUINED
+        if structure.position in colony.known_cells
     )
     known_colonies = {
         other_id: {
@@ -108,4 +108,3 @@ def project_observation(state: MatchState, colony_id: str) -> Observation:
             "set_policy",
         ),
     )
-

@@ -8,7 +8,13 @@ import {
   Text,
 } from "pixi.js";
 
-import type { Observation, VisibleCell, VisibleStructure } from "./api";
+import type {
+  Observation,
+  StructureKind,
+  StructureStatus,
+  VisibleCell,
+  VisibleStructure,
+} from "./api";
 
 export const TILE_WIDTH = 48;
 export const TILE_HEIGHT = 24;
@@ -86,6 +92,72 @@ export function animationForEvent(event: { readonly kind: string }): EventAnimat
     default:
       return "none";
   }
+}
+
+export interface ReplaySnapshot {
+  readonly scenario_id: string;
+  readonly turn: number;
+  readonly world: { readonly cells: readonly Readonly<Record<string, unknown>>[] };
+  readonly colonies: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  readonly structures: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  readonly offers: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+}
+
+export function snapshotToObservation(snapshot: ReplaySnapshot, colonyId: string): Observation {
+  const colony = snapshot.colonies[colonyId];
+  if (!colony) throw new Error(`Replay kolonisi bulunamadı: ${colonyId}`);
+  const health = {
+    healthy: Number(colony.healthy ?? 0),
+    injured: Number(colony.injured ?? 0),
+    sick: Number(colony.sick ?? 0),
+    hungry: Number(colony.hungry ?? 0),
+  };
+  const visibleCells = snapshot.world.cells.map((cell) => ({
+    x: Number(cell.x),
+    y: Number(cell.y),
+    biome: String(cell.biome) as VisibleCell["biome"],
+    water: Boolean(cell.water),
+    buildable: Boolean(cell.buildable),
+    movement_cost: Number(cell.movement_cost),
+    resource: cell.resource === null || cell.resource === undefined ? null : String(cell.resource),
+    resource_amount: Number(cell.resource_amount ?? 0),
+  }));
+  const visibleStructures = Object.values(snapshot.structures).map((structure) => {
+    const position = structure.position as Readonly<Record<string, unknown>>;
+    return {
+      id: String(structure.id),
+      colony_id: String(structure.colony_id),
+      kind: String(structure.kind) as StructureKind,
+      status: String(structure.status) as StructureStatus,
+      progress: Number(structure.progress),
+      required_progress: Number(structure.required_progress),
+      condition: Number(structure.condition),
+      x: Number(position.x),
+      y: Number(position.y),
+    };
+  });
+  const relations = colony.relations as Readonly<Record<string, string>>;
+  return {
+    schema_version: "1.0",
+    scenario_id: snapshot.scenario_id,
+    turn: snapshot.turn,
+    colony_id: colonyId,
+    colony: {
+      id: colonyId,
+      population: Number(colony.population),
+      housing: Number(colony.housing),
+      health,
+      resources: colony.resources as Readonly<Record<string, number>>,
+      policies: colony.policies as Readonly<Record<string, string>>,
+    },
+    visible_cells: visibleCells,
+    visible_structures: visibleStructures,
+    known_colonies: Object.fromEntries(
+      Object.entries(relations).map(([id, relation]) => [id, { id, relation, contacted: relation !== "unknown" }]),
+    ),
+    active_offers: Object.values(snapshot.offers),
+    valid_action_kinds: [],
+  };
 }
 
 interface AssetEntry {
@@ -240,7 +312,9 @@ export class CastleRenderer {
     structure: VisibleStructure,
     position: ScreenPosition,
   ): Promise<Sprite | null> {
-    const generated = `structure.${structure.kind}.operational`;
+    const generated = structure.status === "ruined"
+      ? "structure.generic.ruined"
+      : `structure.${structure.kind}.operational`;
     const candidates = [generated, ...(STRUCTURE_KEYS[structure.kind] ?? []), "structure.house.grass.operational"];
     const key = candidates.find((candidate) => this.manifest?.assets[candidate]);
     if (!key) return null;
