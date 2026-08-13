@@ -29,6 +29,7 @@ export class BenchmarkWorkbench {
   private selectedCell: VisibleCell | null = null;
   private replayFrames: readonly ReplaySnapshot[] = [];
   private busy = false;
+  private matchTerminal = false;
 
   async init(): Promise<void> {
     await Promise.all([this.renderer.init(required("#world-host")), this.loadScenarios()]);
@@ -83,6 +84,7 @@ export class BenchmarkWorkbench {
         colony_count: Number(required<HTMLInputElement>("#colony-input").value),
       });
       this.selectedCell = null;
+      this.matchTerminal = false;
       this.replayFrames = [];
       required<HTMLElement>("#replay-controls").hidden = true;
       this.replaceLog("Karşılaşma oluşturuldu; c1 insan kontrolünde, diğer koloniler deterministik baseline.");
@@ -120,6 +122,11 @@ export class BenchmarkWorkbench {
 
       this.appendEvents(result.events ?? []);
       await this.refreshObservation();
+      const status = await this.api.status(this.match.match_id, this.match.admin_token);
+      this.matchTerminal = status.terminal === true;
+      if (this.matchTerminal) {
+        this.log(`Karşılaşma tamamlandı: ${String(status.termination_reason ?? "terminal")}`, "event");
+      }
     } catch (error) {
       this.logError(error);
     } finally {
@@ -192,6 +199,7 @@ export class BenchmarkWorkbench {
       if (!frames.length) throw new Error("Replay dosyasında tamamlanmış snapshot yok");
       this.replayFrames = frames;
       this.match = null;
+      this.matchTerminal = true;
       const range = required<HTMLInputElement>("#replay-range");
       range.max = String(frames.length - 1);
       range.value = "0";
@@ -288,7 +296,7 @@ export class BenchmarkWorkbench {
   private setBusy(busy: boolean): void {
     this.busy = busy;
     document.body.classList.toggle("is-busy", busy);
-    this.enableActions(Boolean(this.match) && !busy);
+    this.enableActions(Boolean(this.match) && !this.matchTerminal && !busy);
   }
 
   private enableActions(enabled: boolean): void {

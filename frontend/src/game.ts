@@ -218,6 +218,8 @@ export class CastleRenderer {
     const cellLayer = new Container();
     const markerLayer = new Container();
     const structureLayer = new Container();
+    cellLayer.sortableChildren = true;
+    structureLayer.sortableChildren = true;
     this.world.addChild(cellLayer, markerLayer, structureLayer);
 
     await Promise.all(cells.map(async (cell) => {
@@ -225,7 +227,10 @@ export class CastleRenderer {
       const key = this.terrainKey(cell);
       const sprite = await this.spriteFor(key, position);
       if (version !== this.renderVersion) return;
-      if (sprite) cellLayer.addChild(sprite);
+      if (sprite) {
+        sprite.zIndex = (cell.x + cell.y) * 1000 + cell.x;
+        cellLayer.addChild(sprite);
+      }
 
       const hit = new Graphics()
         .poly([
@@ -252,11 +257,14 @@ export class CastleRenderer {
       const position = isoToScreen(structure, origin);
       const sprite = await this.structureSprite(structure, position);
       if (version !== this.renderVersion || !sprite) return;
+      const depth = (structure.x + structure.y) * 1000 + structure.x;
+      sprite.zIndex = depth;
       structureLayer.addChild(sprite);
       const ownerIndex = Math.max(0, Number(structure.colony_id.replace(/\D/g, "")) - 1);
       const flag = new Graphics()
         .rect(position.x - 14, position.y - 35, 5, 12)
         .fill({ color: COLONY_COLORS[ownerIndex % COLONY_COLORS.length] ?? COLONY_COLORS[0] });
+      flag.zIndex = depth + 0.1;
       structureLayer.addChild(flag);
 
       if (["foundation", "building", "repairing"].includes(structure.status)) {
@@ -266,17 +274,22 @@ export class CastleRenderer {
           .fill({ color: 0x29231f, alpha: 0.8 })
           .rect(position.x - 14, position.y + 3, 28 * ratio, 3)
           .fill({ color: 0xe6a65d });
+        progress.zIndex = depth + 0.2;
         structureLayer.addChild(progress);
         const scaffold = await this.spriteFor("effect.construction", position);
         if (scaffold) {
           scaffold.alpha = 0.72;
+          scaffold.zIndex = depth + 0.3;
           structureLayer.addChild(scaffold);
         }
       }
 
       if (structure.status === "burning") {
         const fire = await this.fireSprite(position);
-        if (fire) structureLayer.addChild(fire);
+        if (fire) {
+          fire.zIndex = depth + 0.4;
+          structureLayer.addChild(fire);
+        }
       }
     }));
 
@@ -302,8 +315,9 @@ export class CastleRenderer {
   }
 
   private terrainKey(cell: VisibleCell): string {
-    if (cell.water) return `terrain.${cell.biome === "grassland" ? "grass" : cell.biome}.wang.15`;
-    if (cell.biome === "desert") return "terrain.dirt.base";
+    const terrainFamily = cell.biome === "grassland" ? "grass" : cell.biome === "desert" ? "sand" : "snow";
+    if (cell.water) return `terrain.${terrainFamily}.wang.15`;
+    if (cell.biome === "desert") return "terrain.sand.base";
     if (cell.biome === "snow") return "terrain.snow.wang.0";
     return "terrain.grass.base";
   }

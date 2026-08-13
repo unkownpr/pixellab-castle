@@ -59,6 +59,7 @@ class TurnResult:
 
 
 class SimCore:
+    ACTION_BUDGET = 2
     RESOLUTION_ORDER = (
         "policies",
         "reservations",
@@ -145,7 +146,17 @@ class SimCore:
             if batch is None:
                 events.append(DomainEvent(self.state.turn, "controller_wait", colony_id))
                 continue
-            for action in batch.actions:
+            for index, action in enumerate(batch.actions):
+                if index >= self.ACTION_BUDGET:
+                    results.append(
+                        ActionResult(
+                            colony_id,
+                            action.kind,
+                            "rejected",
+                            "action_budget_exceeded",
+                        )
+                    )
+                    continue
                 result = self._apply_action(colony_id, action, events)
                 results.append(result)
 
@@ -199,13 +210,15 @@ class SimCore:
         self.state = replace(self.state, colonies=colonies)
 
     def _gather(self, colony_id: str, action: GatherAction, events: list[DomainEvent]) -> ActionResult:
+        colony = self.state.colonies[colony_id]
+        if action.position not in colony.known_cells:
+            return ActionResult(colony_id, action.kind, "rejected", "cell_not_visible")
         world = self.state.world
         assert isinstance(world, WorldState)
         cell = world.cells.get(action.position)
         if cell is None or cell.resource is None or cell.resource_amount <= 0:
             return ActionResult(colony_id, action.kind, "rejected", "no_resource")
         amount = min(4, cell.resource_amount)
-        colony = self.state.colonies[colony_id]
         try:
             stock = colony.resources.apply({cell.resource: amount})
         except KeyError:
@@ -225,6 +238,9 @@ class SimCore:
         return ActionResult(colony_id, action.kind, "accepted", "ok")
 
     def _build(self, colony_id: str, action: BuildAction, events: list[DomainEvent]) -> ActionResult:
+        colony = self.state.colonies[colony_id]
+        if action.position not in colony.known_cells:
+            return ActionResult(colony_id, action.kind, "rejected", "cell_not_visible")
         world = self.state.world
         assert isinstance(world, WorldState)
         cell = world.cells.get(action.position)
@@ -236,7 +252,6 @@ class SimCore:
         cost = BUILD_COSTS.get(action.structure)
         if cost is None:
             return ActionResult(colony_id, action.kind, "rejected", "structure_not_buildable")
-        colony = self.state.colonies[colony_id]
         if not can_afford(colony.resources, cost):
             return ActionResult(colony_id, action.kind, "rejected", "insufficient_resources")
         stock = colony.resources.apply({name: -amount for name, amount in cost.items()})

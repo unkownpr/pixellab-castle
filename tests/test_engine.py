@@ -66,6 +66,11 @@ def test_two_colonies_cannot_build_on_same_cell() -> None:
         for position, cell in sim.state.world.cells.items()
         if cell.buildable and position not in {c.spawn for c in sim.state.colonies.values()}
     )
+    colonies = {
+        colony_id: replace(colony, known_cells=colony.known_cells | {location})
+        for colony_id, colony in sim.state.colonies.items()
+    }
+    sim.state = replace(sim.state, colonies=colonies)
 
     result = sim.resolve(
         (
@@ -97,7 +102,9 @@ def test_gather_depletes_deposit_and_adds_stock() -> None:
     position, cell = next(
         (position, cell)
         for position, cell in sim.state.world.cells.items()
-        if cell.resource == "wood" and cell.resource_amount >= 4
+        if cell.resource == "wood"
+        and cell.resource_amount >= 4
+        and position in sim.state.colonies["c1"].known_cells
     )
     before = sim.state.colonies["c1"].resources.wood
 
@@ -106,3 +113,33 @@ def test_gather_depletes_deposit_and_adds_stock() -> None:
     assert result.state.colonies["c1"].resources.wood == before + 4
     assert result.state.world.cells[position].resource_amount == cell.resource_amount - 4
 
+
+def test_controller_cannot_gather_or_build_in_hidden_cells() -> None:
+    sim = make_sim()
+    hidden = next(
+        position
+        for position, cell in sim.state.world.cells.items()
+        if cell.buildable and position not in sim.state.colonies["c1"].known_cells
+    )
+
+    result = sim.resolve(
+        (batch(sim, "c1", GatherAction(hidden), BuildAction(StructureKind.HOUSE, hidden)),)
+    )
+
+    assert [item.code for item in result.action_results] == ["cell_not_visible", "cell_not_visible"]
+
+
+def test_action_batch_cannot_exceed_per_turn_work_budget() -> None:
+    sim = make_sim()
+    position = next(
+        position
+        for position, cell in sim.state.world.cells.items()
+        if cell.resource and position in sim.state.colonies["c1"].known_cells
+    )
+
+    result = sim.resolve(
+        (batch(sim, "c1", GatherAction(position), GatherAction(position), GatherAction(position)),)
+    )
+
+    assert [item.code for item in result.action_results] == ["ok", "ok", "action_budget_exceeded"]
+from dataclasses import replace
