@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#211d19" />
+    <title>Castle Benchmark Console</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="identity">
+          <span class="sigil" aria-hidden="true">C</span>
+          <div><strong>Castle Benchmark</strong><small>Survival Colony Protocol · v1</small></div>
+        </div>
+        <div class="run-state"><span class="status-dot"></span><span id="connection-label">Yerel çekirdek hazır</span></div>
+      </header>
+
+      <main class="workbench">
+        <aside class="panel setup-panel" aria-labelledby="setup-title">
+          <div class="panel-heading"><span>01</span><h1 id="setup-title">Seferi kur</h1></div>
+          <form id="match-form">
+            <label>Senaryo<select id="scenario-select" name="scenario"></select></label>
+            <div class="field-pair">
+              <label>Seed<input id="seed-input" name="seed" type="number" value="17" /></label>
+              <label>Koloni<input id="colony-input" name="colonies" type="number" min="1" max="8" value="1" /></label>
+            </div>
+            <button class="primary" type="submit">Yeni karşılaşma başlat</button>
+          </form>
+          <section class="ledger" aria-labelledby="ledger-title">
+            <div class="section-label"><span id="ledger-title">Koloni defteri</span><output id="turn-output">T–</output></div>
+            <div id="colony-stats" class="empty-state">Henüz aktif koloni yok.</div>
+          </section>
+          <section class="selection" aria-labelledby="selection-title">
+            <div class="section-label"><span id="selection-title">Seçili hücre</span><output id="cell-coordinates">—</output></div>
+            <p id="cell-details">Haritada bir hücre seç.</p>
+          </section>
+        </aside>
+
+        <section class="map-panel" aria-label="Oyun alanı">
+          <div class="map-toolbar">
+            <span id="scenario-label">BİLİNMEYEN BİYOM</span>
+            <span id="fog-label">SİS: AKTİF</span>
+          </div>
+          <div id="world-host" class="world-host"><div class="map-placeholder">Harita çekirdeği bekliyor</div></div>
+          <div class="map-key" aria-hidden="true"><span><i class="key-resource"></i>Kaynak</span><span><i class="key-colony"></i>Koloni</span></div>
+        </section>
+
+        <aside class="panel intel-panel" aria-labelledby="intel-title">
+          <div class="panel-heading"><span>02</span><h2 id="intel-title">Karar masası</h2></div>
+          <p class="hint">Aynı eylem sözleşmesi insan, baseline ve MCP modelleri için kullanılır.</p>
+          <div class="action-grid" id="action-grid">
+            <button data-action="wait" disabled>Bekle<small>Kaynak sakla</small></button>
+            <button data-action="gather" disabled>Topla<small>Seçili hücre</small></button>
+            <button data-action="build" disabled>İnşa et<small>Seçili hücre</small></button>
+            <button data-action="policy" disabled>Politika<small>Rasyon uygula</small></button>
+            <button data-action="diplomacy" disabled>Temas kur<small>İlk komşu</small></button>
+            <button data-action="trade" disabled>Ticaret öner<small>2 odun ↔ 2 erzak</small></button>
+            <button data-action="raid" disabled>Baskın yap<small>Savaş ilan eder</small></button>
+          </div>
+          <label class="build-choice">Yapı<select id="structure-select">
+            <option value="house">Ev</option><option value="well">Kuyu</option>
+            <option value="farm">Tarla</option><option value="warehouse">Depo</option>
+            <option value="market">Pazar</option><option value="lumber_camp">Kereste kampı</option>
+            <option value="quarry">Taş ocağı</option><option value="mine">Maden</option>
+            <option value="workshop">Atölye</option><option value="clinic">Klinik</option>
+            <option value="barracks">Kışla</option><option value="watchtower">Gözetleme kulesi</option>
+          </select></label>
+          <section class="event-section">
+            <div class="section-label"><span>Olay günlüğü</span><button id="clear-events" type="button">Temizle</button></div>
+            <ol id="event-log" class="event-log"><li class="muted">Karşılaşma başlamadı.</li></ol>
+          </section>
+        </aside>
+      </main>
+
+      <footer class="score-rail">
+        <div><span>Hayatta kalma</span><strong id="score-survival">—</strong></div>
+        <div><span>Refah</span><strong id="score-prosperity">—</strong></div>
+        <div><span>Diplomasi</span><strong id="score-diplomacy">—</strong></div>
+        <div><span>Dayanıklılık</span><strong id="score-resilience">—</strong></div>
+        <p>Deterministik · tekrar oynatılabilir · seed kontrollü</p>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

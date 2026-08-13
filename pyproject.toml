@@ -21,6 +21,7 @@ dev = [
 
 [project.scripts]
 castle-benchmark = "castle_benchmark.cli:main"
+castle-benchmark-mcp = "castle_benchmark.mcp_server:main"
 
 [build-system]
 requires = ["hatchling"]

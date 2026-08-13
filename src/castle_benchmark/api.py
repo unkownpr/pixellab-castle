@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
 
 from fastapi import FastAPI, Header, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .schemas import CreateMatchRequest, CreateMatchResponse, SubmissionResponse, SubmitActionsRequest
 from .service import GameService, ServiceError
@@ -17,7 +19,10 @@ def _bearer(authorization: str | None) -> str:
     return authorization.removeprefix("Bearer ").strip()
 
 
-def create_app(service: GameService | None = None) -> FastAPI:
+def create_app(
+    service: GameService | None = None,
+    static_dir: str | Path | None = None,
+) -> FastAPI:
     game = service or GameService()
     app = FastAPI(title="PixelLab Castle Benchmark", version="0.1.0")
 
@@ -104,6 +109,9 @@ def create_app(service: GameService | None = None) -> FastAPI:
         except ServiceError as exc:
             await websocket.close(code=4400 + min(exc.status_code, 99), reason=exc.code)
 
+    client_dir = Path(static_dir) if static_dir is not None else Path(__file__).parents[2] / "frontend" / "dist"
+    if client_dir.is_dir():
+        app.mount("/", StaticFiles(directory=client_dir, html=True), name="client")
+
     app.state.game_service = game
     return app
-
