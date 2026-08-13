@@ -80,3 +80,10 @@ Review GREEN evidence:
 
 - `npm --prefix frontend test -- lobby.test.ts`: 22/22 passed, including fake
   timer bounds, backoff, retry-storm prevention and dispose cancellation.
+
+Final policy boundary follow-up:
+
+- RED: a direct `LobbyController.create()` caller could submit two initial human
+  slots and reached `api.createSession`.
+- GREEN: initial session input is now rejected through the same accessible
+  one-human policy alert before any API call.

@@ -409,6 +409,9 @@ export class LobbyController {
     this.disposed = false;
     this.reconnectAttempt = 0;
     this.errorMessage = null;
+    if (input.slots.filter((slot) => slot.controller_type === "human").length > 1) {
+      throw this.policyError();
+    }
     const created = await this.api.createSession(input, orchestratorToken || undefined);
     this.matchId = created.match_id;
     this.adminToken = created.admin_token;
@@ -640,7 +643,13 @@ export class LobbyController {
   private policyError(): Error {
     const error = new Error("This browser can manage only one human slot");
     this.errorMessage = error.message;
-    this.render();
+    if (this.snapshot) {
+      this.render();
+    } else {
+      const alert = element("p", error.message);
+      alert.setAttribute("role", "alert");
+      this.root.replaceChildren(alert);
+    }
     return error;
   }
 

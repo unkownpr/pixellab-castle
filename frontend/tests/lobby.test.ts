@@ -251,6 +251,30 @@ describe("typed session client", () => {
 });
 
 describe("LobbyController", () => {
+  it("rejects multiple human slots in the initial request before session creation", async () => {
+    const root = document.createElement("div");
+    const createSession = vi.fn();
+    const api = { createSession } as unknown as LobbyApi;
+    const controller = new LobbyController(root, api);
+
+    await expect(controller.create({
+      scenario_id: "basic-survival-v1",
+      seed: 17,
+      colony_count: 2,
+      deadline_seconds: 30,
+      slots: [
+        { colony_id: "c1", controller_type: "human" },
+        { colony_id: "c2", controller_type: "human" },
+      ],
+    })).rejects.toThrow("This browser can manage only one human slot");
+
+    expect(createSession).not.toHaveBeenCalled();
+    expect(root.querySelector("[role='alert']")?.textContent).toContain(
+      "This browser can manage only one human slot",
+    );
+    controller.dispose();
+  });
+
   it("rejects a second human before server configuration and announces the policy", async () => {
     const root = document.createElement("div");
     const configureSlot = vi.fn();
