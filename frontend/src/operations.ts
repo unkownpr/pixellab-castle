@@ -119,6 +119,7 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
   controller_presence_changed: "Presence changed",
   controller_connected: "Controller connected",
   controller_disconnected: "Controller disconnected",
+  controller_ready: "Controller ready",
   controller_timed_out: "Controller timed out",
   controller_replaced: "Controller replaced",
   controller_claimed: "Controller claimed",

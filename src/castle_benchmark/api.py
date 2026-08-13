@@ -623,10 +623,9 @@ def create_app(
                     if message_type is not None:
                         payload = event
                         if message_type == "metric.updated":
-                            payload = {
-                                "event": event,
-                                "metrics": game.run_report(token)["metrics"],
-                            }
+                            metrics = game.run_report(token)["metrics"]
+                            _assert_secret_free(metrics)
+                            payload = {"event": event, "metrics": metrics}
                         await websocket.send_json(
                             _websocket_message(message_type, payload)
                         )
