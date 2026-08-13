@@ -23,6 +23,7 @@ from .lobby import (
     PairingGrant,
     PresenceStatus,
     SessionStatus,
+    register_admin_token_resolver,
 )
 
 
@@ -85,7 +86,6 @@ class LiveMatch:
     id: str
     sim: SimCore
     controller_tokens: dict[str, str]
-    admin_token: str
     pending: dict[str, ActionBatch] = field(default_factory=dict)
     last_result: TurnResult | None = None
     metrics: MetricCollector | None = None
@@ -120,6 +120,17 @@ class GameService:
         except KeyError as exc:
             raise NotFoundError("lobby session does not exist") from exc
 
+    def _admin_token_for_match(self, match_id: str) -> str:
+        for token, access in self._access.items():
+            if access.match_id == match_id and access.admin:
+                return token
+        raise NotFoundError("admin capability no longer exists")
+
+    def _assert_session_running(self, access: Access) -> None:
+        session = self._lobbies.get(access.match_id)
+        if session is not None and session.status is not SessionStatus.RUNNING:
+            raise ConflictError("session_not_running", code="session_not_running")
+
     @staticmethod
     def _slot(session: LobbySession, colony_id: str) -> ControllerSlot:
         for slot in session.slots:
@@ -141,13 +152,13 @@ class GameService:
 
         match_id = uuid.uuid4().hex
         admin_token = secrets.token_urlsafe(24)
-        match = LiveMatch(match_id, sim, {}, admin_token, metrics=MetricCollector.create(sim.state))
+        match = LiveMatch(match_id, sim, {}, metrics=MetricCollector.create(sim.state))
         session = LobbySession(
             match_id=match_id,
             scenario_id=scenario_id,
             seed=seed,
             colony_count=colony_count,
-            admin_token=admin_token,
+            admin_capability_digest=self._secret_digest(admin_token),
             slots=[
                 ControllerSlot(colony_id=colony_id, controller_type=ControllerType.EXTERNAL)
                 for colony_id in sorted(sim.state.colonies)
@@ -155,6 +166,7 @@ class GameService:
         )
         self._matches[match_id] = match
         self._access[admin_token] = Access(match_id, None, True)
+        register_admin_token_resolver(match_id, lambda: self._admin_token_for_match(match_id))
         self._lobbies[match_id] = session
         return session
 
@@ -309,7 +321,7 @@ class GameService:
         match_id = uuid.uuid4().hex
         tokens = {colony_id: secrets.token_urlsafe(24) for colony_id in sim.state.colonies}
         admin_token = secrets.token_urlsafe(24)
-        match = LiveMatch(match_id, sim, tokens, admin_token, metrics=MetricCollector.create(sim.state))
+        match = LiveMatch(match_id, sim, tokens, metrics=MetricCollector.create(sim.state))
         self._matches[match_id] = match
         for colony_id, token in tokens.items():
             self._access[token] = Access(match_id, colony_id, False)
@@ -332,6 +344,7 @@ class GameService:
 
     def observe(self, token: str, requested_colony_id: str | None = None) -> Observation:
         access, match = self._authorize(token)
+        self._assert_session_running(access)
         if access.admin:
             colony_id = requested_colony_id or sorted(match.sim.state.colonies)[0]
         else:
@@ -347,6 +360,7 @@ class GameService:
         access, match = self._authorize(token)
         if access.admin or access.colony_id is None:
             raise ForbiddenError("admin capabilities cannot submit colony actions")
+        self._assert_session_running(access)
         if turn != match.sim.state.turn:
             raise ConflictError(
                 f"expected turn {match.sim.state.turn}, received {turn}", code="stale_turn"

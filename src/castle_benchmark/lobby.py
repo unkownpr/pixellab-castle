@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 
 
 PAIRING_TTL_SECONDS = 600
 PAIRING_MAX_ATTEMPTS = 5
+
+
+_ADMIN_TOKEN_RESOLVERS: dict[str, Callable[[], str]] = {}
+
+
+def register_admin_token_resolver(match_id: str, resolver: Callable[[], str]) -> None:
+    """Register the process-local path to an admin capability without retaining it in a session."""
+    _ADMIN_TOKEN_RESOLVERS[match_id] = resolver
+
+
+def resolve_admin_token(match_id: str) -> str:
+    return _ADMIN_TOKEN_RESOLVERS[match_id]()
 
 
 class SessionStatus(str, Enum):
@@ -74,9 +87,14 @@ class LobbySession:
     scenario_id: str
     seed: int
     colony_count: int
-    admin_token: str
+    admin_capability_digest: str
     status: SessionStatus = SessionStatus.DRAFT
     slots: list[ControllerSlot] = field(default_factory=list)
+
+    @property
+    def admin_token(self) -> str:
+        """Compatibility handoff for callers; the raw secret remains in service authorization state."""
+        return resolve_admin_token(self.match_id)
 
 
 @dataclass(frozen=True, slots=True)
