@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, field, fields, replace
+from enum import StrEnum
 from typing import Mapping
 
 
@@ -39,3 +40,99 @@ class ResourceStock:
     def as_dict(self) -> dict[str, int]:
         return {field.name: getattr(self, field.name) for field in fields(self)}
 
+
+class StructureKind(StrEnum):
+    HEADQUARTERS = "headquarters"
+    HOUSE = "house"
+    WAREHOUSE = "warehouse"
+    WELL = "well"
+    FARM = "farm"
+    LUMBER_CAMP = "lumber_camp"
+    QUARRY = "quarry"
+    MINE = "mine"
+    MARKET = "market"
+    WORKSHOP = "workshop"
+    CLINIC = "clinic"
+    BARRACKS = "barracks"
+    WATCHTOWER = "watchtower"
+    WALL = "wall"
+    GATE = "gate"
+
+
+class StructureStatus(StrEnum):
+    PLANNED = "planned"
+    FOUNDATION = "foundation"
+    BUILDING = "building"
+    OPERATIONAL = "operational"
+    DAMAGED = "damaged"
+    BURNING = "burning"
+    RUINED = "ruined"
+    REPAIRING = "repairing"
+
+
+class RelationStatus(StrEnum):
+    UNKNOWN = "unknown"
+    CONTACTED = "contacted"
+    NEUTRAL = "neutral"
+    TRADE = "trade_agreement"
+    ALLIANCE = "alliance"
+    WAR = "war"
+
+
+class MilitaryPosture(StrEnum):
+    PEACEFUL = "peaceful"
+    DEFENSIVE = "defensive"
+    EXPANSIONIST = "expansionist"
+
+
+@dataclass(frozen=True, slots=True)
+class Structure:
+    id: str
+    colony_id: str
+    kind: StructureKind
+    position: Position
+    status: StructureStatus
+    progress: int
+    required_progress: int
+    condition: int = 100
+
+
+@dataclass(frozen=True, slots=True)
+class ColonyState:
+    id: str
+    spawn: Position
+    resources: ResourceStock
+    population: int = 8
+    housing: int = 8
+    healthy: int = 8
+    injured: int = 0
+    sick: int = 0
+    hungry: int = 0
+    relations: dict[str, RelationStatus] = field(default_factory=dict)
+    policies: dict[str, str] = field(default_factory=dict)
+    policy_cooldowns: dict[str, int] = field(default_factory=dict)
+    known_cells: frozenset[Position] = field(default_factory=frozenset)
+
+
+@dataclass(frozen=True, slots=True)
+class TradeOffer:
+    id: str
+    source_colony_id: str
+    target_colony_id: str
+    give: tuple[tuple[str, int], ...]
+    receive: tuple[tuple[str, int], ...]
+    expires_turn: int
+    status: str = "open"
+
+
+@dataclass(frozen=True, slots=True)
+class MatchState:
+    scenario_id: str
+    seed: int
+    turn: int
+    world: object
+    colonies: dict[str, ColonyState]
+    structures: dict[str, Structure]
+    offers: dict[str, TradeOffer] = field(default_factory=dict)
+    terminal: bool = False
+    termination_reason: str | None = None
