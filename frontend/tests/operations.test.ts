@@ -460,13 +460,20 @@ describe("operations DOM", () => {
     await Promise.resolve();
     expect(document.activeElement?.getAttribute("data-tab")).toBe("cost");
 
-    const timelineController = new OperationsController({ onChange: () => renderOperationsRoom(root, timelineController) });
-    timelineController.applySnapshot(snapshot([slot("c1", "connected")], [event(1, "turn_opened")]));
-    const timeline = root.querySelector<HTMLElement>("[data-sequence='1']")!;
+    const timelineRoot = document.createElement("section");
+    document.body.append(timelineRoot);
+    const timelineController = new OperationsController({ onChange: () => renderOperationsRoom(timelineRoot, timelineController) });
+    timelineController.applySnapshot(snapshot(
+      [slot("c1", "connected")],
+      [event(1, "turn_opened"), event(2, "controller_submitted", "c1")],
+    ));
+    bindOperationsRoom(timelineRoot, timelineController);
+    const timeline = timelineRoot.querySelector<HTMLElement>("[data-sequence='1']")!;
     timeline.focus();
-    timeline.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    timeline.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     await Promise.resolve();
-    expect(document.activeElement?.getAttribute("data-sequence")).toBe("1");
+    expect(timelineController.state.selectedSequence).toBe(2);
+    expect(document.activeElement?.getAttribute("data-sequence")).toBe("2");
   });
 });
 

@@ -878,6 +878,19 @@ export function bindOperationsRoom(root: HTMLElement, controller: OperationsCont
       else if (event.key === "End") controller.selectTab(INSPECTOR_TABS.at(-1)!);
       else controller.moveTab(event.key === "ArrowRight" ? 1 : -1);
       focusSelected(root, "[role='tab'][aria-selected='true']");
+    } else if (timeline && ["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      const items = controller.timeline;
+      const current = Math.max(0, items.findIndex(({ sequence }) => sequence === Number(timeline.dataset.sequence)));
+      const next = event.key === "Home"
+        ? items[0]
+        : event.key === "End"
+          ? items.at(-1)
+          : items[(current + (["ArrowDown", "ArrowRight"].includes(event.key) ? 1 : -1) + items.length) % items.length];
+      if (next) {
+        controller.selectTimeline(next.sequence);
+        focusSelected(root, `[data-sequence='${next.sequence}']`);
+      }
     } else if (timeline && ["Enter", " "].includes(event.key)) {
       event.preventDefault();
       controller.selectTimeline(Number(timeline.dataset.sequence));
