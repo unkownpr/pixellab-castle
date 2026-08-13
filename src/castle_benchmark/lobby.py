@@ -60,9 +60,23 @@ class ControllerIdentity:
     run_label: str | None = None
 
     def is_valid(self) -> bool:
-        return all(
+        required_valid = all(
             isinstance(value, str) and bool(value.strip())
             for value in (self.display_name, self.provider, self.model)
+        )
+        values = (
+            self.display_name,
+            self.provider,
+            self.model,
+            self.model_version,
+            self.adapter_name,
+            self.adapter_version,
+            self.connection_mode,
+            self.run_label,
+        )
+        return required_valid and all(
+            value is None or (isinstance(value, str) and len(value) <= 128)
+            for value in values
         )
 
 

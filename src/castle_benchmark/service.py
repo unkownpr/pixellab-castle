@@ -103,6 +103,8 @@ class LiveMatch:
     deadline_seconds: int = DEFAULT_DEADLINE_SECONDS
     pending_controller_ids: dict[str, str | None] = field(default_factory=dict)
     operational_events: list[DomainEvent] = field(default_factory=list)
+    operational_event_sequences: list[int] = field(default_factory=list)
+    next_operational_sequence: int = 1
     tenures: dict[str, list[dict[str, object]]] = field(default_factory=dict)
     tenure_usage: dict[str, dict[str, dict[str, int]]] = field(default_factory=dict)
     resolved_turns: list[ResolvedTurn] = field(default_factory=list)
@@ -123,11 +125,46 @@ class GameService:
         self._access: dict[str, Access] = {}
         self._lobbies: dict[str, LobbySession] = {}
         self._pairings: dict[str, tuple[str, str]] = {}
+        self._pairing_code_attempts: dict[str, tuple[int, float]] = {}
+        self._pairing_peer_attempts: dict[str, tuple[int, float]] = {}
         self._lobby_lock = RLock()
 
     @staticmethod
     def _secret_digest(secret: str) -> str:
         return sha256(secret.encode()).hexdigest()
+
+    def _prune_pairing_attempts(self, now: float) -> None:
+        cutoff = now - 60.0
+        for attempts in (self._pairing_code_attempts, self._pairing_peer_attempts):
+            for key, (_, updated_at) in tuple(attempts.items()):
+                if updated_at <= cutoff:
+                    del attempts[key]
+            while len(attempts) > 1024:
+                oldest = min(attempts, key=lambda key: attempts[key][1])
+                del attempts[oldest]
+
+    def reserve_pairing_attempt(self, peer: str, code: str, now: float) -> None:
+        """Atomically reserve one bounded shared adapter claim attempt."""
+        code_digest = self._secret_digest(code)
+        with self._lobby_lock:
+            self._prune_pairing_attempts(now)
+            if (
+                self._pairing_code_attempts.get(code_digest, (0, now))[0] >= 5
+                or self._pairing_peer_attempts.get(peer, (0, now))[0] >= 5
+            ):
+                raise ConflictError(
+                    "pairing_attempt_limit", code="pairing_attempt_limit"
+                )
+            code_count = self._pairing_code_attempts.get(code_digest, (0, now))[0]
+            peer_count = self._pairing_peer_attempts.get(peer, (0, now))[0]
+            self._pairing_code_attempts[code_digest] = (code_count + 1, now)
+            self._pairing_peer_attempts[peer] = (peer_count + 1, now)
+            self._prune_pairing_attempts(now)
+
+    def clear_pairing_rate(self, peer: str, code: str) -> None:
+        with self._lobby_lock:
+            self._pairing_code_attempts.pop(self._secret_digest(code), None)
+            self._pairing_peer_attempts.pop(peer, None)
 
     def _lobby_for_admin(self, admin_token: str) -> tuple[LobbySession, LiveMatch]:
         access, match = self._authorize(admin_token)
@@ -174,7 +211,59 @@ class GameService:
             slot.colony_id,
             self._event_data(slot, now, **extra),
         )
+        self._append_operational_event(match, event)
+        return event
+
+    def _record_presence_change(
+        self,
+        match: LiveMatch,
+        slot: ControllerSlot,
+        previous: PresenceStatus,
+        now: float | None,
+    ) -> None:
+        if previous is slot.presence:
+            return
+        data: dict[str, object] = {
+            "controller_id": slot.controller_id,
+            "generation": slot.generation,
+            "previous": previous.value,
+            "current": slot.presence.value,
+        }
+        if now is not None:
+            data["at"] = now
+        self._record_operational_event(
+            match,
+            "controller_presence_changed",
+            colony_id=slot.colony_id,
+            **data,
+        )
+
+    @staticmethod
+    def _append_operational_event(match: LiveMatch, event: DomainEvent) -> None:
         match.operational_events.append(event)
+        match.operational_event_sequences.append(match.next_operational_sequence)
+        match.next_operational_sequence += 1
+        if len(match.operational_events) > 2048:
+            del match.operational_events[0]
+            del match.operational_event_sequences[0]
+
+    @classmethod
+    def _record_operational_event(
+        cls,
+        match: LiveMatch,
+        kind: str,
+        *,
+        colony_id: str | None = None,
+        event_turn: int | None = None,
+        **data: object,
+    ) -> DomainEvent:
+        event = DomainEvent(
+            match.sim.state.turn if event_turn is None else event_turn,
+            kind,
+            colony_id,
+            data,
+        )
+        cls._append_operational_event(match, event)
         return event
 
     def _begin_tenure(self, match: LiveMatch, slot: ControllerSlot, now: float) -> None:
@@ -262,6 +351,7 @@ class GameService:
         now: float | None = None,
     ) -> TurnResult:
         batches = tuple(match.pending[colony_id] for colony_id in sorted(match.pending))
+        resolved_turn = match.sim.state.turn
         action_controller_ids = dict(match.pending_controller_ids)
         match.pending.clear()
         raw_result = match.sim.resolve(batches)
@@ -276,23 +366,48 @@ class GameService:
         match.resolved_turns.append(ResolvedTurn(batches, action_controller_ids, result))
         match.pending_controller_ids.clear()
         if session is not None:
+            self._record_operational_event(
+                match, "turn_resolved", event_turn=resolved_turn
+            )
+            self._record_operational_event(match, "metric_updated")
             if match.sim.state.terminal:
                 session.status = SessionStatus.COMPLETED
                 match.deadline_at = None
+                self._record_operational_event(
+                    match,
+                    "match_completed",
+                    reason=match.sim.state.termination_reason,
+                )
             elif now is not None:
                 match.deadline_at = now + match.deadline_seconds
+                self._record_operational_event(
+                    match, "turn_opened", deadline_at=match.deadline_at
+                )
             elif match.deadline_at is not None:
                 match.deadline_at += match.deadline_seconds
+                self._record_operational_event(
+                    match, "turn_opened", deadline_at=match.deadline_at
+                )
             for slot in session.slots:
                 if (
                     slot.controller_type is ControllerType.EXTERNAL
                     and slot.presence is PresenceStatus.SUBMITTED
                 ):
+                    previous_presence = slot.presence
                     slot.presence = PresenceStatus.THINKING
+                    self._record_presence_change(
+                        match, slot, previous_presence, now
+                    )
         return result
 
     def create_session(
-        self, orchestrator_token: str, scenario_id: str, seed: int, colony_count: int
+        self,
+        orchestrator_token: str,
+        scenario_id: str,
+        seed: int,
+        colony_count: int,
+        deadline_seconds: int = DEFAULT_DEADLINE_SECONDS,
+        slot_configs: Iterable[tuple[str, str, str | None]] = (),
     ) -> LobbySession:
         """Create a pre-match session whose controller capabilities are not yet minted."""
         if not orchestrator_token:
@@ -302,20 +417,66 @@ class GameService:
             sim = SimCore.create(scenario, seed, colony_count)
         except (KeyError, ValueError) as exc:
             raise ServiceError(str(exc)) from exc
+        if (
+            isinstance(deadline_seconds, bool)
+            or not isinstance(deadline_seconds, int)
+            or not 1 <= deadline_seconds <= 300
+        ):
+            raise ServiceError("deadline must be between 1 and 300 seconds")
+        configured: dict[str, tuple[ControllerType, str | None]] = {}
+        for colony_id, controller_type, baseline_kind in slot_configs:
+            if colony_id not in sim.state.colonies:
+                raise NotFoundError("colony does not exist")
+            if colony_id in configured:
+                raise ConflictError("slot configured more than once", code="duplicate_slot")
+            try:
+                parsed_type = ControllerType(controller_type)
+            except ValueError as exc:
+                raise ServiceError("unknown controller type") from exc
+            if parsed_type is not ControllerType.BASELINE and baseline_kind is not None:
+                raise ServiceError("baseline kind requires a baseline controller")
+            if baseline_kind is not None and baseline_kind not in AGENT_TYPES:
+                raise ServiceError("unknown baseline controller")
+            configured[colony_id] = (parsed_type, baseline_kind)
 
         match_id = uuid.uuid4().hex
         admin_token = secrets.token_urlsafe(24)
-        match = LiveMatch(match_id, sim, {}, metrics=MetricCollector.create(sim.state))
+        match = LiveMatch(
+            match_id,
+            sim,
+            {},
+            metrics=MetricCollector.create(sim.state),
+            deadline_seconds=deadline_seconds,
+        )
+        slots: list[ControllerSlot] = []
+        for colony_id in sorted(sim.state.colonies):
+            controller_type, baseline_kind = configured.get(
+                colony_id, (ControllerType.EXTERNAL, None)
+            )
+            slots.append(
+                ControllerSlot(
+                    colony_id=colony_id,
+                    controller_type=controller_type,
+                    controller_id=(
+                        uuid.uuid4().hex
+                        if controller_type is not ControllerType.EXTERNAL
+                        else None
+                    ),
+                    presence=(
+                        PresenceStatus.READY
+                        if controller_type in {ControllerType.HUMAN, ControllerType.BASELINE}
+                        else PresenceStatus.UNASSIGNED
+                    ),
+                    baseline_kind=baseline_kind,
+                )
+            )
         session = LobbySession(
             match_id=match_id,
             scenario_id=scenario_id,
             seed=seed,
             colony_count=colony_count,
             admin_capability_digest=self._secret_digest(admin_token),
-            slots=[
-                ControllerSlot(colony_id=colony_id, controller_type=ControllerType.EXTERNAL)
-                for colony_id in sorted(sim.state.colonies)
-            ],
+            slots=slots,
         )
         self._matches[match_id] = match
         self._access[admin_token] = Access(match_id, None, True)
@@ -330,7 +491,19 @@ class GameService:
         controller_type: ControllerType | str,
         baseline_kind: str | None = None,
     ) -> ControllerSlot:
-        session, _ = self._lobby_for_admin(admin_token)
+        with self._lobby_lock:
+            return self._configure_slot(
+                admin_token, colony_id, controller_type, baseline_kind
+            )
+
+    def _configure_slot(
+        self,
+        admin_token: str,
+        colony_id: str,
+        controller_type: ControllerType | str,
+        baseline_kind: str | None = None,
+    ) -> ControllerSlot:
+        session, match = self._lobby_for_admin(admin_token)
         if session.status is not SessionStatus.DRAFT:
             raise ForbiddenError("lobby configuration is frozen")
         try:
@@ -339,8 +512,11 @@ class GameService:
             raise ServiceError("unknown controller type") from exc
         if configured_type is not ControllerType.BASELINE and baseline_kind is not None:
             raise ServiceError("baseline kind requires a baseline controller")
+        if baseline_kind is not None and baseline_kind not in AGENT_TYPES:
+            raise ServiceError("unknown baseline controller")
 
         slot = self._slot(session, colony_id)
+        previous_presence = slot.presence
         if slot.pairing_digest is not None or slot.capability_digest is not None:
             raise ConflictError("slot has active pairing state", code="slot_configured")
         slot.controller_type = configured_type
@@ -359,18 +535,20 @@ class GameService:
             if configured_type in (ControllerType.HUMAN, ControllerType.BASELINE)
             else PresenceStatus.UNASSIGNED
         )
+        self._record_presence_change(match, slot, previous_presence, None)
         return slot
 
     def open_lobby(self, admin_token: str) -> LobbySession:
-        session, _ = self._lobby_for_admin(admin_token)
-        if session.status is not SessionStatus.DRAFT:
-            raise ConflictError("session is not a draft", code="invalid_session_status")
-        session.status = SessionStatus.LOBBY
-        return session
+        with self._lobby_lock:
+            session, _ = self._lobby_for_admin(admin_token)
+            if session.status is not SessionStatus.DRAFT:
+                raise ConflictError("session is not a draft", code="invalid_session_status")
+            session.status = SessionStatus.LOBBY
+            return session
 
     def create_pairing(self, admin_token: str, colony_id: str, now: float) -> PairingGrant:
         with self._lobby_lock:
-            session, _ = self._lobby_for_admin(admin_token)
+            session, match = self._lobby_for_admin(admin_token)
             if session.status not in (
                 SessionStatus.DRAFT,
                 SessionStatus.LOBBY,
@@ -378,6 +556,7 @@ class GameService:
             ):
                 raise ConflictError("pairing is unavailable for this session", code="invalid_session_status")
             slot = self._slot(session, colony_id)
+            previous_presence = slot.presence
             if slot.controller_type is not ControllerType.EXTERNAL:
                 raise ConflictError("pairing requires an external controller", code="not_external_slot")
             if slot.pairing_consumed:
@@ -391,6 +570,7 @@ class GameService:
             slot.pairing_attempts = 0
             slot.presence = PresenceStatus.PAIRING
             self._pairings[digest] = (session.match_id, colony_id)
+            self._record_presence_change(match, slot, previous_presence, now)
             return PairingGrant(session.match_id, colony_id, code=code, expires_at=slot.pairing_expires_at)
 
     def claim_slot(self, code: str, identity: ControllerIdentity, now: float) -> PairingGrant:
@@ -403,6 +583,7 @@ class GameService:
             session = self._lobbies[match_id]
             match = self._matches[match_id]
             slot = self._slot(session, colony_id)
+            previous_presence = slot.presence
             if slot.pairing_digest is None or not secrets.compare_digest(slot.pairing_digest, digest):
                 raise UnauthorizedError("invalid pairing code")
             if slot.pairing_consumed:
@@ -411,8 +592,32 @@ class GameService:
                 raise ConflictError("pairing_expired", code="pairing_expired")
             if slot.pairing_attempts >= PAIRING_MAX_ATTEMPTS:
                 raise ConflictError("pairing_attempt_limit", code="pairing_attempt_limit")
-            if not isinstance(identity, ControllerIdentity) or not identity.is_valid():
+            identity_values = (
+                identity.display_name,
+                identity.provider,
+                identity.model,
+                identity.model_version,
+                identity.adapter_name,
+                identity.adapter_version,
+                identity.connection_mode,
+                identity.run_label,
+            ) if isinstance(identity, ControllerIdentity) else ()
+            if (
+                not isinstance(identity, ControllerIdentity)
+                or not identity.is_valid()
+                or any(
+                    value is not None and (not isinstance(value, str) or len(value) > 128)
+                    for value in identity_values
+                )
+            ):
                 slot.pairing_attempts += 1
+                self._record_operational_event(
+                    match,
+                    "pairing_rejected",
+                    colony_id=slot.colony_id,
+                    reason="invalid_identity",
+                    attempts=slot.pairing_attempts,
+                )
                 raise ServiceError("invalid controller identity")
 
             slot.controller_id = uuid.uuid4().hex
@@ -425,9 +630,33 @@ class GameService:
             controller_token = self._mint_controller_capability(match, slot)
             self._begin_tenure(match, slot, now)
             self._record_controller_event(match, "controller_claimed", slot, now)
+            self._record_presence_change(match, slot, previous_presence, now)
             return PairingGrant(match_id, colony_id, controller_token=controller_token)
 
+    def claim_slot_contract(
+        self, code: str, identity: ControllerIdentity, now: float
+    ) -> dict[str, str]:
+        """Claim a slot and project only the controller-owned adapter contract."""
+        with self._lobby_lock:
+            grant = self.claim_slot(code, identity, now)
+            assert grant.controller_token is not None
+            access, _ = self._authorize(grant.controller_token)
+            session = self._lobbies[access.match_id]
+            assert access.colony_id is not None
+            slot = self._slot(session, access.colony_id)
+            assert slot.controller_id is not None
+            return {
+                "match_id": grant.match_id,
+                "controller_id": slot.controller_id,
+                "colony_id": grant.colony_id,
+                "controller_token": grant.controller_token,
+            }
+
     def lobby_status(self, admin_token: str, now: float) -> dict[str, object]:
+        with self._lobby_lock:
+            return self._lobby_status(admin_token, now)
+
+    def _lobby_status(self, admin_token: str, now: float) -> dict[str, object]:
         session, _ = self._lobby_for_admin(admin_token)
 
         def serialize(slot: ControllerSlot) -> dict[str, object]:
@@ -458,6 +687,7 @@ class GameService:
             "scenario_id": session.scenario_id,
             "seed": session.seed,
             "colony_count": session.colony_count,
+            "deadline_seconds": self._matches[session.match_id].deadline_seconds,
             "status": session.status.value,
             "slots": [serialize(slot) for slot in session.slots],
         }
@@ -466,41 +696,81 @@ class GameService:
         self, controller_token: str, turn: int, status: PresenceStatus | str, now: float
     ) -> None:
         """Record controller-owned presence without making wall time part of SimCore."""
-        access, match = self._authorize(controller_token)
-        if access.admin or access.colony_id is None:
-            raise ForbiddenError("admin capabilities cannot send controller heartbeats")
-        session = self._lobbies.get(access.match_id)
-        if session is None:
-            raise ConflictError("session_not_running", code="session_not_running")
-        if turn != match.sim.state.turn:
-            raise ConflictError("stale_turn", code="stale_turn")
-        try:
-            presence = PresenceStatus(status)
-        except ValueError as exc:
-            raise ServiceError("unknown controller presence") from exc
-        if presence not in {
-            PresenceStatus.CONNECTED,
-            PresenceStatus.THINKING,
-            PresenceStatus.SUBMITTED,
-            PresenceStatus.DISCONNECTED,
-        }:
-            raise ServiceError("invalid heartbeat presence")
-        slot = self._slot(session, access.colony_id)
-        if slot.controller_id is None:
-            raise UnauthorizedError("controller is no longer assigned")
-        was_disconnected = slot.presence in {PresenceStatus.DISCONNECTED, PresenceStatus.TIMED_OUT}
-        slot.last_heartbeat_at = now
-        slot.last_heartbeat_turn = turn
-        slot.presence = presence
-        if presence is PresenceStatus.DISCONNECTED:
-            self._record_controller_event(match, "controller_disconnected", slot, now)
-        elif was_disconnected:
-            assert match.metrics is not None
-            match.metrics.record_reconnect(slot.colony_id)
-            self._tenure_usage(match, slot)["reconnects"] += 1
-            self._record_controller_event(match, "controller_connected", slot, now, reconnect=True)
+        with self._lobby_lock:
+            access, match = self._authorize(controller_token)
+            if access.admin or access.colony_id is None:
+                raise ForbiddenError("admin capabilities cannot send controller heartbeats")
+            session = self._lobbies.get(access.match_id)
+            if session is None:
+                raise ConflictError("session_not_running", code="session_not_running")
+            if turn != match.sim.state.turn:
+                raise ConflictError("stale_turn", code="stale_turn")
+            try:
+                presence = PresenceStatus(status)
+            except ValueError as exc:
+                raise ServiceError("unknown controller presence") from exc
+            if presence not in {
+                PresenceStatus.READY,
+                PresenceStatus.CONNECTED,
+                PresenceStatus.THINKING,
+                PresenceStatus.SUBMITTED,
+                PresenceStatus.DISCONNECTED,
+            }:
+                raise ServiceError("invalid heartbeat presence")
+            slot = self._slot(session, access.colony_id)
+            if slot.controller_id is None:
+                raise UnauthorizedError("controller is no longer assigned")
+            if (
+                slot.last_heartbeat_at is not None
+                and now - slot.last_heartbeat_at < 0.1
+            ):
+                last_event = match.operational_events[-1] if match.operational_events else None
+                last_at = (
+                    last_event.data.get("at")
+                    if last_event is not None
+                    and last_event.kind == "heartbeat_rejected"
+                    and last_event.colony_id == slot.colony_id
+                    else None
+                )
+                if not isinstance(last_at, (int, float)) or now - last_at >= 1.0:
+                    self._record_operational_event(
+                        match,
+                        "heartbeat_rejected",
+                        colony_id=slot.colony_id,
+                        controller_id=slot.controller_id,
+                        reason="rate_limited",
+                        at=now,
+                    )
+                raise ConflictError(
+                    "heartbeat_rate_limited", code="heartbeat_rate_limited"
+                )
+            was_disconnected = slot.presence in {
+                PresenceStatus.DISCONNECTED,
+                PresenceStatus.TIMED_OUT,
+            }
+            slot.last_heartbeat_at = now
+            slot.last_heartbeat_turn = turn
+            previous_presence = slot.presence
+            slot.presence = presence
+            if presence is PresenceStatus.READY and previous_presence is not presence:
+                self._record_controller_event(match, "controller_ready", slot, now)
+            elif presence is PresenceStatus.DISCONNECTED:
+                self._record_controller_event(match, "controller_disconnected", slot, now)
+            elif was_disconnected:
+                assert match.metrics is not None
+                match.metrics.record_reconnect(slot.colony_id)
+                self._tenure_usage(match, slot)["reconnects"] += 1
+                self._record_controller_event(
+                    match, "controller_connected", slot, now, reconnect=True
+                )
 
     def start_match(self, admin_token: str, now: float) -> LobbySession:
+        with self._lobby_lock:
+            _, match = self._lobby_for_admin(admin_token)
+            with match.turn_lock:
+                return self._start_match(admin_token, now)
+
+    def _start_match(self, admin_token: str, now: float) -> LobbySession:
         session, match = self._lobby_for_admin(admin_token)
         if session.status not in {SessionStatus.DRAFT, SessionStatus.LOBBY}:
             raise ConflictError("invalid_session_status", code="invalid_session_status")
@@ -521,15 +791,28 @@ class GameService:
             raise ConflictError("session_not_ready", code="session_not_ready")
         session.status = SessionStatus.RUNNING
         match.deadline_at = now + match.deadline_seconds
+        self._record_operational_event(
+            match, "turn_opened", deadline_at=match.deadline_at
+        )
         for slot in session.slots:
             self._begin_tenure(match, slot, now)
             if slot.controller_type is ControllerType.EXTERNAL:
+                previous_presence = slot.presence
                 slot.presence = PresenceStatus.THINKING
+                self._record_presence_change(
+                    match, slot, previous_presence, now
+                )
             elif slot.controller_type is ControllerType.HUMAN:
                 self._mint_controller_capability(match, slot)
         return session
 
     def close_deadline(self, admin_token: str, now: float) -> TurnResult:
+        with self._lobby_lock:
+            _, match = self._lobby_for_admin(admin_token)
+            with match.turn_lock:
+                return self._close_deadline(admin_token, now)
+
+    def _close_deadline(self, admin_token: str, now: float) -> TurnResult:
         session, match = self._lobby_for_admin(admin_token)
         with match.turn_lock:
             if session.status is not SessionStatus.RUNNING:
@@ -547,7 +830,11 @@ class GameService:
                 )
                 match.pending_controller_ids[colony_id] = slot.controller_id
                 if slot.controller_type is ControllerType.EXTERNAL:
+                    previous_presence = slot.presence
                     slot.presence = PresenceStatus.TIMED_OUT
+                    self._record_presence_change(
+                        match, slot, previous_presence, now
+                    )
                     assert match.metrics is not None
                     match.metrics.record_timeout(colony_id)
                     self._tenure_usage(match, slot)["timeouts"] += 1
@@ -562,6 +849,21 @@ class GameService:
         colony_id: str,
         replacement: ControllerType | str,
         now: float,
+        baseline_kind: str | None = None,
+    ) -> ControllerSlot:
+        """Serialize replacement against slot claims and capability projection."""
+        with self._lobby_lock:
+            return self._replace_controller(
+                admin_token, colony_id, replacement, now, baseline_kind
+            )
+
+    def _replace_controller(
+        self,
+        admin_token: str,
+        colony_id: str,
+        replacement: ControllerType | str,
+        now: float,
+        baseline_kind: str | None = None,
     ) -> ControllerSlot:
         """End the current tenure, revoke its capability, and install a takeover slot."""
         _, authorized_match = self._authorize(admin_token)
@@ -573,14 +875,19 @@ class GameService:
                 replacement_type = ControllerType(replacement)
             except ValueError as exc:
                 raise ServiceError("unknown controller type") from exc
+            if replacement_type is not ControllerType.BASELINE and baseline_kind is not None:
+                raise ServiceError("baseline kind requires a baseline controller")
+            if baseline_kind is not None and baseline_kind not in AGENT_TYPES:
+                raise ServiceError("unknown baseline controller")
             slot = self._slot(session, colony_id)
+            previous_presence = slot.presence
             self._end_tenure(match, colony_id, now)
             for token, access in tuple(self._access.items()):
                 if not access.admin and access.match_id == match.id and access.colony_id == colony_id:
                     del self._access[token]
             slot.generation += 1
             slot.controller_type = replacement_type
-            slot.baseline_kind = None
+            slot.baseline_kind = baseline_kind
             slot.identity = None
             slot.capability_digest = None
             slot.pairing_digest = None
@@ -603,20 +910,26 @@ class GameService:
             self._record_controller_event(
                 match, "controller_replaced", slot, now, replacement_type=replacement_type.value
             )
+            self._record_presence_change(match, slot, previous_presence, now)
             return slot
 
     def human_controller_token(self, admin_token: str, colony_id: str) -> str:
         """Admin-only handoff of the current locally controlled colony capability."""
-        session, match = self._lobby_for_admin(admin_token)
-        if session.status is not SessionStatus.RUNNING:
-            raise ConflictError("session_not_running", code="session_not_running")
-        slot = self._slot(session, colony_id)
-        if slot.controller_type is not ControllerType.HUMAN:
-            raise ConflictError("not_human_slot", code="not_human_slot")
-        for token, access in self._access.items():
-            if not access.admin and access.match_id == match.id and access.colony_id == colony_id:
-                return token
-        raise NotFoundError("human controller capability does not exist")
+        with self._lobby_lock:
+            session, match = self._lobby_for_admin(admin_token)
+            if session.status is not SessionStatus.RUNNING:
+                raise ConflictError("session_not_running", code="session_not_running")
+            slot = self._slot(session, colony_id)
+            if slot.controller_type is not ControllerType.HUMAN:
+                raise ConflictError("not_human_slot", code="not_human_slot")
+            for token, access in tuple(self._access.items()):
+                if (
+                    not access.admin
+                    and access.match_id == match.id
+                    and access.colony_id == colony_id
+                ):
+                    return token
+            raise NotFoundError("human controller capability does not exist")
 
     def write_resolved_turns(self, admin_token: str, writer: ArtifactWriter) -> None:
         """Persist finalized action attribution without making it a replay input."""
@@ -634,6 +947,10 @@ class GameService:
             match.persisted_turn_count = len(match.resolved_turns)
 
     def operations_snapshot(self, admin_token: str, now: float) -> dict[str, object]:
+        with self._lobby_lock:
+            return self._operations_snapshot(admin_token, now)
+
+    def _operations_snapshot(self, admin_token: str, now: float) -> dict[str, object]:
         session, match = self._lobby_for_admin(admin_token)
         snapshot = self.lobby_status(admin_token, now)
         snapshot.update(
@@ -643,12 +960,17 @@ class GameService:
                 "pending_colonies": tuple(sorted(match.pending)),
                 "events": [
                     {
+                        "sequence": sequence,
                         "turn": event.turn,
                         "kind": event.kind,
                         "colony_id": event.colony_id,
                         "data": event.data,
                     }
-                    for event in match.operational_events
+                    for sequence, event in zip(
+                        match.operational_event_sequences,
+                        match.operational_events,
+                        strict=True,
+                    )
                 ],
                 "tenures": match.tenures,
             }
@@ -686,7 +1008,12 @@ class GameService:
         return CreatedMatch(match_id, scenario_id, tokens, admin_token)
 
     def _authorize(self, token: str) -> tuple[Access, LiveMatch]:
-        access = self._access.get(token)
+        matched_token: str | None = None
+        if isinstance(token, str):
+            for candidate in tuple(self._access):
+                if secrets.compare_digest(candidate, token):
+                    matched_token = candidate
+        access = self._access.get(matched_token) if matched_token is not None else None
         if access is None:
             raise UnauthorizedError("invalid controller capability")
         match = self._matches.get(access.match_id)
@@ -714,6 +1041,12 @@ class GameService:
     def submit_actions(
         self, token: str, turn: int, actions: Iterable[dict[str, object]]
     ) -> Submission:
+        with self._lobby_lock:
+            return self._submit_actions(token, turn, actions)
+
+    def _submit_actions(
+        self, token: str, turn: int, actions: Iterable[dict[str, object]]
+    ) -> Submission:
         access, match = self._authorize(token)
         if access.admin or access.colony_id is None:
             raise ForbiddenError("admin capabilities cannot submit colony actions")
@@ -739,8 +1072,18 @@ class GameService:
             match.pending[access.colony_id] = batch
             if session is not None:
                 slot = self._slot(session, access.colony_id)
+                previous_presence = slot.presence
                 slot.presence = PresenceStatus.SUBMITTED
                 match.pending_controller_ids[access.colony_id] = slot.controller_id
+                self._record_operational_event(
+                    match,
+                    "controller_submitted",
+                    colony_id=access.colony_id,
+                    controller_id=slot.controller_id,
+                )
+                self._record_presence_change(
+                    match, slot, previous_presence, None
+                )
             waiting = tuple(sorted(set(match.sim.state.colonies) - set(match.pending)))
             if waiting:
                 return Submission("pending", match.sim.state.turn, waiting)
@@ -773,6 +1116,22 @@ class GameService:
         output_tokens: int,
         latency_ms: int,
     ) -> dict[str, int]:
+        with self._lobby_lock:
+            return self._record_usage(
+                token,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=latency_ms,
+            )
+
+    def _record_usage(
+        self,
+        token: str,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        latency_ms: int,
+    ) -> dict[str, int]:
         access, match = self._authorize(token)
         if access.admin or access.colony_id is None:
             raise ForbiddenError("admin capabilities cannot record controller usage")
@@ -794,9 +1153,19 @@ class GameService:
             tenure_usage["input_tokens"] += input_tokens
             tenure_usage["output_tokens"] += output_tokens
             tenure_usage["latency_ms"] += latency_ms
+            self._record_operational_event(
+                match,
+                "metric_updated",
+                colony_id=access.colony_id,
+                metrics=dict(usage),
+            )
         return dict(usage)
 
     def record_mcp_call(self, token: str) -> None:
+        with self._lobby_lock:
+            self._record_mcp_call(token)
+
+    def _record_mcp_call(self, token: str) -> None:
         access, match = self._authorize(token)
         if access.admin or access.colony_id is None:
             return
@@ -811,6 +1180,10 @@ class GameService:
             self._tenure_usage(match, slot)["mcp_calls"] += 1
 
     def run_report(self, token: str) -> dict[str, object]:
+        with self._lobby_lock:
+            return self._run_report(token)
+
+    def _run_report(self, token: str) -> dict[str, object]:
         access, match = self._authorize(token)
         if not access.admin:
             raise ForbiddenError("run reports require an admin capability")
