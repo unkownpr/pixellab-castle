@@ -49,6 +49,11 @@
 - HTTP/MCP orchestrator authentication, IP-level throttling, heartbeats,
   lifecycle start, and controller rotation are intentionally deferred to later
   plan tasks.
+- **Intentional phase boundary:** Task 1 creates only `draft`/`lobby` session
+  state. It deliberately does not provide a `start_match` operation or any
+  transition to `running`; therefore all new-session observation and action
+  submission remain denied until Task 2 implements that transition. Legacy
+  `create_match` sessions remain immediately playable for compatibility.
 - No existing project record was present in the configured Obsidian vault.
 
 ## Review fix wave
@@ -75,3 +80,17 @@ Addressed review findings after commit `4d2bd4a`:
 - `uv run pytest tests/test_lobby.py tests/test_contracts.py -q` — 15 passed.
 - `uv run pytest -q` — 64 passed.
 - `git diff --check` — clean.
+
+## Second narrow review fix
+
+- Extended recursive snapshot sanitization to assert the SHA-256 digest of the
+  raw admin capability is absent, alongside raw and digest forms of pairing and
+  controller secrets.
+- Extended admin/action authorization coverage to directly reject a new-session
+  admin token, while retaining the legacy-match check.
+- Retained the pre-start gameplay-denial regression without introducing a
+  `RUNNING` transition; that operation belongs to Task 2.
+
+### Second narrow fix verification
+
+- `uv run pytest tests/test_lobby.py -q` — 10 passed.

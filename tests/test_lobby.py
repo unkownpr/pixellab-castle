@@ -76,6 +76,7 @@ def test_lobby_status_never_exposes_raw_pairing_or_controller_secrets(
     assert sha256(grant.code.encode()).hexdigest() not in serialized
     assert sha256(claimed.controller_token.encode()).hexdigest() not in serialized
     assert session.admin_token not in serialized
+    assert sha256(session.admin_token.encode()).hexdigest() not in serialized
     assert claimed.controller_token not in service._matches[session.match_id].controller_tokens.values()
 
 
@@ -171,7 +172,10 @@ def test_controller_capability_cannot_administer_its_lobby(service: GameService,
 
 def test_admin_capability_cannot_submit_lobby_gameplay(service: GameService) -> None:
     """Catches an admin capability bypassing controller-only action submission."""
+    session = service.create_session("orch", "basic-survival-v1", 17, 1)
     legacy = service.create_match("basic-survival-v1", seed=17, colony_count=1)
 
+    with pytest.raises(ForbiddenError, match="admin capabilities cannot submit"):
+        service.submit_actions(session.admin_token, turn=0, actions=({"kind": "wait"},))
     with pytest.raises(ForbiddenError, match="admin capabilities cannot submit"):
         service.submit_actions(legacy.admin_token, turn=0, actions=({"kind": "wait"},))
