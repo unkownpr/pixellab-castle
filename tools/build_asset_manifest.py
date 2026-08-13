@@ -153,6 +153,14 @@ def build_manifest() -> dict[str, object]:
 
     lineage_path = ROOT / "assets" / "generated" / "lineage.json"
     generated_states = json.loads(lineage_path.read_text()) if lineage_path.exists() else []
+    generated_states = [
+        {
+            **generated,
+            "selected_output": generated["path"],
+            "output_index": generated.get("frame", 0),
+        }
+        for generated in generated_states
+    ]
     for generated in generated_states:
         path = ROOT / generated["path"]
         if not path.exists():

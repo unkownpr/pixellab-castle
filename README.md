@@ -34,6 +34,7 @@ Codex/OpenCode gibi stdio MCP istemcileri için proje yolunu kendi makinenize g�
 [mcp_servers.castle-benchmark]
 command = "uv"
 args = ["--directory", "/absolute/path/to/pixellab-castle", "run", "castle-benchmark-mcp"]
+env = { CASTLE_BENCHMARK_ORCHESTRATOR_TOKEN = "uzun-rastgele-bir-kabiliyet" }
 ```
 
 HTTP tabanlı MCP incelemesi için:
@@ -45,6 +46,7 @@ uv run castle-benchmark-mcp --transport streamable-http
 Temel araçlar:
 
 - `benchmark.create_match`: seed’li maçı ve koloni capability tokenlarını üretir.
+- `benchmark.join_match`: admin kabiliyetiyle tek bir koloni tokenını kontrolöre verir.
 - `benchmark.observe`: yalnız kontrol edilen koloninin sisle sınırlandırılmış gözlemini verir.
 - `benchmark.submit_actions`: eşzamanlı tur bariyerine eylem yollar.
 - `benchmark.record_usage`: gerçek token ve gecikme ölçümlerini kaydeder.

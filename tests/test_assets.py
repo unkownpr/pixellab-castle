@@ -68,6 +68,7 @@ def test_manifest_records_pixellab_lineage() -> None:
     assert all("prompt" in item and "id" in item for item in payload["pixellab"]["known_isometric_tile_ids"])
     assert len(payload["pixellab"]["generated_states"]) >= 15
     assert all("job_id" in item and "seed" in item and "prompt" in item for item in payload["pixellab"]["generated_states"])
+    assert all("selected_output" in item and "output_index" in item for item in payload["pixellab"]["generated_states"])
     for structure in ("warehouse", "well", "farm", "lumber_camp", "quarry", "mine", "workshop", "clinic", "barracks", "wall"):
         assert f"structure.{structure}.operational" in payload["assets"]
     assert "effect.fire.base" in payload["assets"]

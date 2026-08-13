@@ -377,6 +377,8 @@ class SimCore:
         if action.target_colony_id not in self.state.colonies or action.target_colony_id == colony_id:
             return ActionResult(colony_id, action.kind, "rejected", "invalid_target")
         attacker = self.state.colonies[colony_id]
+        if attacker.relations[action.target_colony_id] == RelationStatus.UNKNOWN:
+            return ActionResult(colony_id, action.kind, "rejected", "target_not_contacted")
         surprise = attacker.relations[action.target_colony_id] != RelationStatus.WAR
         if surprise:
             cost = min(5, attacker.resources.influence)

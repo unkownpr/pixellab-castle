@@ -4489,114 +4489,146 @@
       {
         "job_id": "f548448c-0114-4506-98a2-6478579bd603",
         "key": "structure.warehouse.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/warehouse.png",
         "prompt": "compact medieval timber warehouse with crates and double doors, readable isometric game building sprite",
-        "seed": 8101
+        "seed": 8101,
+        "selected_output": "assets/generated/buildings/warehouse.png"
       },
       {
         "job_id": "87256ba1-2482-4a7f-82a8-a0cbd7a6500e",
         "key": "structure.well.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/well.png",
         "prompt": "compact medieval stone water well with timber roof and bucket, readable isometric game building sprite",
-        "seed": 8102
+        "seed": 8102,
+        "selected_output": "assets/generated/buildings/well.png"
       },
       {
         "job_id": "1817f04c-9ebc-46ee-b898-fdf7b77c08de",
         "key": "structure.farm.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/farm.png",
         "prompt": "compact medieval farm plot with wheat rows, fence and tiny tool shed, readable isometric game building sprite",
-        "seed": 8103
+        "seed": 8103,
+        "selected_output": "assets/generated/buildings/farm.png"
       },
       {
         "job_id": "836a89a2-026e-41ef-985a-7b11959e9435",
         "key": "structure.lumber_camp.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/lumber_camp.png",
         "prompt": "compact medieval lumber camp with stacked logs, chopping block and canvas shelter, readable isometric game building sprite",
-        "seed": 8104
+        "seed": 8104,
+        "selected_output": "assets/generated/buildings/lumber_camp.png"
       },
       {
         "job_id": "b9b09f95-14ab-4d6f-b161-995dcbcb53b7",
         "key": "structure.quarry.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/quarry.png",
         "prompt": "compact medieval stone quarry with cut blocks, pulley and timber supports, readable isometric game building sprite",
-        "seed": 8105
+        "seed": 8105,
+        "selected_output": "assets/generated/buildings/quarry.png"
       },
       {
         "job_id": "c25b74e9-69ef-46d5-a93e-6d8041b1211b",
         "key": "structure.mine.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/mine.png",
         "prompt": "compact medieval stone mine entrance with timber supports, ore cart and dark tunnel, readable game building sprite",
-        "seed": 8106
+        "seed": 8106,
+        "selected_output": "assets/generated/buildings/mine.png"
       },
       {
         "job_id": "359172f2-faa8-4176-a638-a5873203ee8e",
         "key": "structure.market.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/market.png",
         "prompt": "compact medieval open air market with striped cloth awning, crates and trading stall, readable game building sprite",
-        "seed": 8107
+        "seed": 8107,
+        "selected_output": "assets/generated/buildings/market.png"
       },
       {
         "job_id": "ec425b4c-8783-465c-a8fb-65de4f27f483",
         "key": "structure.workshop.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/workshop.png",
         "prompt": "compact medieval artisan workshop with timber frame, chimney, tools and workbench, readable game building sprite",
-        "seed": 8108
+        "seed": 8108,
+        "selected_output": "assets/generated/buildings/workshop.png"
       },
       {
         "job_id": "2c346f25-00b3-4c13-b3b0-364bb8d496d1",
         "key": "structure.clinic.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/clinic.png",
         "prompt": "compact medieval healer clinic with pale canvas awning, herb sign and timber frame, readable game building sprite",
-        "seed": 8109
+        "seed": 8109,
+        "selected_output": "assets/generated/buildings/clinic.png"
       },
       {
         "job_id": "70aed882-12dc-4eb0-a344-c316c19288ff",
         "key": "structure.barracks.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/barracks.png",
         "prompt": "compact fortified medieval barracks with timber and stone walls, weapon rack and red pennant, readable game building sprite",
-        "seed": 8110
+        "seed": 8110,
+        "selected_output": "assets/generated/buildings/barracks.png"
       },
       {
         "job_id": "adc24de9-97ac-47ad-bd5f-fdeb7323184b",
         "key": "structure.watchtower.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/watchtower.png",
         "prompt": "compact medieval timber watchtower with stone base, ladder and lookout platform, readable game building sprite",
-        "seed": 8111
+        "seed": 8111,
+        "selected_output": "assets/generated/buildings/watchtower.png"
       },
       {
         "job_id": "e825a8f1-8985-4694-8f38-1bc6ec920fe0",
         "key": "structure.gate.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/gate.png",
         "prompt": "compact medieval fortified gatehouse with raised portcullis and timber doors, readable game building sprite",
-        "seed": 8112
+        "seed": 8112,
+        "selected_output": "assets/generated/buildings/gate.png"
       },
       {
         "job_id": "03529795-71db-453b-a673-86db0251f9aa",
         "key": "structure.wall.operational",
+        "output_index": 0,
         "path": "assets/generated/buildings/wall.png",
         "prompt": "short compact medieval stone defensive wall segment with timber braces, readable game building sprite",
-        "seed": 8113
+        "seed": 8113,
+        "selected_output": "assets/generated/buildings/wall.png"
       },
       {
         "job_id": "c204cb23-5f3a-42b1-bd67-b68e348fe8f1",
         "key": "structure.generic.ruined",
+        "output_index": 0,
         "path": "assets/generated/effects/ruin.png",
         "prompt": "same medieval building collapsed into charred broken beams, cracked stones and ash, ruined game building sprite",
-        "seed": 8121
+        "seed": 8121,
+        "selected_output": "assets/generated/effects/ruin.png"
       },
       {
         "job_id": "559f44e6-b3cf-4dd9-a3df-1ff588b85245",
         "key": "effect.fire.base",
+        "output_index": 0,
         "path": "assets/generated/effects/fire_base.png",
         "prompt": "small orange ember flame with wisps of dark smoke for a burning medieval building, isolated pixel art effect sprite",
-        "seed": 8120
+        "seed": 8120,
+        "selected_output": "assets/generated/effects/fire_base.png"
       },
       {
         "job_id": "7e61b2fc-c771-4ee5-beef-07a374e03b6d",
         "key": "effect.construction",
+        "output_index": 0,
         "path": "assets/generated/effects/construction.png",
         "prompt": "wooden scaffold with rope, planks and drifting construction dust, isolated medieval pixel art effect sprite",
-        "seed": 8122
+        "seed": 8122,
+        "selected_output": "assets/generated/effects/construction.png"
       },
       {
         "frame": 0,
@@ -4604,9 +4636,11 @@
         "frames": 9,
         "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
         "key": "effect.fire.loop.0",
+        "output_index": 0,
         "path": "assets/generated/effects/fire/frame_0.png",
         "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
-        "seed": 8123
+        "seed": 8123,
+        "selected_output": "assets/generated/effects/fire/frame_0.png"
       },
       {
         "frame": 1,
@@ -4614,9 +4648,11 @@
         "frames": 9,
         "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
         "key": "effect.fire.loop.1",
+        "output_index": 1,
         "path": "assets/generated/effects/fire/frame_1.png",
         "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
-        "seed": 8123
+        "seed": 8123,
+        "selected_output": "assets/generated/effects/fire/frame_1.png"
       },
       {
         "frame": 2,
@@ -4624,9 +4660,11 @@
         "frames": 9,
         "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
         "key": "effect.fire.loop.2",
+        "output_index": 2,
         "path": "assets/generated/effects/fire/frame_2.png",
         "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
-        "seed": 8123
+        "seed": 8123,
+        "selected_output": "assets/generated/effects/fire/frame_2.png"
       },
       {
         "frame": 3,
@@ -4634,9 +4672,11 @@
         "frames": 9,
         "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
         "key": "effect.fire.loop.3",
+        "output_index": 3,
         "path": "assets/generated/effects/fire/frame_3.png",
         "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
-        "seed": 8123
+        "seed": 8123,
+        "selected_output": "assets/generated/effects/fire/frame_3.png"
       },
       {
         "frame": 4,
@@ -4644,9 +4684,11 @@
         "frames": 9,
         "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
         "key": "effect.fire.loop.4",
+        "output_index": 4,
         "path": "assets/generated/effects/fire/frame_4.png",
         "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
-        "seed": 8123
+        "seed": 8123,
+        "selected_output": "assets/generated/effects/fire/frame_4.png"
       },
       {
         "frame": 5,
@@ -4654,9 +4696,11 @@
         "frames": 9,
         "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
         "key": "effect.fire.loop.5",
+        "output_index": 5,
         "path": "assets/generated/effects/fire/frame_5.png",
         "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
-        "seed": 8123
+        "seed": 8123,
+        "selected_output": "assets/generated/effects/fire/frame_5.png"
       },
       {
         "frame": 6,
@@ -4664,9 +4708,11 @@
         "frames": 9,
         "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
         "key": "effect.fire.loop.6",
+        "output_index": 6,
         "path": "assets/generated/effects/fire/frame_6.png",
         "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
-        "seed": 8123
+        "seed": 8123,
+        "selected_output": "assets/generated/effects/fire/frame_6.png"
       },
       {
         "frame": 7,
@@ -4674,9 +4720,11 @@
         "frames": 9,
         "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
         "key": "effect.fire.loop.7",
+        "output_index": 7,
         "path": "assets/generated/effects/fire/frame_7.png",
         "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
-        "seed": 8123
+        "seed": 8123,
+        "selected_output": "assets/generated/effects/fire/frame_7.png"
       },
       {
         "frame": 8,
@@ -4684,9 +4732,11 @@
         "frames": 9,
         "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
         "key": "effect.fire.loop.8",
+        "output_index": 8,
         "path": "assets/generated/effects/fire/frame_8.png",
         "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
-        "seed": 8123
+        "seed": 8123,
+        "selected_output": "assets/generated/effects/fire/frame_8.png"
       }
     ],
     "inventory_checked_at": "2026-08-13",

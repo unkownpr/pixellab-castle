@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import argparse
+import os
+import secrets
 from dataclasses import asdict
 
 from mcp.server.fastmcp import FastMCP
@@ -9,8 +11,12 @@ from mcp.server.fastmcp import FastMCP
 from .service import GameService, ServiceError
 
 
-def build_mcp_server(service: GameService | None = None) -> FastMCP:
+def build_mcp_server(
+    service: GameService | None = None,
+    orchestrator_token: str | None = None,
+) -> FastMCP:
     game = service or GameService()
+    required_orchestrator_token = orchestrator_token or os.environ.get("CASTLE_BENCHMARK_ORCHESTRATOR_TOKEN")
     mcp = FastMCP(
         "PixelLab Castle Benchmark",
         instructions=(
@@ -29,10 +35,28 @@ def build_mcp_server(service: GameService | None = None) -> FastMCP:
         return encode(game.list_scenarios())
 
     @mcp.tool(name="benchmark.create_match")
-    def create_match(scenario_id: str = "basic-survival-v1", seed: int = 17, colony_count: int = 4) -> str:
+    def create_match(
+        orchestrator_token: str,
+        scenario_id: str = "basic-survival-v1",
+        seed: int = 17,
+        colony_count: int = 4,
+    ) -> str:
         """Create a match and return controller capabilities. Keep tokens private."""
         try:
-            return encode(asdict(game.create_match(scenario_id, seed, colony_count)))
+            if not required_orchestrator_token or not secrets.compare_digest(
+                orchestrator_token, required_orchestrator_token
+            ):
+                return encode({"error": {"code": "unauthorized", "message": "orchestrator capability required"}})
+            created = game.create_match(scenario_id, seed, colony_count)
+            return encode({"match_id": created.match_id, "scenario_id": created.scenario_id, "admin_token": created.admin_token})
+        except ServiceError as exc:
+            return encode({"error": {"code": exc.code, "message": exc.message}})
+
+    @mcp.tool(name="benchmark.join_match")
+    def join_match(admin_token: str, colony_id: str) -> str:
+        """Provision exactly one colony capability from an orchestrator-held admin token."""
+        try:
+            return encode({"colony_id": colony_id, "controller_token": game.join_match(admin_token, colony_id)})
         except ServiceError as exc:
             return encode({"error": {"code": exc.code, "message": exc.message}})
 
@@ -40,6 +64,7 @@ def build_mcp_server(service: GameService | None = None) -> FastMCP:
     def observe(controller_token: str) -> str:
         """Get the fog-limited immutable observation for your colony's current turn."""
         try:
+            game.record_mcp_call(controller_token)
             return encode(asdict(game.observe(controller_token)))
         except ServiceError as exc:
             return encode({"error": {"code": exc.code, "message": exc.message}})
@@ -48,6 +73,7 @@ def build_mcp_server(service: GameService | None = None) -> FastMCP:
     def submit_actions(controller_token: str, turn: int, actions: list[dict[str, object]]) -> str:
         """Submit one structured action batch; resolution waits for every controller."""
         try:
+            game.record_mcp_call(controller_token)
             submission = game.submit_actions(controller_token, turn, actions)
             return encode(
                 {
@@ -66,6 +92,7 @@ def build_mcp_server(service: GameService | None = None) -> FastMCP:
     def match_status(controller_token: str) -> str:
         """Read turn, terminal condition, and barrier status for your match."""
         try:
+            game.record_mcp_call(controller_token)
             return encode(game.match_status(controller_token))
         except ServiceError as exc:
             return encode({"error": {"code": exc.code, "message": exc.message}})
@@ -87,6 +114,7 @@ def build_mcp_server(service: GameService | None = None) -> FastMCP:
     ) -> str:
         """Record measured cost and latency for one model decision before submitting it."""
         try:
+            game.record_mcp_call(controller_token)
             return encode(
                 game.record_usage(
                     controller_token,

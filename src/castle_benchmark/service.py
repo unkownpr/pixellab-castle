@@ -210,11 +210,20 @@ class GameService:
             {"model_calls": 0, "mcp_calls": 0, "input_tokens": 0, "output_tokens": 0, "latency_ms": 0},
         )
         usage["model_calls"] += 1
-        usage["mcp_calls"] += 1
         usage["input_tokens"] += input_tokens
         usage["output_tokens"] += output_tokens
         usage["latency_ms"] += latency_ms
         return dict(usage)
+
+    def record_mcp_call(self, token: str) -> None:
+        access, match = self._authorize(token)
+        if access.admin or access.colony_id is None:
+            return
+        usage = match.usage.setdefault(
+            access.colony_id,
+            {"model_calls": 0, "mcp_calls": 0, "input_tokens": 0, "output_tokens": 0, "latency_ms": 0},
+        )
+        usage["mcp_calls"] += 1
 
     def run_report(self, token: str) -> dict[str, object]:
         access, match = self._authorize(token)
@@ -236,3 +245,12 @@ class GameService:
             "metrics": metrics,
             "latest_events": self.last_events(token),
         }
+
+    def join_match(self, admin_token: str, colony_id: str) -> str:
+        access, match = self._authorize(admin_token)
+        if not access.admin:
+            raise ForbiddenError("joining controllers requires an admin capability")
+        try:
+            return match.controller_tokens[colony_id]
+        except KeyError as exc:
+            raise NotFoundError("colony does not exist") from exc

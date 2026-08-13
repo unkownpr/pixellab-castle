@@ -26,7 +26,7 @@ def test_replay_reproduces_hash_sequence(tmp_path) -> None:
         colony_count=2,
         controller_names={"c1": "wait", "c2": "wait"},
     )
-    for _ in range(4):
+    while not sim.state.terminal:
         batches = tuple(
             ActionBatch(sim.state.turn, colony_id, (WaitAction(),))
             for colony_id in sim.state.colonies
@@ -67,3 +67,16 @@ def test_replay_fails_closed_when_hash_is_corrupted(tmp_path) -> None:
 
     assert not verification.ok
     assert verification.first_mismatch_turn == 0
+
+
+def test_replay_fails_closed_when_turn_log_is_truncated(tmp_path) -> None:
+    sim = SimCore.create(BASIC_SURVIVAL, seed=60, colony_count=1)
+    writer = ArtifactWriter.create(tmp_path / "run", BASIC_SURVIVAL, 60, 1, {"c1": "wait"})
+    while not sim.state.terminal:
+        batch = ActionBatch(sim.state.turn, "c1", (WaitAction(),))
+        result = sim.resolve((batch,))
+        writer.write_turn((batch,), result)
+    writer.finish(sim.state, metrics={})
+    writer.events_path.write_text(writer.events_path.read_text().splitlines()[0] + "\n")
+
+    assert not verify_replay(writer.run_dir).ok

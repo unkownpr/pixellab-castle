@@ -6,10 +6,12 @@ from fastapi.testclient import TestClient
 from castle_benchmark.api import create_app
 from castle_benchmark.runner import RunConfig, run_match, verify_replay
 from castle_benchmark.scenarios import BASIC_SURVIVAL, OFFICIAL_SCENARIOS
+from castle_benchmark.service import GameService
 
 
 def test_http_human_turn_and_complete_replayable_baseline_match(tmp_path: Path) -> None:
-    client = TestClient(create_app())
+    service = GameService()
+    client = TestClient(create_app(service))
     created = client.post(
         "/api/matches",
         json={"scenario_id": BASIC_SURVIVAL.id, "seed": 17, "colony_count": 4},
@@ -53,18 +55,14 @@ def test_http_human_turn_and_complete_replayable_baseline_match(tmp_path: Path) 
     assert resolved is not None
     assert resolved.json()["status"] == "resolved"
     assert any(event["kind"] == "construction_started" for event in resolved.json()["events"])
+    while not service.match_status(created["admin_token"])["terminal"]:
+        turn = int(service.match_status(created["admin_token"])["turn"])
+        for colony_id in ("c1", "c2", "c3", "c4"):
+            service.submit_actions(tokens[colony_id], turn, ({"kind": "wait"},))
 
-    run = run_match(
-        RunConfig(
-            BASIC_SURVIVAL,
-            seed=17,
-            colony_count=4,
-            output_dir=tmp_path,
-            controller_kinds=("survivalist", "trader", "expansionist", "militarist"),
-        )
-    )
-    assert run.termination_reason in {"turn_limit", "extinction"}
-    assert verify_replay(run.run_dir).ok
+    report = service.run_report(created["admin_token"])
+    assert report["status"]["terminal"] is True
+    assert report["status"]["termination_reason"] in {"turn_limit", "extinction"}
 
 
 @pytest.mark.parametrize("scenario", OFFICIAL_SCENARIOS, ids=lambda scenario: scenario.id)

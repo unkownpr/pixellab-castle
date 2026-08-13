@@ -98,11 +98,25 @@ def verify_replay(run_dir: Path) -> ReplayVerification:
         return ReplayVerification(False, (), (), 0)
     for index, line in enumerate(events_path.read_text().splitlines()):
         record = json.loads(line)
+        if record.get("completed") is not True:
+            mismatch = index
+            break
         expected.append(str(record["state_hash"]))
         batches = tuple(batch_from_dict(batch) for batch in record["batches"])
         sim.resolve(batches)
         actual.append(state_hash(sim.state))
         if mismatch is None and expected[-1] != actual[-1]:
             mismatch = index
+    report_path = run_dir / "report.json"
+    if mismatch is None:
+        if not report_path.exists():
+            mismatch = len(actual)
+        else:
+            report = json.loads(report_path.read_text())
+            if (
+                not sim.state.terminal
+                or int(report.get("turns", -1)) != sim.state.turn
+                or report.get("final_state_hash") != state_hash(sim.state)
+            ):
+                mismatch = len(actual)
     return ReplayVerification(mismatch is None, tuple(expected), tuple(actual), mismatch)
-

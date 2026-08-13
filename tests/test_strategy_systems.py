@@ -83,6 +83,7 @@ def test_surprise_raid_changes_relation_and_costs_influence() -> None:
     sim = SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2)
     influence_before = sim.state.colonies["c1"].resources.influence
 
+    sim.resolve((batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),))
     result = sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c2")),))
 
     assert result.state.colonies["c1"].relations["c2"] == RelationStatus.WAR
@@ -95,6 +96,14 @@ def test_surprise_raid_changes_relation_and_costs_influence() -> None:
     ]
     assert damaged
     assert any(event.kind == "combat_damage" for event in result.events)
+
+
+def test_unknown_colony_cannot_be_raided_at_unlimited_range() -> None:
+    sim = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=4)
+
+    result = sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c4")),))
+
+    assert result.action_results[0].code == "target_not_contacted"
 
 
 def test_policy_change_has_cooldown() -> None:

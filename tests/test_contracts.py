@@ -82,6 +82,7 @@ def test_live_report_accumulates_model_usage_and_decision_metrics(service: GameS
     token = created.controller_tokens["c1"]
 
     service.record_usage(token, input_tokens=120, output_tokens=35, latency_ms=480)
+    service.record_mcp_call(token)
     service.submit_actions(token, turn=0, actions=({"kind": "wait"},))
     report = service.run_report(created.admin_token)
 
