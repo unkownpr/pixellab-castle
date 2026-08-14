@@ -61,6 +61,12 @@ class SetPolicyAction:
     kind: Literal["set_policy"] = "set_policy"
 
 
+@dataclass(frozen=True, slots=True)
+class ScoutAction:
+    target: Position
+    kind: Literal["scout"] = "scout"
+
+
 GameAction: TypeAlias = (
     WaitAction
     | GatherAction
@@ -70,6 +76,7 @@ GameAction: TypeAlias = (
     | TradeRespondAction
     | RaidAction
     | SetPolicyAction
+    | ScoutAction
 )
 
 

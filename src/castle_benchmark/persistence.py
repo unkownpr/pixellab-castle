@@ -13,6 +13,7 @@ from .actions import (
     DiplomacyAction,
     GatherAction,
     RaidAction,
+    ScoutAction,
     SetPolicyAction,
     TradeOfferAction,
     TradeRespondAction,
@@ -97,6 +98,8 @@ def action_to_dict(action: object) -> dict[str, object]:
         return {"kind": "raid", "target_colony_id": action.target_colony_id}
     if isinstance(action, SetPolicyAction):
         return {"kind": "set_policy", "policy": action.policy, "value": action.value}
+    if isinstance(action, ScoutAction):
+        return {"kind": "scout", "x": action.target.x, "y": action.target.y}
     raise TypeError(f"unsupported action: {type(action).__name__}")
 
 
@@ -129,6 +132,8 @@ def action_from_dict(data: dict[str, object]) -> object:
         return RaidAction(str(data["target_colony_id"]))
     if kind == "set_policy":
         return SetPolicyAction(str(data["policy"]), str(data["value"]))
+    if kind == "scout":
+        return ScoutAction(Position(int(data["x"]), int(data["y"])))
     raise ValueError(f"unknown action kind: {kind}")
 
 

@@ -14,6 +14,7 @@ import type {
   StructureKind,
   StructureStatus,
   VisibleCell,
+  VisibleScout,
   VisibleStructure,
 } from "./api";
 import { nextWorldView, type WorldView } from "./operations";
@@ -113,6 +114,7 @@ export interface ReplaySnapshot {
   readonly colonies: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   readonly structures: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   readonly offers: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  readonly scouts?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 }
 
 export function snapshotToObservation(snapshot: ReplaySnapshot, colonyId: string): Observation {
@@ -148,6 +150,18 @@ export function snapshotToObservation(snapshot: ReplaySnapshot, colonyId: string
       y: Number(position.y),
     };
   });
+  const scouts = Object.values(snapshot.scouts ?? {}).map((scout) => {
+    const position = scout.position as Readonly<Record<string, unknown>>;
+    const target = scout.target as Readonly<Record<string, unknown>>;
+    return {
+      id: String(scout.id),
+      colony_id: String(scout.colony_id),
+      x: Number(position.x),
+      y: Number(position.y),
+      target_x: Number(target.x),
+      target_y: Number(target.y),
+    };
+  });
   const relations = colony.relations as Readonly<Record<string, string>>;
   return {
     schema_version: "1.0",
@@ -164,6 +178,7 @@ export function snapshotToObservation(snapshot: ReplaySnapshot, colonyId: string
     },
     visible_cells: visibleCells,
     visible_structures: visibleStructures,
+    scouts,
     known_colonies: Object.fromEntries(
       Object.entries(relations).map(([id, relation]) => [id, { id, relation, contacted: relation !== "unknown" }]),
     ),
@@ -506,6 +521,22 @@ export class CastleRenderer {
         focus.zIndex = depth + 0.5;
         structureLayer.addChild(focus);
       }
+    }));
+
+    if (version !== this.renderVersion) return;
+
+    const scoutLayer = new Container();
+    scoutLayer.sortableChildren = true;
+    this.world.addChild(scoutLayer);
+    await Promise.all((observation.scouts ?? []).map(async (scout: VisibleScout) => {
+      const position = isoToScreen(scout, origin);
+      const texture = await this.idleTextureFor("scout", "south");
+      if (version !== this.renderVersion || !texture) return;
+      const sprite = new Sprite(texture);
+      const anchor = this.characterAnchor("character.scout.idle.south");
+      sprite.position.set(position.x - anchor[0], position.y - anchor[1]);
+      sprite.zIndex = (scout.x + scout.y) * 1000 + scout.x + 0.6;
+      scoutLayer.addChild(sprite);
     }));
 
     if (version !== this.renderVersion) return;
