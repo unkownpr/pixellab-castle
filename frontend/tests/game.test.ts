@@ -12,6 +12,7 @@ import {
   compareIsoDepth,
   isoToScreen,
   snapshotToObservation,
+  structureOpacity,
 } from "../src/game";
 
 describe("isometric projection", () => {
@@ -56,6 +57,15 @@ describe("controller protocol", () => {
     ["unknown_event", "none"],
   ])("maps %s to %s without interpreting game state", (kind, animation) => {
     expect(animationForEvent({ kind })).toBe(animation);
+  });
+});
+
+describe("structure rendering", () => {
+  it("renders a ruined structure at reduced opacity", () => {
+    expect(structureOpacity("ruined")).toBe(0.72);
+    expect(structureOpacity("operational")).toBe(1);
+    expect(structureOpacity("damaged")).toBe(1);
+    expect(structureOpacity("foundation")).toBe(0.62);
   });
 });
 

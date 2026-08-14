@@ -581,7 +581,7 @@ class SimCore:
             if neighbours:
                 spread_targets.add(neighbours[0].id)
             condition = max(0, source.condition - 40)
-            status = StructureStatus.RUINED if condition == 0 else StructureStatus.DAMAGED
+            status = StructureStatus.RUINED if condition == 0 else StructureStatus.BURNING
             structures[source.id] = replace(source, condition=condition, status=status)
             events.append(
                 DomainEvent(

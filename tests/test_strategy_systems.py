@@ -169,8 +169,59 @@ def test_burning_structure_damages_and_spreads_on_next_hazard() -> None:
 
     result = sim.resolve(all_wait(sim))
 
-    assert result.state.structures["s1"].status == StructureStatus.DAMAGED
+    assert result.state.structures["s1"].status == StructureStatus.BURNING
     assert result.state.structures["s1"].condition < 100
     assert result.state.structures["s2"].status == StructureStatus.BURNING
     assert any(event.kind == "fire_damage" for event in result.events)
     assert any(event.kind == "fire_spread" for event in result.events)
+
+
+def test_burning_structure_keeps_burning_until_ruined() -> None:
+    """A fire persists across consecutive hazards instead of going out after one turn."""
+    sim = SimCore.create(BASIC_SURVIVAL, seed=37, colony_count=1)
+    structures = dict(sim.state.structures)
+    headquarters = structures["s1"]
+    structures["s1"] = replace(headquarters, status=StructureStatus.BURNING)
+    sim.state = replace(sim.state, structures=structures)
+
+    conditions = []
+    for _ in range(3):
+        sim.state = replace(sim.state, turn=(-sim.state.seed) % 11)
+        result = sim.resolve(all_wait(sim))
+        structure = result.state.structures["s1"]
+        conditions.append((structure.status, structure.condition))
+
+    assert conditions == [
+        (StructureStatus.BURNING, 60),
+        (StructureStatus.BURNING, 20),
+        (StructureStatus.RUINED, 0),
+    ]
+
+
+def test_fire_ruining_emits_events_and_stops() -> None:
+    """Ruining a structure emits fire_damage with the ruined status and ignites nothing new."""
+    sim = SimCore.create(BASIC_SURVIVAL, seed=37, colony_count=1)
+    structures = dict(sim.state.structures)
+    headquarters = structures["s1"]
+    structures["s1"] = replace(headquarters, status=StructureStatus.BURNING)
+    sim.state = replace(sim.state, structures=structures)
+
+    damage_events = []
+    for _ in range(3):
+        sim.state = replace(sim.state, turn=(-sim.state.seed) % 11)
+        result = sim.resolve(all_wait(sim))
+        damage_events.extend(event for event in result.events if event.kind == "fire_damage")
+
+    assert [event.data["status"] for event in damage_events] == [
+        StructureStatus.BURNING.value,
+        StructureStatus.BURNING.value,
+        StructureStatus.RUINED.value,
+    ]
+    assert damage_events[-1].data["condition"] == 0
+    assert result.state.structures["s1"].status == StructureStatus.RUINED
+
+    # Once ruined the fire is out: the next hazard ignites nothing new.
+    sim.state = replace(sim.state, turn=(-sim.state.seed) % 11)
+    final = sim.resolve(all_wait(sim))
+    assert not any(event.kind == "fire_started" for event in final.events)
+    assert final.state.structures["s1"].status == StructureStatus.RUINED
