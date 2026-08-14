@@ -1728,6 +1728,142 @@
       "source": "pixellab",
       "state": "walk"
     },
+    "character.scout.idle.east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frames": 1,
+      "path": "chars/scout/east.png",
+      "role": "scout",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.scout.idle.north": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frames": 1,
+      "path": "chars/scout/north.png",
+      "role": "scout",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.scout.idle.north-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-east",
+      "frames": 1,
+      "path": "chars/scout/north-east.png",
+      "role": "scout",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.scout.idle.north-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north-west",
+      "frames": 1,
+      "path": "chars/scout/north-west.png",
+      "role": "scout",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.scout.idle.south": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frames": 1,
+      "path": "chars/scout/south.png",
+      "role": "scout",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.scout.idle.south-east": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-east",
+      "frames": 1,
+      "path": "chars/scout/south-east.png",
+      "role": "scout",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.scout.idle.south-west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south-west",
+      "frames": 1,
+      "path": "chars/scout/south-west.png",
+      "role": "scout",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
+    "character.scout.idle.west": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frames": 1,
+      "path": "chars/scout/west.png",
+      "role": "scout",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "idle"
+    },
     "character.villager_blue.idle.east": {
       "anchor": [
         24,
