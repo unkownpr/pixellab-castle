@@ -854,6 +854,15 @@ async def test_rules_publish_every_structure_kind_from_live_constants() -> None:
     assert "production" in rules["structures"]["farm"]["effects"]
     assert "blocks_trade_without_gate" in rules["structures"]["wall"]["effects"]
 
+    # Catches a single-element effect tuple written without its trailing comma,
+    # which silently publishes the effect name split into one entry per letter.
+    assert rules["structures"]["gate"]["effects"] == ["enables_trade_when_walled"]
+    assert rules["structures"]["watchtower"]["effects"] == ["extends_sight_radius"]
+    for kind, entry in rules["structures"].items():
+        assert all(
+            len(effect) > 1 for effect in entry["effects"]
+        ), f"{kind} publishes character-level effects: {entry['effects']}"
+
 
 @pytest.mark.asyncio
 async def test_rules_are_match_independent_and_leak_no_state() -> None:

@@ -107,8 +107,8 @@ _SPECIAL_EFFECTS: dict[StructureKind, tuple[str, ...]] = {
     StructureKind.CLINIC: ("heals_sick_then_injured",),
     StructureKind.BARRACKS: ("reduces_raid_loot",),
     StructureKind.WALL: ("reduces_raid_damage", "blocks_trade_without_gate"),
-    StructureKind.GATE: ("enables_trade_when_walled"),
-    StructureKind.WATCHTOWER: ("extends_sight_radius"),
+    StructureKind.GATE: ("enables_trade_when_walled",),
+    StructureKind.WATCHTOWER: ("extends_sight_radius",),
 }
 
 
