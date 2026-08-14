@@ -187,9 +187,17 @@ def trade_blocked(structures: Mapping[str, Structure], colony_id: str) -> bool:
 
 
 def scaled_amount(amount: int, ratio: tuple[int, int]) -> int:
-    """Round down, so a collected amount can never exceed what the payer handed over."""
+    """Apply a trade ratio, rounding to the nearest unit and never above what was sent.
+
+    Rounding to nearest rather than down matters at the scale colonies actually
+    trade at. Rounding down turns a one-unit consignment into nothing and halves a
+    two-unit one, so the friction lands hardest exactly where trades are smallest
+    and no counterparty can accept a sensible offer. The cap keeps the invariant
+    that a trade may destroy resources but never create them.
+    """
     numerator, denominator = ratio
-    return (amount * numerator) // denominator
+    scaled = (amount * numerator + denominator // 2) // denominator
+    return min(amount, scaled)
 
 
 def scaled_receipt(items: tuple[tuple[str, int], ...], ratio: tuple[int, int]) -> dict[str, int]:
