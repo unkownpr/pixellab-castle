@@ -44,10 +44,10 @@ from .systems import (
     WALL_RAID_DAMAGE_REDUCTION,
     can_afford,
     has_operational,
-    operational_structure_counts,
     production_delta,
     resource_delta,
     scaled_receipt,
+    staffed_production,
     trade_blocked,
 )
 from .world import WorldCell, WorldState, generate_world, rotated_spawns, visible_cells
@@ -60,6 +60,14 @@ SCOUT_SPEED = 3  # cells a scout advances toward its target each turn
 SCOUT_REVEAL_RADIUS = 2  # radius around the scout revealed as it travels
 SCOUT_FOOD_COST = 12  # provisioning charged when a scout is dispatched
 WATCHTOWER_SIGHT_BONUS = 2  # added to active sight radius per operational watchtower
+
+# Labour economy constants. A scout occupies one colonist for its whole journey, so
+# available_population (population minus colonists out scouting) is the real cost of
+# exploration: every hand sent scouting is a hand that cannot gather, cannot work a
+# producing structure, and cannot carry an action that turn. These encode how scarce
+# that labour is.
+GATHER_YIELD_PER_ACTION = 4  # units one gather action collects at full strength
+WORKERS_PER_PRODUCER = 1  # colonists needed to staff one producing structure a turn
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,8 +188,14 @@ class SimCore:
             if batch is None:
                 events.append(DomainEvent(self.state.turn, "controller_wait", colony_id))
                 continue
+            # Scouting eats into the turn's work budget: colonists away travelling
+            # cannot carry an action. The ceiling itself is unchanged.
+            budget = min(
+                self.ACTION_BUDGET,
+                self.state.colonies[colony_id].available_population,
+            )
             for index, action in enumerate(batch.actions):
-                if index >= self.ACTION_BUDGET:
+                if index >= budget:
                     results.append(
                         ActionResult(
                             colony_id,
@@ -256,7 +270,17 @@ class SimCore:
         cell = world.cells.get(action.position)
         if cell is None or cell.resource is None or cell.resource_amount <= 0:
             return ActionResult(colony_id, action.kind, "rejected", "no_resource")
-        amount = min(4, cell.resource_amount)
+        # Yield scales with the share of the colony still at home, so sending people
+        # scouting costs production from the first colonist onward rather than only
+        # once the colony is nearly wiped out.
+        if colony.population <= 0:
+            return ActionResult(colony_id, action.kind, "rejected", "no_population")
+        staffed_yield = (
+            GATHER_YIELD_PER_ACTION * colony.available_population // colony.population
+        )
+        amount = min(staffed_yield, cell.resource_amount)
+        if amount <= 0:
+            return ActionResult(colony_id, action.kind, "rejected", "no_available_population")
         try:
             stock = colony.resources.apply({cell.resource: amount})
         except KeyError:
@@ -648,7 +672,10 @@ class SimCore:
     def _apply_production(self, events: list[DomainEvent]) -> None:
         for colony_id in sorted(self.state.colonies):
             colony = self.state.colonies[colony_id]
-            counts = operational_structure_counts(self.state.structures, colony_id)
+            workers = colony.available_population // WORKERS_PER_PRODUCER
+            counts, idle_producers = staffed_production(
+                self.state.structures, colony_id, workers
+            )
             delta = production_delta(colony.resources, counts)
             heal_capacity = counts.get(StructureKind.CLINIC, 0) * CLINIC_HEALS_PER_TURN
             healed_sick = min(heal_capacity, colony.sick)
@@ -670,6 +697,7 @@ class SimCore:
                         "resources": delta,
                         "healed_sick": healed_sick,
                         "healed_injured": healed_injured,
+                        "idle_producers": idle_producers,
                     },
                 )
             )
