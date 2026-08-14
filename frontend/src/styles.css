@@ -646,11 +646,12 @@ form > small {
   .workbench {
     grid-template-areas: "setup map intel";
     grid-template-columns: minmax(var(--size-setup-desktop), 0.8fr) minmax(0, 2fr) minmax(var(--size-inspector-desktop), 0.9fr);
+    height: calc(100dvh - var(--size-header));
     min-height: calc(100dvh - var(--size-header));
   }
-  .setup-panel { border-block-start: var(--rule-none); }
-  .intel-panel { border-block-start: var(--rule-none); border-inline-start: var(--rule-hairline) solid var(--color-rule); }
-  .map-panel { min-height: 100%; }
+  .setup-panel { border-block-start: var(--rule-none); min-height: 0; overflow-y: auto; }
+  .intel-panel { border-block-start: var(--rule-none); border-inline-start: var(--rule-hairline) solid var(--color-rule); min-height: 0; overflow-y: auto; }
+  .map-panel { min-height: 0; height: 100%; }
   .metric-dock { grid-template-columns: minmax(0, 1fr); }
 }
 
