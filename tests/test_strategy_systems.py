@@ -60,7 +60,7 @@ def add_structure(
     return structure_id
 
 
-def test_trade_offer_reserves_then_transfers_exact_resources() -> None:
+def test_trade_offer_reserves_then_transfers_less_friction() -> None:
     """Catches double-spending or resource creation in accepted trades."""
     sim = SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2)
     sim.resolve(
@@ -89,14 +89,16 @@ def test_trade_offer_reserves_then_transfers_exact_resources() -> None:
 
     accepted = sim.resolve((batch(sim, "c2", TradeRespondAction(offer_id=offer_id, accept=True)),))
 
+    # The payer is debited in full, but neither side owns a MARKET, so only
+    # floor(amount * 4/5) of each consignment survives the journey.
     # Both colonies also consume two food on each resolved turn: offer and accept.
-    assert accepted.state.colonies["c1"].resources.food == before_c1_food + 5 - 4
+    assert accepted.state.colonies["c1"].resources.food == before_c1_food + 4 - 4
     assert accepted.state.colonies["c2"].resources.food == before_c2_food - 5 - 4
-    assert accepted.state.colonies["c2"].resources.wood == before_c2_wood + 10
+    assert accepted.state.colonies["c2"].resources.wood == before_c2_wood + 8
     assert (
         accepted.state.colonies["c1"].resources.wood
         + accepted.state.colonies["c2"].resources.wood
-        == before_c1_wood + before_c2_wood
+        < before_c1_wood + before_c2_wood
     )
 
 
@@ -307,8 +309,85 @@ def test_market_improves_trade_ratio_for_its_owner() -> None:
     offer_id = next(event.data["offer_id"] for event in offered.events if event.kind == "trade_offered")
     accepted = sim.resolve((batch(sim, "c2", TradeRespondAction(offer_id=offer_id, accept=True)),))
 
-    # c2 owns a MARKET, so it receives ceil(4 * 5/4) = 5 wood instead of 4.
-    assert accepted.state.colonies["c2"].resources.wood == before_c2_wood + 5
+    # c2 owns a MARKET, so the consignment arrives intact: all 4 wood, not the
+    # floor(4 * 4/5) = 3 that a colony without a market would have collected.
+    assert accepted.state.colonies["c2"].resources.wood == before_c2_wood + 4
+
+
+def test_market_owner_collects_more_than_a_colony_without_one() -> None:
+    """The market's value is avoided friction, not created value."""
+
+    def collected(with_market: bool) -> int:
+        sim = SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2)
+        sim.resolve(
+            (
+                batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),
+                batch(sim, "c2", DiplomacyAction(target_colony_id="c1", operation="contact")),
+            )
+        )
+        if with_market:
+            add_structure(sim, "c2", StructureKind.MARKET)
+        before = sim.state.colonies["c2"].resources.wood
+        offered = sim.resolve(
+            (
+                batch(
+                    sim,
+                    "c1",
+                    TradeOfferAction(target_colony_id="c2", give=(("wood", 4),), receive=(("food", 2),)),
+                ),
+            )
+        )
+        offer_id = next(
+            event.data["offer_id"] for event in offered.events if event.kind == "trade_offered"
+        )
+        accepted = sim.resolve((batch(sim, "c2", TradeRespondAction(offer_id=offer_id, accept=True)),))
+        return accepted.state.colonies["c2"].resources.wood - before
+
+    assert collected(with_market=False) == 3
+    assert collected(with_market=True) == 4
+
+
+def test_trade_never_creates_resources() -> None:
+    """Two colonies with markets must not be able to mint value by trading in circles.
+
+    Trading is allowed to lose resources to friction, never to invent them. Without
+    this, an agent that spams offers back and forth beats one that plays the scenario.
+    """
+    tracked = ("wood", "stone")
+
+    sim = SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2)
+    sim.resolve(
+        (
+            batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),
+            batch(sim, "c2", DiplomacyAction(target_colony_id="c1", operation="contact")),
+        )
+    )
+    add_structure(sim, "c1", StructureKind.MARKET)
+    add_structure(sim, "c2", StructureKind.MARKET)
+
+    def held() -> int:
+        return sum(
+            colony.resources.as_dict()[name]
+            for colony in sim.state.colonies.values()
+            for name in tracked
+        )
+
+    for _ in range(10):
+        start = held()
+        offered = sim.resolve(
+            (
+                batch(
+                    sim,
+                    "c1",
+                    TradeOfferAction(target_colony_id="c2", give=(("wood", 4),), receive=(("stone", 4),)),
+                ),
+            )
+        )
+        offer_id = next(
+            event.data["offer_id"] for event in offered.events if event.kind == "trade_offered"
+        )
+        sim.resolve((batch(sim, "c2", TradeRespondAction(offer_id=offer_id, accept=True)),))
+        assert held() <= start
 
 
 def test_barracks_reduces_food_lost_to_raid() -> None:

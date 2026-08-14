@@ -58,10 +58,13 @@ RAID_INJURIES = 1
 BARRACKS_RAID_LOOT_REDUCTION = 2
 WALL_RAID_DAMAGE_REDUCTION = 10
 
-# Trade ratios as (received, paid) fractions. A MARKET lets its owner receive more
-# for every unit they accept in a trade.
-TRADE_RATIO_BASE = (1, 1)
-TRADE_RATIO_MARKET = (5, 4)
+# Trade ratios as (received, paid) fractions, applied to what a side collects.
+# Trading without a MARKET loses part of the consignment in transit; a MARKET
+# removes that friction. Both ratios are <= 1 on purpose: a trade may destroy
+# resources but must never create them, otherwise two colonies with markets can
+# mint value by passing goods back and forth every turn.
+TRADE_RATIO_BASE = (4, 5)
+TRADE_RATIO_MARKET = (1, 1)
 
 
 def can_afford(stock: ResourceStock, cost: dict[str, int]) -> bool:
@@ -129,8 +132,9 @@ def trade_blocked(structures: Mapping[str, Structure], colony_id: str) -> bool:
 
 
 def scaled_amount(amount: int, ratio: tuple[int, int]) -> int:
+    """Round down, so a collected amount can never exceed what the payer handed over."""
     numerator, denominator = ratio
-    return (amount * numerator + denominator - 1) // denominator
+    return (amount * numerator) // denominator
 
 
 def scaled_receipt(items: tuple[tuple[str, int], ...], ratio: tuple[int, int]) -> dict[str, int]:
