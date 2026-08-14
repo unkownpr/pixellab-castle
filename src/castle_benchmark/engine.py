@@ -27,7 +27,26 @@ from .domain import (
     TradeOffer,
 )
 from .scenarios import Scenario
-from .systems import BUILD_COSTS, BUILD_TURNS, HOUSING_BY_STRUCTURE, can_afford, resource_delta
+from .systems import (
+    BARRACKS_RAID_LOOT_REDUCTION,
+    BUILD_COSTS,
+    BUILD_TURNS,
+    CLINIC_HEALS_PER_TURN,
+    HOUSING_BY_STRUCTURE,
+    RAID_FOOD_LOOT,
+    RAID_INJURIES,
+    RAID_STRUCTURE_DAMAGE,
+    TRADE_RATIO_BASE,
+    TRADE_RATIO_MARKET,
+    WALL_RAID_DAMAGE_REDUCTION,
+    can_afford,
+    has_operational,
+    operational_structure_counts,
+    production_delta,
+    resource_delta,
+    scaled_receipt,
+    trade_blocked,
+)
 from .world import WorldCell, WorldState, generate_world, rotated_spawns, visible_cells
 
 
@@ -161,6 +180,7 @@ class SimCore:
                 results.append(result)
 
         self._progress_construction(events)
+        self._apply_production(events)
         self._expire_offers(events)
         self._apply_needs(events)
         self._apply_hazards(events)
@@ -316,6 +336,8 @@ class SimCore:
     def _offer(self, colony_id: str, action: TradeOfferAction, events: list[DomainEvent]) -> ActionResult:
         if action.target_colony_id not in self.state.colonies or action.target_colony_id == colony_id:
             return ActionResult(colony_id, action.kind, "rejected", "invalid_target")
+        if trade_blocked(self.state.structures, colony_id):
+            return ActionResult(colony_id, action.kind, "rejected", "walled")
         try:
             give_delta = resource_delta(action.give, sign=-1)
             resource_delta(action.receive)
@@ -349,6 +371,8 @@ class SimCore:
             return ActionResult(colony_id, action.kind, "rejected", "offer_unavailable")
         source = self.state.colonies[offer.source_colony_id]
         target = self.state.colonies[colony_id]
+        if action.accept and trade_blocked(self.state.structures, colony_id):
+            return ActionResult(colony_id, action.kind, "rejected", "walled")
         offers = dict(self.state.offers)
         if not action.accept:
             self._update_colony(
@@ -360,9 +384,19 @@ class SimCore:
             events.append(DomainEvent(self.state.turn, "trade_rejected", colony_id, {"offer_id": offer.id}))
             return ActionResult(colony_id, action.kind, "accepted", "ok")
         try:
+            source_ratio = (
+                TRADE_RATIO_MARKET
+                if has_operational(self.state.structures, offer.source_colony_id, StructureKind.MARKET)
+                else TRADE_RATIO_BASE
+            )
+            target_ratio = (
+                TRADE_RATIO_MARKET
+                if has_operational(self.state.structures, colony_id, StructureKind.MARKET)
+                else TRADE_RATIO_BASE
+            )
             target_after_payment = target.resources.apply(resource_delta(offer.receive, sign=-1))
-            source_after_receipt = source.resources.apply(resource_delta(offer.receive))
-            target_after_trade = target_after_payment.apply(resource_delta(offer.give))
+            source_after_receipt = source.resources.apply(scaled_receipt(offer.receive, source_ratio))
+            target_after_trade = target_after_payment.apply(scaled_receipt(offer.give, target_ratio))
         except (ValueError, KeyError):
             return ActionResult(colony_id, action.kind, "rejected", "insufficient_resources")
         self._update_colony(offer.source_colony_id, resources=source_after_receipt)
@@ -388,9 +422,14 @@ class SimCore:
             relations[target] = RelationStatus.WAR
             self._update_colony(source, relations=relations)
         defender = self.state.colonies[action.target_colony_id]
-        stolen = min(3, defender.resources.food)
+        barracks = has_operational(self.state.structures, action.target_colony_id, StructureKind.BARRACKS)
+        loot = max(0, RAID_FOOD_LOOT - (BARRACKS_RAID_LOOT_REDUCTION if barracks else 0))
+        stolen = min(loot, defender.resources.food)
+        injuries = min(RAID_INJURIES, defender.population - defender.injured)
         self._update_colony(
-            action.target_colony_id, resources=defender.resources.apply({"food": -stolen})
+            action.target_colony_id,
+            resources=defender.resources.apply({"food": -stolen}),
+            injured=defender.injured + injuries,
         )
         current_attacker = self.state.colonies[colony_id]
         self._update_colony(colony_id, resources=current_attacker.resources.apply({"food": stolen}))
@@ -402,7 +441,9 @@ class SimCore:
         ]
         if targets:
             target = targets[0]
-            condition = max(0, target.condition - 20)
+            walled = has_operational(self.state.structures, action.target_colony_id, StructureKind.WALL)
+            damage = RAID_STRUCTURE_DAMAGE - (WALL_RAID_DAMAGE_REDUCTION if walled else 0)
+            condition = max(0, target.condition - damage)
             status = StructureStatus.RUINED if condition == 0 else StructureStatus.DAMAGED
             structures = dict(self.state.structures)
             structures[target.id] = replace(target, condition=condition, status=status)
@@ -478,6 +519,35 @@ class SimCore:
                 )
         if changed:
             self.state = replace(self.state, structures=structures)
+
+    def _apply_production(self, events: list[DomainEvent]) -> None:
+        for colony_id in sorted(self.state.colonies):
+            colony = self.state.colonies[colony_id]
+            counts = operational_structure_counts(self.state.structures, colony_id)
+            delta = production_delta(colony.resources, counts)
+            heal_capacity = counts.get(StructureKind.CLINIC, 0) * CLINIC_HEALS_PER_TURN
+            healed_sick = min(heal_capacity, colony.sick)
+            healed_injured = min(heal_capacity - healed_sick, colony.injured)
+            if not delta and not healed_sick and not healed_injured:
+                continue
+            self._update_colony(
+                colony_id,
+                resources=colony.resources.apply(delta),
+                sick=colony.sick - healed_sick,
+                injured=colony.injured - healed_injured,
+            )
+            events.append(
+                DomainEvent(
+                    self.state.turn,
+                    "production",
+                    colony_id,
+                    {
+                        "resources": delta,
+                        "healed_sick": healed_sick,
+                        "healed_injured": healed_injured,
+                    },
+                )
+            )
 
     def _refresh_colonies(self) -> None:
         for colony_id, colony in tuple(self.state.colonies.items()):

@@ -26,6 +26,10 @@ uv run castle-benchmark report runs/basic-survival-v1-seed-17
 
 Her koşu `metadata.json`, tur bazlı `turns.jsonl`, `snapshots.jsonl`, `report.json` ve `summary.sqlite3` üretir. Replay doğrulaması her turun kanonik SHA-256 durum hash’ini yeniden hesaplar.
 
+## Yapı ekonomisi
+
+Üretim yapıları (farm, well, lumber camp, quarry, mine, workshop, clinic, market) ile savunma yapıları (barracks, wall, gate) yalnızca `operational` durumdayken işlev görür. `warehouse` şimdilik dekoratiftir: anlamlı olması kaynak başına depolama sınırı gerektirir ve bu ayrı bir çalışmadır; o güne dek inşa edilebilir ancak hiçbir etkisi yoktur.
+
 ## MCP bağlantısı
 
 Codex/OpenCode gibi stdio MCP istemcileri için proje yolunu kendi makinenize göre ayarlayın:
