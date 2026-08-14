@@ -8,7 +8,9 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.server.fastmcp.exceptions import ToolError
 from types import SimpleNamespace
 
+from castle_benchmark import engine, systems
 from castle_benchmark.api import create_app
+from castle_benchmark.domain import StructureKind
 from castle_benchmark.mcp_server import build_mcp_server
 from castle_benchmark.service import GameService
 
@@ -22,6 +24,7 @@ async def test_mcp_exposes_versioned_benchmark_tools() -> None:
 
     assert {tool.name for tool in tools} >= {
         "benchmark.list_scenarios",
+        "benchmark.rules",
         "benchmark.create_match",
         "benchmark.create_session",
         "benchmark.create_pairing",
@@ -777,3 +780,124 @@ async def test_serve_app_mounts_shared_service_mcp_and_claims_pairing() -> None:
         "controller_token",
     }
     assert payload["colony_id"] == "c1"
+
+
+@pytest.mark.asyncio
+async def test_rules_publish_every_structure_kind_from_live_constants() -> None:
+    """Catches the rules projection copying constants by hand or omitting a structure."""
+    server = build_mcp_server(GameService(), orchestrator_token="o" * 32)
+
+    rules = await call(server, "benchmark.rules", {})
+
+    structures = rules["structures"]
+    assert set(structures) == {kind.value for kind in StructureKind}
+    for kind in StructureKind:
+        entry = structures[kind.value]
+        assert set(entry) == {
+            "build_cost",
+            "build_turns",
+            "housing",
+            "production",
+            "requires_worker",
+            "effects",
+        }
+        assert entry["build_cost"] == systems.BUILD_COSTS.get(kind)
+        assert entry["build_turns"] == systems.BUILD_TURNS.get(kind)
+        assert entry["housing"] == systems.HOUSING_BY_STRUCTURE.get(kind, 0)
+        assert entry["production"] == systems.PRODUCTION_YIELDS.get(kind)
+        assert entry["requires_worker"] == (kind in systems.LABOUR_STRUCTURE_KINDS)
+
+    assert rules["workshop"] == {
+        "ore_per_tool": systems.WORKSHOP_ORE_PER_TOOL,
+        "tools_per_turn": systems.WORKSHOP_TOOLS_PER_TURN,
+    }
+    assert rules["clinic"] == {"heals_per_turn": systems.CLINIC_HEALS_PER_TURN}
+    assert rules["raid"] == {
+        "food_loot": systems.RAID_FOOD_LOOT,
+        "structure_damage": systems.RAID_STRUCTURE_DAMAGE,
+        "injuries": systems.RAID_INJURIES,
+        "barracks_loot_reduction": systems.BARRACKS_RAID_LOOT_REDUCTION,
+        "wall_damage_reduction": systems.WALL_RAID_DAMAGE_REDUCTION,
+    }
+    assert rules["trade"] == {
+        "ratio_without_market": {
+            "received": systems.TRADE_RATIO_BASE[0],
+            "paid": systems.TRADE_RATIO_BASE[1],
+        },
+        "ratio_with_market": {
+            "received": systems.TRADE_RATIO_MARKET[0],
+            "paid": systems.TRADE_RATIO_MARKET[1],
+        },
+        "walled_without_gate_blocks_trade": True,
+    }
+    assert rules["actions"] == {
+        "budget_per_turn": engine.SimCore.ACTION_BUDGET,
+        "bounded_by_available_population": True,
+    }
+    assert rules["gather"] == {
+        "yield_per_action": engine.GATHER_YIELD_PER_ACTION,
+        "scales_with_available_population": True,
+    }
+    assert rules["labour"] == {"workers_per_producer": engine.WORKERS_PER_PRODUCER}
+    assert rules["scouting"] == {
+        "speed": engine.SCOUT_SPEED,
+        "reveal_radius": engine.SCOUT_REVEAL_RADIUS,
+        "food_cost": engine.SCOUT_FOOD_COST,
+        "watchtower_sight_bonus": engine.WATCHTOWER_SIGHT_BONUS,
+    }
+    assert rules["fire"]["damage_per_turn"] == engine.FIRE_DAMAGE_PER_TURN
+
+    assert rules["structures"]["headquarters"]["build_cost"] is None
+    assert rules["structures"]["headquarters"]["build_turns"] is None
+    assert rules["structures"]["headquarters"]["housing"] == 8
+    assert rules["structures"]["house"]["effects"] == ["housing"]
+    assert "production" in rules["structures"]["farm"]["effects"]
+    assert "blocks_trade_without_gate" in rules["structures"]["wall"]["effects"]
+
+    # Catches a single-element effect tuple written without its trailing comma,
+    # which silently publishes the effect name split into one entry per letter.
+    assert rules["structures"]["gate"]["effects"] == ["enables_trade_when_walled"]
+    assert rules["structures"]["watchtower"]["effects"] == ["extends_sight_radius"]
+    for kind, entry in rules["structures"].items():
+        assert all(
+            len(effect) > 1 for effect in entry["effects"]
+        ), f"{kind} publishes character-level effects: {entry['effects']}"
+
+
+@pytest.mark.asyncio
+async def test_rules_are_match_independent_and_leak_no_state() -> None:
+    """Catches the rules tool depending on, or leaking, live per-match state."""
+    no_match = await call(
+        build_mcp_server(GameService(), orchestrator_token="o" * 32),
+        "benchmark.rules",
+        {},
+    )
+
+    service = GameService()
+    service.create_match("basic-survival-v1", 3, 4)
+    in_match = await call(
+        build_mcp_server(service, orchestrator_token="o" * 32),
+        "benchmark.rules",
+        {},
+    )
+
+    assert in_match == no_match
+    assert no_match["schema_version"] == "1.1"
+    assert set(no_match) == {
+        "schema_version",
+        "structures",
+        "workshop",
+        "clinic",
+        "raid",
+        "trade",
+        "actions",
+        "gather",
+        "labour",
+        "scouting",
+        "fire",
+        "terminal_conditions",
+        "scenarios",
+    }
+    serialized = json.dumps(no_match, sort_keys=True)
+    for forbidden in ("match_id", "colony_id", "seed", "cells", "position"):
+        assert forbidden not in serialized
