@@ -9,6 +9,8 @@ from castle_benchmark.actions import (
 )
 from dataclasses import replace
 
+import pytest
+
 from castle_benchmark.domain import (
     MilitaryPosture,
     Position,
@@ -27,6 +29,35 @@ def batch(sim: SimCore, colony_id: str, *actions: object) -> ActionBatch:
 
 def all_wait(sim: SimCore) -> tuple[ActionBatch, ...]:
     return tuple(batch(sim, colony_id, WaitAction()) for colony_id in sim.state.colonies)
+
+
+def add_structure(
+    sim: SimCore,
+    colony_id: str,
+    kind: StructureKind,
+    status: StructureStatus = StructureStatus.OPERATIONAL,
+) -> str:
+    """Seed a structure directly onto the colony without spending a build action."""
+    structures = dict(sim.state.structures)
+    structure_id = f"s{len(structures) + 1}"
+    spawn = sim.state.colonies[colony_id].spawn
+    if status in (StructureStatus.FOUNDATION, StructureStatus.BUILDING):
+        progress = 0 if status == StructureStatus.FOUNDATION else 1
+        required_progress = 3
+    else:
+        progress = 1
+        required_progress = 1
+    structures[structure_id] = Structure(
+        id=structure_id,
+        colony_id=colony_id,
+        kind=kind,
+        position=Position(spawn.x + 1, spawn.y),
+        status=status,
+        progress=progress,
+        required_progress=required_progress,
+    )
+    sim.state = replace(sim.state, structures=structures)
+    return structure_id
 
 
 def test_trade_offer_reserves_then_transfers_exact_resources() -> None:
@@ -174,3 +205,266 @@ def test_burning_structure_damages_and_spreads_on_next_hazard() -> None:
     assert result.state.structures["s2"].status == StructureStatus.BURNING
     assert any(event.kind == "fire_damage" for event in result.events)
     assert any(event.kind == "fire_spread" for event in result.events)
+
+
+# --- Structure economy -----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("kind", "resource", "expected_yield"),
+    [
+        (StructureKind.FARM, "food", 2),
+        (StructureKind.WELL, "water", 2),
+        (StructureKind.LUMBER_CAMP, "wood", 2),
+        (StructureKind.QUARRY, "stone", 2),
+        (StructureKind.MINE, "ore", 2),
+    ],
+)
+def test_producer_yields_resource_while_operational(kind, resource, expected_yield) -> None:
+    """Catches resource producers that charge BUILD_COSTS but return nothing."""
+    producer = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+    control = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+    add_structure(producer, "c1", kind)
+
+    producer.resolve(all_wait(producer))
+    control.resolve(all_wait(control))
+
+    produced = getattr(producer.state.colonies["c1"].resources, resource)
+    baseline = getattr(control.state.colonies["c1"].resources, resource)
+    assert produced - baseline == expected_yield
+
+
+def test_workshop_converts_ore_into_tools() -> None:
+    sim = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+    add_structure(sim, "c1", StructureKind.WORKSHOP)
+    before_ore = sim.state.colonies["c1"].resources.ore
+    before_tools = sim.state.colonies["c1"].resources.tools
+
+    sim.resolve(all_wait(sim))
+
+    assert sim.state.colonies["c1"].resources.ore == before_ore - 2
+    assert sim.state.colonies["c1"].resources.tools == before_tools + 1
+
+
+def test_workshop_stops_when_ore_runs_out() -> None:
+    sim = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+    colonies = dict(sim.state.colonies)
+    colonies["c1"] = replace(colonies["c1"], resources=replace(colonies["c1"].resources, ore=1))
+    sim.state = replace(sim.state, colonies=colonies)
+    add_structure(sim, "c1", StructureKind.WORKSHOP)
+
+    sim.resolve(all_wait(sim))
+
+    assert sim.state.colonies["c1"].resources.ore == 1
+    assert sim.state.colonies["c1"].resources.tools == 6
+
+
+def test_clinic_heals_sick_then_injured() -> None:
+    sim = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+    colonies = dict(sim.state.colonies)
+    colonies["c1"] = replace(colonies["c1"], sick=1, injured=1)
+    sim.state = replace(sim.state, colonies=colonies)
+    add_structure(sim, "c1", StructureKind.CLINIC)
+
+    sim.resolve(all_wait(sim))
+    assert sim.state.colonies["c1"].sick == 0
+    assert sim.state.colonies["c1"].injured == 1
+
+    sim.resolve(all_wait(sim))
+    assert sim.state.colonies["c1"].injured == 0
+
+
+def test_market_grants_influence() -> None:
+    sim = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+    add_structure(sim, "c1", StructureKind.MARKET)
+    before = sim.state.colonies["c1"].resources.influence
+
+    sim.resolve(all_wait(sim))
+
+    assert sim.state.colonies["c1"].resources.influence == before + 2
+
+
+def test_market_improves_trade_ratio_for_its_owner() -> None:
+    sim = SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2)
+    sim.resolve(
+        (
+            batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),
+            batch(sim, "c2", DiplomacyAction(target_colony_id="c1", operation="contact")),
+        )
+    )
+    add_structure(sim, "c2", StructureKind.MARKET)
+    before_c2_wood = sim.state.colonies["c2"].resources.wood
+
+    offered = sim.resolve(
+        (
+            batch(
+                sim,
+                "c1",
+                TradeOfferAction(target_colony_id="c2", give=(("wood", 4),), receive=(("food", 2),)),
+            ),
+        )
+    )
+    offer_id = next(event.data["offer_id"] for event in offered.events if event.kind == "trade_offered")
+    accepted = sim.resolve((batch(sim, "c2", TradeRespondAction(offer_id=offer_id, accept=True)),))
+
+    # c2 owns a MARKET, so it receives ceil(4 * 5/4) = 5 wood instead of 4.
+    assert accepted.state.colonies["c2"].resources.wood == before_c2_wood + 5
+
+
+def test_barracks_reduces_food_lost_to_raid() -> None:
+    def stolen_food(barracks: bool) -> int:
+        sim = SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2)
+        sim.resolve((batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),))
+        if barracks:
+            add_structure(sim, "c2", StructureKind.BARRACKS)
+        result = sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c2")),))
+        return next(event.data["stolen_food"] for event in result.events if event.kind in ("raid", "surprise_raid"))
+
+    assert stolen_food(False) == 3
+    assert stolen_food(True) == 1
+
+
+def test_wall_reduces_structure_damage_from_raid() -> None:
+    def hq_condition(walled: bool) -> int:
+        sim = SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2)
+        sim.resolve((batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),))
+        if walled:
+            add_structure(sim, "c2", StructureKind.WALL)
+        sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c2")),))
+        hq = next(
+            structure
+            for structure in sim.state.structures.values()
+            if structure.colony_id == "c2" and structure.kind == StructureKind.HEADQUARTERS
+        )
+        return hq.condition
+
+    assert hq_condition(False) == 80
+    assert hq_condition(True) == 90
+
+
+def test_gate_permits_trade_while_walled() -> None:
+    sim = SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2)
+    sim.resolve(
+        (
+            batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),
+            batch(sim, "c2", DiplomacyAction(target_colony_id="c1", operation="contact")),
+        )
+    )
+    add_structure(sim, "c2", StructureKind.WALL)
+
+    offered = sim.resolve(
+        (
+            batch(
+                sim,
+                "c1",
+                TradeOfferAction(target_colony_id="c2", give=(("wood", 2),), receive=(("food", 2),)),
+            ),
+        )
+    )
+    offer_id = next(event.data["offer_id"] for event in offered.events if event.kind == "trade_offered")
+    blocked = sim.resolve((batch(sim, "c2", TradeRespondAction(offer_id=offer_id, accept=True)),))
+    assert any(result.code == "walled" for result in blocked.action_results)
+
+    add_structure(sim, "c2", StructureKind.GATE)
+    offered_again = sim.resolve(
+        (
+            batch(
+                sim,
+                "c1",
+                TradeOfferAction(target_colony_id="c2", give=(("wood", 2),), receive=(("food", 2),)),
+            ),
+        )
+    )
+    offer_id_again = next(event.data["offer_id"] for event in offered_again.events if event.kind == "trade_offered")
+    accepted = sim.resolve((batch(sim, "c2", TradeRespondAction(offer_id=offer_id_again, accept=True)),))
+    assert any(event.kind == "trade_completed" for event in accepted.events)
+
+
+def test_damaged_raid_mitigations_do_not_apply() -> None:
+    def stolen_food(status: StructureStatus) -> int:
+        sim = SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2)
+        sim.resolve((batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),))
+        add_structure(sim, "c2", StructureKind.BARRACKS, status=status)
+        result = sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c2")),))
+        return next(event.data["stolen_food"] for event in result.events if event.kind in ("raid", "surprise_raid"))
+
+    assert stolen_food(StructureStatus.OPERATIONAL) == 1
+    assert stolen_food(StructureStatus.DAMAGED) == 3
+
+
+def test_damaged_wall_does_not_reduce_raid_damage() -> None:
+    def hq_condition(status: StructureStatus) -> int:
+        sim = SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2)
+        sim.resolve((batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),))
+        add_structure(sim, "c2", StructureKind.WALL, status=status)
+        sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c2")),))
+        hq = next(
+            structure
+            for structure in sim.state.structures.values()
+            if structure.colony_id == "c2" and structure.kind == StructureKind.HEADQUARTERS
+        )
+        return hq.condition
+
+    assert hq_condition(StructureStatus.OPERATIONAL) == 90
+    assert hq_condition(StructureStatus.DAMAGED) == 80
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        StructureStatus.DAMAGED,
+        StructureStatus.BURNING,
+        StructureStatus.RUINED,
+        StructureStatus.FOUNDATION,
+        StructureStatus.BUILDING,
+    ],
+)
+def test_non_operational_producer_yields_nothing(status) -> None:
+    sim = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+    control = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+    add_structure(sim, "c1", StructureKind.FARM, status=status)
+
+    sim.resolve(all_wait(sim))
+    control.resolve(all_wait(control))
+
+    assert sim.state.colonies["c1"].resources.food == control.state.colonies["c1"].resources.food
+
+
+def test_damaged_structure_of_every_producing_kind_yields_nothing() -> None:
+    producing_kinds = (
+        StructureKind.FARM,
+        StructureKind.WELL,
+        StructureKind.LUMBER_CAMP,
+        StructureKind.QUARRY,
+        StructureKind.MINE,
+        StructureKind.WORKSHOP,
+        StructureKind.CLINIC,
+        StructureKind.MARKET,
+    )
+    for kind in producing_kinds:
+        sim = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+        control = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+        add_structure(sim, "c1", kind, status=StructureStatus.DAMAGED)
+
+        sim.resolve(all_wait(sim))
+        control.resolve(all_wait(control))
+
+        assert sim.state.colonies["c1"].resources == control.state.colonies["c1"].resources
+        assert sim.state.colonies["c1"].sick == control.state.colonies["c1"].sick
+        assert sim.state.colonies["c1"].injured == control.state.colonies["c1"].injured
+
+
+def test_farm_colony_outperforms_do_nothing_colony_over_full_scenario() -> None:
+    producer = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+    idler = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+    add_structure(producer, "c1", StructureKind.FARM)
+
+    for _ in range(BASIC_SURVIVAL.max_turns):
+        if producer.state.terminal and idler.state.terminal:
+            break
+        if not producer.state.terminal:
+            producer.resolve(all_wait(producer))
+        if not idler.state.terminal:
+            idler.resolve(all_wait(idler))
+
+    assert producer.state.colonies["c1"].resources.food > idler.state.colonies["c1"].resources.food

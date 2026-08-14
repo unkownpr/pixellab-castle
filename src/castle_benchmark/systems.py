@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from .domain import ResourceStock, StructureKind
+from typing import Mapping
+
+from .domain import ResourceStock, Structure, StructureKind, StructureStatus
 
 
 BUILD_COSTS: dict[StructureKind, dict[str, int]] = {
@@ -28,6 +30,39 @@ HOUSING_BY_STRUCTURE = {
     StructureKind.HOUSE: 6,
 }
 
+# Per-turn yields granted by each OPERATIONAL structure. Production is applied in
+# the "production" phase, before needs are consumed, so a farm or well feeding the
+# colony the same turn it is built is intentional.
+PRODUCTION_YIELDS: dict[StructureKind, dict[str, int]] = {
+    StructureKind.FARM: {"food": 2},
+    StructureKind.WELL: {"water": 2},
+    StructureKind.LUMBER_CAMP: {"wood": 2},
+    StructureKind.QUARRY: {"stone": 2},
+    StructureKind.MINE: {"ore": 2},
+    StructureKind.MARKET: {"influence": 2},
+}
+
+# A WORKSHOP turns ore into tools; each workshop converts WORKSHOP_ORE_PER_TOOL ore
+# into WORKSHOP_TOOLS_PER_TURN tools per turn, and only while ore is available.
+WORKSHOP_ORE_PER_TOOL = 2
+WORKSHOP_TOOLS_PER_TURN = 1
+
+# A CLINIC heals this many sick (then injured) colonists per turn.
+CLINIC_HEALS_PER_TURN = 1
+
+# Raid effects and their mitigations. BARRACKS cuts the food a raid can carry away;
+# WALL absorbs part of the condition damage raids deal to structures.
+RAID_FOOD_LOOT = 3
+RAID_STRUCTURE_DAMAGE = 20
+RAID_INJURIES = 1
+BARRACKS_RAID_LOOT_REDUCTION = 2
+WALL_RAID_DAMAGE_REDUCTION = 10
+
+# Trade ratios as (received, paid) fractions. A MARKET lets its owner receive more
+# for every unit they accept in a trade.
+TRADE_RATIO_BASE = (1, 1)
+TRADE_RATIO_MARKET = (5, 4)
+
 
 def can_afford(stock: ResourceStock, cost: dict[str, int]) -> bool:
     values = stock.as_dict()
@@ -41,3 +76,62 @@ def resource_delta(items: tuple[tuple[str, int], ...], sign: int = 1) -> dict[st
             raise ValueError("resource transfer amounts must be positive")
         delta[name] = delta.get(name, 0) + sign * amount
     return delta
+
+
+def operational_structure_counts(
+    structures: Mapping[str, Structure], colony_id: str
+) -> dict[StructureKind, int]:
+    """Count a colony's OPERATIONAL structures by kind; nothing else contributes."""
+    counts: dict[StructureKind, int] = {}
+    for structure in structures.values():
+        if structure.colony_id == colony_id and structure.status == StructureStatus.OPERATIONAL:
+            counts[structure.kind] = counts.get(structure.kind, 0) + 1
+    return counts
+
+
+def production_delta(
+    stock: ResourceStock, counts: Mapping[StructureKind, int]
+) -> dict[str, int]:
+    """Net resource change a colony earns from its OPERATIONAL structures this turn."""
+    delta: dict[str, int] = {}
+    for kind, yields in PRODUCTION_YIELDS.items():
+        count = counts.get(kind, 0)
+        if not count:
+            continue
+        for name, amount in yields.items():
+            delta[name] = delta.get(name, 0) + amount * count
+    workshops = counts.get(StructureKind.WORKSHOP, 0)
+    if workshops:
+        ore = stock.ore + delta.get("ore", 0)
+        tools = min(workshops * WORKSHOP_TOOLS_PER_TURN, ore // WORKSHOP_ORE_PER_TOOL)
+        if tools:
+            delta["tools"] = delta.get("tools", 0) + tools
+            delta["ore"] = delta.get("ore", 0) - tools * WORKSHOP_ORE_PER_TOOL
+    return delta
+
+
+def has_operational(
+    structures: Mapping[str, Structure], colony_id: str, kind: StructureKind
+) -> bool:
+    return any(
+        structure.colony_id == colony_id
+        and structure.kind == kind
+        and structure.status == StructureStatus.OPERATIONAL
+        for structure in structures.values()
+    )
+
+
+def trade_blocked(structures: Mapping[str, Structure], colony_id: str) -> bool:
+    """A colony walled without an OPERATIONAL gate cannot trade."""
+    return has_operational(structures, colony_id, StructureKind.WALL) and not has_operational(
+        structures, colony_id, StructureKind.GATE
+    )
+
+
+def scaled_amount(amount: int, ratio: tuple[int, int]) -> int:
+    numerator, denominator = ratio
+    return (amount * numerator + denominator - 1) // denominator
+
+
+def scaled_receipt(items: tuple[tuple[str, int], ...], ratio: tuple[int, int]) -> dict[str, int]:
+    return {name: scaled_amount(amount, ratio) for name, amount in items}
