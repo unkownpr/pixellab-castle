@@ -13,7 +13,10 @@ from typing import Any
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import ValidationError
 
+from . import engine, systems
+from .domain import StructureKind
 from .lobby import ControllerIdentity
+from .scenarios import OFFICIAL_SCENARIOS
 from .schemas import (
     MAX_PAYLOAD_BYTES,
     SCHEMA_VERSION,
@@ -98,6 +101,106 @@ def resolve_mcp_peer(context: object, trusted_proxies: Sequence[str]) -> str:
         return str(direct_peer)
 
 
+_SPECIAL_EFFECTS: dict[StructureKind, tuple[str, ...]] = {
+    StructureKind.MARKET: ("removes_trade_friction",),
+    StructureKind.WORKSHOP: ("converts_ore_to_tools",),
+    StructureKind.CLINIC: ("heals_sick_then_injured",),
+    StructureKind.BARRACKS: ("reduces_raid_loot",),
+    StructureKind.WALL: ("reduces_raid_damage", "blocks_trade_without_gate"),
+    StructureKind.GATE: ("enables_trade_when_walled"),
+    StructureKind.WATCHTOWER: ("extends_sight_radius"),
+}
+
+
+def build_rules() -> dict[str, object]:
+    """Project the deterministic simulation rules from the live constants.
+
+    Every numeric value is read from ``systems`` / ``engine`` here, never copied
+    as a literal, so a constant change is reflected without a manual edit. No
+    ``MatchState`` is consulted: the result is identical with or without a match.
+    """
+    structures: dict[str, object] = {}
+    for kind in StructureKind:
+        effects = list(_SPECIAL_EFFECTS.get(kind, ()))
+        if kind in systems.HOUSING_BY_STRUCTURE:
+            effects.append("housing")
+        if kind in systems.PRODUCTION_YIELDS:
+            effects.append("production")
+        structures[kind.value] = {
+            "build_cost": systems.BUILD_COSTS.get(kind),
+            "build_turns": systems.BUILD_TURNS.get(kind),
+            "housing": systems.HOUSING_BY_STRUCTURE.get(kind, 0),
+            "production": systems.PRODUCTION_YIELDS.get(kind),
+            "requires_worker": kind in systems.LABOUR_STRUCTURE_KINDS,
+            "effects": effects,
+        }
+
+    return {
+        "structures": structures,
+        "workshop": {
+            "ore_per_tool": systems.WORKSHOP_ORE_PER_TOOL,
+            "tools_per_turn": systems.WORKSHOP_TOOLS_PER_TURN,
+        },
+        "clinic": {"heals_per_turn": systems.CLINIC_HEALS_PER_TURN},
+        "raid": {
+            "food_loot": systems.RAID_FOOD_LOOT,
+            "structure_damage": systems.RAID_STRUCTURE_DAMAGE,
+            "injuries": systems.RAID_INJURIES,
+            "barracks_loot_reduction": systems.BARRACKS_RAID_LOOT_REDUCTION,
+            "wall_damage_reduction": systems.WALL_RAID_DAMAGE_REDUCTION,
+        },
+        "trade": {
+            "ratio_without_market": {
+                "received": systems.TRADE_RATIO_BASE[0],
+                "paid": systems.TRADE_RATIO_BASE[1],
+            },
+            "ratio_with_market": {
+                "received": systems.TRADE_RATIO_MARKET[0],
+                "paid": systems.TRADE_RATIO_MARKET[1],
+            },
+            "walled_without_gate_blocks_trade": True,
+        },
+        "actions": {
+            "budget_per_turn": engine.SimCore.ACTION_BUDGET,
+            "bounded_by_available_population": True,
+        },
+        "gather": {
+            "yield_per_action": engine.GATHER_YIELD_PER_ACTION,
+            "scales_with_available_population": True,
+        },
+        "labour": {
+            "workers_per_producer": engine.WORKERS_PER_PRODUCER,
+        },
+        "scouting": {
+            "speed": engine.SCOUT_SPEED,
+            "reveal_radius": engine.SCOUT_REVEAL_RADIUS,
+            "food_cost": engine.SCOUT_FOOD_COST,
+            "watchtower_sight_bonus": engine.WATCHTOWER_SIGHT_BONUS,
+        },
+        "fire": {
+            "damage_per_turn": engine.FIRE_DAMAGE_PER_TURN,
+            "spreads_to_orthogonal_adjacent_operational_structures": True,
+            "ruins_persist": True,
+        },
+        "terminal_conditions": {
+            "turn_limit": "the scenario max_turns is reached",
+            "extinction": "every colony is at zero population",
+        },
+        "scenarios": tuple(
+            {
+                "id": scenario.id,
+                "name": scenario.name,
+                "biome": scenario.biome,
+                "width": scenario.width,
+                "height": scenario.height,
+                "max_turns": scenario.max_turns,
+                "max_colonies": len(scenario.spawn_points),
+            }
+            for scenario in OFFICIAL_SCENARIOS
+        ),
+    }
+
+
 def build_mcp_server(
     service: GameService | None = None,
     orchestrator_token: str | None = None,
@@ -170,6 +273,11 @@ def build_mcp_server(
     def list_scenarios() -> str:
         """List deterministic official benchmark scenarios."""
         return encode(game.list_scenarios())
+
+    @mcp.tool(name="benchmark.rules")
+    def rules() -> str:
+        """Publish the deterministic simulation rules; no match or capability required."""
+        return encode(versioned(build_rules()))
 
     @mcp.tool(name="benchmark.server_telemetry")
     def server_telemetry(orchestrator_token: str) -> str:
@@ -449,7 +557,7 @@ def build_mcp_server(
 
     @mcp.tool(name="benchmark.observe")
     def observe(controller_token: str) -> str:
-        """Get the fog-limited immutable observation for your colony's current turn."""
+        """Get the fog-limited immutable observation for your colony's current turn. Call benchmark.rules first for the deterministic rules of the simulation."""
         try:
             if too_large := payload_error({"controller_token": controller_token}):
                 return too_large
@@ -461,7 +569,7 @@ def build_mcp_server(
     def submit_actions(
         controller_token: str, turn: int, actions: list[dict[str, object]]
     ) -> str:
-        """Submit one structured action batch; resolution waits for every controller."""
+        """Submit one structured action batch; resolution waits for every controller. Call benchmark.rules first for the deterministic rules of the simulation."""
         try:
             if too_large := payload_error(
                 {"controller_token": controller_token, "turn": turn, "actions": actions}

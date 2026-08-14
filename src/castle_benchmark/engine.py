@@ -69,6 +69,10 @@ WATCHTOWER_SIGHT_BONUS = 2  # added to active sight radius per operational watch
 GATHER_YIELD_PER_ACTION = 4  # units one gather action collects at full strength
 WORKERS_PER_PRODUCER = 1  # colonists needed to staff one producing structure a turn
 
+# Hazard constants. Fire consumes a fixed amount of structure condition each turn a
+# structure keeps burning; a structure reduced to zero condition becomes a ruin.
+FIRE_DAMAGE_PER_TURN = 40
+
 
 @dataclass(frozen=True, slots=True)
 class DomainEvent:
@@ -804,7 +808,7 @@ class SimCore:
             ]
             if neighbours:
                 spread_targets.add(neighbours[0].id)
-            condition = max(0, source.condition - 40)
+            condition = max(0, source.condition - FIRE_DAMAGE_PER_TURN)
             status = StructureStatus.RUINED if condition == 0 else StructureStatus.BURNING
             structures[source.id] = replace(source, condition=condition, status=status)
             events.append(
