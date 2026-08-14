@@ -92,6 +92,50 @@ def operational_structure_counts(
     return counts
 
 
+# Kinds whose OPERATIONAL structures need a worker each turn to produce. Passive
+# structures (housing, walls, barracks, watchtower, gate) are excluded: they work
+# without hands, so building them never competes with scouting for labour.
+LABOUR_STRUCTURE_KINDS = frozenset(
+    {
+        StructureKind.FARM,
+        StructureKind.WELL,
+        StructureKind.LUMBER_CAMP,
+        StructureKind.QUARRY,
+        StructureKind.MINE,
+        StructureKind.MARKET,
+        StructureKind.WORKSHOP,
+        StructureKind.CLINIC,
+    }
+)
+
+
+def staffed_production(
+    structures: Mapping[str, Structure], colony_id: str, workers: int
+) -> tuple[dict[StructureKind, int], int]:
+    """Staff a colony's OPERATIONAL producing structures with its available workers.
+
+    Each producing structure (see LABOUR_STRUCTURE_KINDS) needs one worker per turn.
+    When ``workers`` falls short of the number of OPERATIONAL producers, the colony
+    staffs structures in stable id order so identical replays choose identical
+    structures, and the returned idle count records how many stay unstaffed.
+    """
+    producers = sorted(
+        (
+            structure
+            for structure in structures.values()
+            if structure.colony_id == colony_id
+            and structure.status == StructureStatus.OPERATIONAL
+            and structure.kind in LABOUR_STRUCTURE_KINDS
+        ),
+        key=lambda structure: structure.id,
+    )
+    staffed = producers[:workers]
+    counts: dict[StructureKind, int] = {}
+    for structure in staffed:
+        counts[structure.kind] = counts.get(structure.kind, 0) + 1
+    return counts, len(producers) - len(staffed)
+
+
 def production_delta(
     stock: ResourceStock, counts: Mapping[StructureKind, int]
 ) -> dict[str, int]:
