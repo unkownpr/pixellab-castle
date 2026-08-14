@@ -141,12 +141,13 @@ export class BenchmarkWorkbench {
     const orchestratorInput = required<HTMLInputElement>("#orchestrator-token");
     const orchestratorToken = orchestratorInput.value;
     orchestratorInput.value = "";
+    const colonyCount = Number(required<HTMLInputElement>("#colony-input").value);
     const input: CreateSessionInput = {
       scenario_id: required<HTMLSelectElement>("#scenario-select").value,
       seed: Number(required<HTMLInputElement>("#seed-input").value),
-      colony_count: Number(required<HTMLInputElement>("#colony-input").value),
+      colony_count: colonyCount,
       deadline_seconds: Number(required<HTMLInputElement>("#deadline-input").value),
-      slots: [],
+      slots: colonyCount === 1 ? [{ colony_id: "c1", controller_type: "human" }] : [],
     };
     this.setBusy(true);
     try {

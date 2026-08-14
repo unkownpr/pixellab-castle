@@ -6,6 +6,7 @@ import {
   Graphics,
   Sprite,
   Text,
+  Texture,
 } from "pixi.js";
 
 import type {
@@ -182,6 +183,75 @@ const STRUCTURE_KEYS: Readonly<Record<string, readonly string[]>> = {
   watchtower: ["structure.watchtower.operational"],
 };
 
+export type CharacterDirection = "south" | "north" | "east" | "west";
+
+export interface WorkSite {
+  readonly kind: "gather" | "build";
+  readonly x: number;
+  readonly y: number;
+}
+
+const CHARACTER_ROLES = [
+  "villager_blue",
+  "villager_brown",
+  "villager_red",
+  "villager_teal",
+  "farmer",
+  "child",
+  "woman_green",
+  "merchant",
+] as const;
+
+const MAX_CHARACTERS_PER_COLONY = 8;
+const WALK_SECONDS = 1.7;
+const WORK_SECONDS = 2.6;
+const IDLE_SECONDS = 1.3;
+const WALK_FRAME_COUNT = 6;
+const WALK_DIRECTIONS: readonly CharacterDirection[] = ["south", "north", "east", "west"];
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function easeInOut(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
+}
+
+export function characterDirectionBetween(
+  from: GridPosition,
+  to: GridPosition,
+): CharacterDirection {
+  const screenX = to.x - from.x - (to.y - from.y);
+  const screenY = to.x - from.x + (to.y - from.y);
+  if (Math.abs(screenX) >= Math.abs(screenY)) return screenX >= 0 ? "east" : "west";
+  return screenY >= 0 ? "south" : "north";
+}
+
+export function colonyHome(observation: Observation, colonyId: string): GridPosition | null {
+  const headquarters = observation.visible_structures.find(
+    (structure) => structure.colony_id === colonyId && structure.kind === "headquarters",
+  );
+  if (headquarters) return { x: headquarters.x, y: headquarters.y };
+  const any = observation.visible_structures.find((structure) => structure.colony_id === colonyId);
+  return any ? { x: any.x, y: any.y } : null;
+}
+
+export function colonyWorkSites(observation: Observation, colonyId: string): readonly WorkSite[] {
+  const sites: WorkSite[] = [];
+  for (const structure of observation.visible_structures) {
+    if (structure.colony_id !== colonyId) continue;
+    if (["foundation", "building", "repairing"].includes(structure.status)) {
+      sites.push({ kind: "build", x: structure.x, y: structure.y });
+    }
+  }
+  for (const cell of observation.visible_cells) {
+    if (cell.resource && cell.resource_amount > 0) {
+      sites.push({ kind: "gather", x: cell.x, y: cell.y });
+    }
+  }
+  return sites;
+}
+
 interface RendererVisualTokens {
   readonly ink: number;
   readonly accent: number;
@@ -235,6 +305,22 @@ function rendererVisualTokens(): RendererVisualTokens {
   };
 }
 
+interface WorldCharacter {
+  readonly colonyId: string;
+  readonly role: string;
+  readonly root: Container;
+  home: GridPosition;
+  job: WorkSite | null;
+  phase: "idle" | "toJob" | "working" | "toHome";
+  elapsed: number;
+  facing: CharacterDirection;
+  currentX: number;
+  currentY: number;
+  visualState: string;
+  walkSprite: AnimatedSprite | null;
+  idleSprite: Sprite | null;
+}
+
 export class CastleRenderer {
   private readonly app = new Application();
   private readonly world = new Container();
@@ -245,6 +331,13 @@ export class CastleRenderer {
   private currentObservation: Observation | null = null;
   private focusedColonyId: string | null = null;
   private view: WorldView = { scale: 1, x: 0, y: 0 };
+  private characterLayer: Container | null = null;
+  private readonly characters: WorldCharacter[] = [];
+  private characterOrigin: ScreenPosition = { x: 0, y: 0 };
+  private reducedMotion = false;
+  private readonly tickHandler = () => this.tickCharacters();
+  private readonly idleTextureCache = new Map<string, Texture>();
+  private readonly walkTexturesCache = new Map<string, Texture[]>();
 
   async init(host: HTMLElement, manifestUrl = "/manifest.json"): Promise<void> {
     await this.app.init({
@@ -253,12 +346,18 @@ export class CastleRenderer {
       backgroundAlpha: 0,
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       autoDensity: true,
+      preserveDrawingBuffer: true,
     });
     this.app.canvas.className = "world-canvas";
     this.app.canvas.setAttribute("aria-label", "İzometrik koloni haritası");
     host.replaceChildren(this.app.canvas);
     this.app.stage.addChild(this.world);
     this.visualTokens = rendererVisualTokens();
+    this.characterLayer = new Container();
+    this.characterLayer.sortableChildren = true;
+    this.world.addChild(this.characterLayer);
+    this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.app.ticker.add(this.tickHandler);
     const response = await fetch(manifestUrl);
     if (!response.ok) throw new Error(`Asset manifest yüklenemedi (${response.status})`);
     this.manifest = await response.json() as AssetManifest;
@@ -294,6 +393,7 @@ export class CastleRenderer {
     const visualTokens = this.requireVisualTokens();
     this.currentObservation = observation;
     const version = ++this.renderVersion;
+    if (this.characterLayer) this.world.removeChild(this.characterLayer);
     this.world.removeChildren().forEach((child) => child.destroy({ children: true }));
 
     const cells = [...observation.visible_cells].sort(compareIsoDepth);
@@ -416,10 +516,210 @@ export class CastleRenderer {
     turnLabel.position.set(14, 12);
     this.world.addChild(turnLabel);
     this.applyViewTransform();
+    if (this.characterLayer) {
+      this.world.addChild(this.characterLayer);
+      this.syncCharacters(observation);
+    }
   }
 
   destroy(): void {
+    this.app.ticker.remove(this.tickHandler);
     this.app.destroy(true, { children: true, texture: false });
+  }
+
+  private syncCharacters(observation: Observation): void {
+    const layer = this.characterLayer;
+    if (!layer) return;
+    const colonyId = observation.colony_id;
+    const home = colonyHome(observation, colonyId);
+    const sites = colonyWorkSites(observation, colonyId);
+    const desired = home
+      ? Math.min(Math.max(observation.colony.population, 1), MAX_CHARACTERS_PER_COLONY)
+      : 0;
+    this.characterOrigin = this.worldOrigin(observation.visible_cells);
+
+    while (this.characters.length > desired) {
+      const removed = this.characters.pop();
+      removed?.root.destroy({ children: true });
+    }
+    while (this.characters.length < desired) {
+      const character = this.buildCharacter(colonyId, home!, this.characters.length);
+      this.characters.push(character);
+      layer.addChild(character.root);
+    }
+    for (let index = 0; index < this.characters.length; index++) {
+      const character = this.characters[index]!;
+      character.home = home!;
+      character.job = sites.length ? sites[index % sites.length]! : null;
+      if (!character.job) {
+        character.phase = "idle";
+        character.elapsed = Math.min(character.elapsed, IDLE_SECONDS);
+      }
+    }
+  }
+
+  private buildCharacter(colonyId: string, home: GridPosition, index: number): WorldCharacter {
+    return {
+      colonyId,
+      role: CHARACTER_ROLES[index % CHARACTER_ROLES.length]!,
+      root: new Container(),
+      home,
+      job: null,
+      phase: "idle",
+      elapsed: Math.random() * IDLE_SECONDS,
+      facing: "south",
+      currentX: home.x,
+      currentY: home.y,
+      visualState: "",
+      walkSprite: null,
+      idleSprite: null,
+    };
+  }
+
+  private tickCharacters(): void {
+    if (this.reducedMotion) return;
+    const deltaSeconds = Math.min(this.app.ticker.deltaMS, 100) / 1000;
+    for (const character of this.characters) this.tickCharacter(character, deltaSeconds);
+  }
+
+  private tickCharacter(character: WorldCharacter, deltaSeconds: number): void {
+    const home = character.home;
+    const job = character.job;
+    character.elapsed += deltaSeconds;
+
+    let gridX = character.currentX;
+    let gridY = character.currentY;
+    let moving = false;
+    let facing = character.facing;
+
+    if (!job) {
+      character.phase = "idle";
+      gridX = home.x;
+      gridY = home.y;
+    } else if (character.phase === "idle") {
+      gridX = home.x;
+      gridY = home.y;
+      if (character.elapsed >= IDLE_SECONDS) {
+        character.phase = "toJob";
+        character.elapsed = 0;
+      }
+    } else if (character.phase === "toJob") {
+      const t = Math.min(1, character.elapsed / WALK_SECONDS);
+      gridX = lerp(home.x, job.x, easeInOut(t));
+      gridY = lerp(home.y, job.y, easeInOut(t));
+      moving = true;
+      facing = characterDirectionBetween(home, job);
+      if (t >= 1) {
+        character.phase = "working";
+        character.elapsed = 0;
+      }
+    } else if (character.phase === "working") {
+      gridX = job.x;
+      gridY = job.y;
+      if (character.elapsed >= WORK_SECONDS) {
+        character.phase = "toHome";
+        character.elapsed = 0;
+      }
+    } else {
+      const t = Math.min(1, character.elapsed / WALK_SECONDS);
+      gridX = lerp(job.x, home.x, easeInOut(t));
+      gridY = lerp(job.y, home.y, easeInOut(t));
+      moving = true;
+      facing = characterDirectionBetween(job, home);
+      if (t >= 1) {
+        character.phase = "idle";
+        character.elapsed = 0;
+      }
+    }
+
+    character.currentX = gridX;
+    character.currentY = gridY;
+    character.facing = facing;
+    const position = isoToScreen({ x: gridX, y: gridY }, this.characterOrigin);
+    const bob = character.phase === "working" ? Math.sin(character.elapsed * 9) * 2 : 0;
+    character.root.position.set(position.x, position.y - bob);
+    character.root.zIndex = Math.round(gridX + gridY) * 1000 + Math.round(gridX);
+    this.applyCharacterVisual(character, moving, facing);
+  }
+
+  private applyCharacterVisual(
+    character: WorldCharacter,
+    moving: boolean,
+    facing: CharacterDirection,
+  ): void {
+    const state = moving ? `walk:${facing}` : `idle:${facing}`;
+    if (character.visualState === state) return;
+    character.visualState = state;
+    if (moving) {
+      void this.walkTexturesFor(facing).then((frames) => {
+        if (character.visualState !== state || !frames) return;
+        let sprite = character.walkSprite;
+        if (!sprite) {
+          sprite = new AnimatedSprite(frames);
+          character.walkSprite = sprite;
+          character.root.addChild(sprite);
+        } else if (sprite.textures !== frames) {
+          sprite.textures = frames;
+        }
+        sprite.animationSpeed = 0.16;
+        sprite.loop = true;
+        sprite.play();
+        const anchor = this.characterAnchor(`character.reference.walk.${facing}.0`);
+        sprite.position.set(-anchor[0], -anchor[1]);
+        sprite.visible = true;
+        if (character.idleSprite) character.idleSprite.visible = false;
+      });
+    } else {
+      void this.idleTextureFor(character.role, facing).then((texture) => {
+        if (character.visualState !== state || !texture) return;
+        let sprite = character.idleSprite;
+        if (!sprite) {
+          sprite = new Sprite(texture);
+          character.idleSprite = sprite;
+          character.root.addChild(sprite);
+        } else if (sprite.texture !== texture) {
+          sprite.texture = texture;
+        }
+        const anchor = this.characterAnchor(`character.${character.role}.idle.${facing}`);
+        sprite.position.set(-anchor[0], -anchor[1]);
+        sprite.visible = true;
+        if (character.walkSprite) character.walkSprite.visible = false;
+      });
+    }
+  }
+
+  private characterAnchor(key: string): readonly [number, number] {
+    return this.manifest?.assets[key]?.anchor ?? [24, 44];
+  }
+
+  private async walkTexturesFor(direction: CharacterDirection): Promise<Texture[] | null> {
+    const cached = this.walkTexturesCache.get(direction);
+    if (cached) return cached;
+    const keys = Array.from(
+      { length: WALK_FRAME_COUNT },
+      (_, index) => `character.reference.walk.${direction}.${index}`,
+    );
+    const entries = keys
+      .map((key) => this.manifest?.assets[key])
+      .filter((entry): entry is AssetEntry => entry !== undefined);
+    if (entries.length !== WALK_FRAME_COUNT) return null;
+    const textures = await Promise.all(entries.map((entry) => Assets.load(`/${entry.path}`)));
+    this.walkTexturesCache.set(direction, textures);
+    return textures;
+  }
+
+  private async idleTextureFor(
+    role: string,
+    direction: CharacterDirection,
+  ): Promise<Texture | null> {
+    const key = `character.${role}.idle.${direction}`;
+    const cached = this.idleTextureCache.get(key);
+    if (cached) return cached;
+    const entry = this.manifest?.assets[key];
+    if (!entry) return null;
+    const texture = await Assets.load(`/${entry.path}`);
+    this.idleTextureCache.set(key, texture);
+    return texture;
   }
 
   private worldOrigin(cells: readonly VisibleCell[]): ScreenPosition {

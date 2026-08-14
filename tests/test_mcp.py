@@ -1,10 +1,14 @@
 import json
 from dataclasses import asdict
 
+import httpx
 import pytest
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
 from mcp.server.fastmcp.exceptions import ToolError
 from types import SimpleNamespace
 
+from castle_benchmark.api import create_app
 from castle_benchmark.mcp_server import build_mcp_server
 from castle_benchmark.service import GameService
 
@@ -725,3 +729,51 @@ async def test_mcp_start_response_is_frozen_at_commit(
     )
 
     assert response["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_serve_app_mounts_shared_service_mcp_and_claims_pairing() -> None:
+    """Catches the serve gateway not exposing a shared-service MCP endpoint."""
+    token = "o" * 32
+    app = create_app(GameService(), orchestrator_token=token)
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as http:
+            created = (
+                await http.post(
+                    "/api/sessions",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={"scenario_id": "basic-survival-v1", "seed": 17, "colony_count": 1},
+                )
+            ).json()
+            pairing = (
+                await http.post(
+                    f"/api/sessions/{created['match_id']}/slots/c1/pairing",
+                    headers={"Authorization": f"Bearer {created['admin_token']}"},
+                )
+            ).json()
+
+        async with streamable_http_client(
+            "http://127.0.0.1:8000/mcp",
+            http_client=httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000"),
+        ) as (read, write, _):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool(
+                    "benchmark.claim_slot",
+                    {
+                        "pairing_code": pairing["pairing_code"],
+                        "identity": {"display_name": "Claude", "provider": "anthropic", "model": "claude"},
+                    },
+                )
+
+    payload = json.loads(result.content[0].text)
+    assert set(payload) == {
+        "schema_version",
+        "match_id",
+        "controller_id",
+        "colony_id",
+        "controller_token",
+    }
+    assert payload["colony_id"] == "c1"

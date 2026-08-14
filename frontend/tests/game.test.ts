@@ -2,9 +2,13 @@
 
 import { describe, expect, it } from "vitest";
 
+import type { Observation } from "../src/api";
 import {
   actionBatch,
   animationForEvent,
+  characterDirectionBetween,
+  colonyHome,
+  colonyWorkSites,
   compareIsoDepth,
   isoToScreen,
   snapshotToObservation,
@@ -75,5 +79,46 @@ describe("replay adapter", () => {
     expect(observation.turn).toBe(9);
     expect(observation.visible_cells).toHaveLength(1);
     expect(observation.visible_structures[0]?.status).toBe("ruined");
+  });
+});
+
+describe("character work", () => {
+  const observation: Observation = {
+    schema_version: "1.0",
+    scenario_id: "basic-survival-v1",
+    turn: 3,
+    colony_id: "c1",
+    colony: { id: "c1", population: 5, housing: 6, health: {}, resources: {}, policies: {} },
+    visible_cells: [
+      { x: 0, y: 0, biome: "grassland", water: false, buildable: true, movement_cost: 1, resource: null, resource_amount: 0 },
+      { x: 2, y: 1, biome: "grassland", water: false, buildable: true, movement_cost: 1, resource: "wood", resource_amount: 4 },
+    ],
+    visible_structures: [
+      { id: "hq", colony_id: "c1", kind: "headquarters", status: "operational", progress: 1, required_progress: 1, condition: 100, x: 0, y: 0 },
+      { id: "b", colony_id: "c1", kind: "house", status: "building", progress: 2, required_progress: 6, condition: 100, x: 3, y: 0 },
+      { id: "other", colony_id: "c2", kind: "house", status: "building", progress: 1, required_progress: 6, condition: 100, x: 5, y: 5 },
+    ],
+    known_colonies: {},
+    active_offers: [],
+    valid_action_kinds: [],
+  };
+
+  it("locates the colony home from its headquarters", () => {
+    expect(colonyHome(observation, "c1")).toEqual({ x: 0, y: 0 });
+    expect(colonyHome(observation, "c9")).toBeNull();
+  });
+
+  it("collects build and gather work sites for one colony only", () => {
+    expect(colonyWorkSites(observation, "c1")).toEqual([
+      { kind: "build", x: 3, y: 0 },
+      { kind: "gather", x: 2, y: 1 },
+    ]);
+  });
+
+  it("maps movement to the four cardinal screen directions", () => {
+    expect(characterDirectionBetween({ x: 0, y: 0 }, { x: 3, y: 3 })).toBe("south");
+    expect(characterDirectionBetween({ x: 3, y: 3 }, { x: 0, y: 0 })).toBe("north");
+    expect(characterDirectionBetween({ x: 0, y: 0 }, { x: 3, y: -3 })).toBe("east");
+    expect(characterDirectionBetween({ x: 0, y: 0 }, { x: -3, y: 3 })).toBe("west");
   });
 });

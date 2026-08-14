@@ -7,6 +7,7 @@ import os
 import secrets
 import time
 from collections.abc import Callable, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from hashlib import sha256
@@ -50,6 +51,7 @@ from .schemas import (
     project_match_status,
     project_run_report,
 )
+from .mcp_server import build_mcp_server
 from .service import GameService, ServiceError, UnauthorizedError
 
 
@@ -191,7 +193,26 @@ def create_app(
             raise ValueError("remote serving requires a high-entropy orchestrator capability")
         if not origins:
             raise ValueError("remote serving requires at least one explicit allowed origin")
-    app = FastAPI(title="PixelLab Castle Benchmark", version="0.1.0")
+
+    mcp = build_mcp_server(
+        game,
+        orchestrator_token=required_orchestrator_token,
+        transport="streamable-http",
+        trusted_proxies=trusted_proxies,
+        clock=clock,
+    )
+    mcp_app = mcp.streamable_http_app()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        async with mcp._session_manager.run():
+            yield
+
+    app = FastAPI(
+        title="PixelLab Castle Benchmark",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
     websocket_tickets: dict[str, tuple[str, float, str]] = {}
     websocket_ticket_lock = RLock()
 
@@ -204,6 +225,8 @@ def create_app(
             allow_headers=["Authorization", "Content-Type"],
         )
     app.add_middleware(RequestBodyLimitMiddleware, max_bytes=MAX_PAYLOAD_BYTES)
+
+    app.router.routes.append(mcp_app.routes[0])
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(
