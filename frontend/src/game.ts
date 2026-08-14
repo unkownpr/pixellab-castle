@@ -67,6 +67,12 @@ export function compareIsoDepth(a: GridPosition, b: GridPosition): number {
   return diagonal === 0 ? a.x - b.x : diagonal;
 }
 
+export function structureOpacity(status: StructureStatus): number {
+  if (status === "ruined") return 0.72;
+  if (status === "foundation" || status === "building" || status === "repairing") return 0.62;
+  return 1;
+}
+
 export function actionBatch(
   turn: number,
   colonyId: string,
@@ -764,7 +770,7 @@ export class CastleRenderer {
     if (!key) return null;
     const sprite = await this.spriteFor(key, position);
     if (!sprite) return null;
-    if (["foundation", "building", "repairing"].includes(structure.status)) sprite.alpha = 0.62;
+    sprite.alpha = structureOpacity(structure.status);
     if (structure.status === "damaged") sprite.tint = this.requireVisualTokens().damaged;
     if (structure.status === "burning") sprite.tint = this.requireVisualTokens().burning;
     return sprite;
