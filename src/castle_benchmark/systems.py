@@ -50,6 +50,17 @@ WORKSHOP_TOOLS_PER_TURN = 1
 # A CLINIC heals this many sick (then injured) colonists per turn.
 CLINIC_HEALS_PER_TURN = 1
 
+# Sickness is the consequence of a colony failing to meet its needs. Every turn a
+# colony consumes food and water; when it falls short, SICKENED_PER_SHORTFALL_TURN
+# healthy colonists fall sick. Starvation death still follows the cumulative
+# shortfall counter, but now claims a sick colonist first, so sickness is the stage
+# between deprivation and death rather than a separate, parallel drain. Meeting
+# needs reverses it: NATURAL_RECOVERY_PER_TURN sick colonists recover each turn a
+# colony is fully fed and watered, making the clinic an accelerator rather than the
+# only way back to health.
+SICKENED_PER_SHORTFALL_TURN = 1
+NATURAL_RECOVERY_PER_TURN = 1
+
 # Raid effects and their mitigations. BARRACKS cuts the food a raid can carry away;
 # WALL absorbs part of the condition damage raids deal to structures.
 RAID_FOOD_LOOT = 3

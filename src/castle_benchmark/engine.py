@@ -36,9 +36,11 @@ from .systems import (
     BUILD_TURNS,
     CLINIC_HEALS_PER_TURN,
     HOUSING_BY_STRUCTURE,
+    NATURAL_RECOVERY_PER_TURN,
     RAID_FOOD_LOOT,
     RAID_INJURIES,
     RAID_STRUCTURE_DAMAGE,
+    SICKENED_PER_SHORTFALL_TURN,
     TRADE_RATIO_BASE,
     TRADE_RATIO_MARKET,
     WALL_RAID_DAMAGE_REDUCTION,
@@ -740,13 +742,44 @@ class SimCore:
             food = min(food_need, colony.resources.food)
             water = min(water_need, colony.resources.water)
             stock = colony.resources.apply({"food": -food, "water": -water})
-            hungry = colony.hungry + int(food < food_need or water < water_need)
+            shortfall = food < food_need or water < water_need
+            hungry = colony.hungry + int(shortfall)
             population = colony.population
+            sick = colony.sick
             if hungry >= 3 and population > 0:
                 population -= 1
                 hungry = 0
+                if sick > 0:
+                    sick -= 1
                 events.append(DomainEvent(self.state.turn, "population_died", colony_id, {"cause": "needs"}))
-            self._update_colony(colony_id, resources=stock, hungry=hungry, population=population)
+            if shortfall:
+                healthy_available = max(0, population - colony.injured - sick)
+                sickened = min(SICKENED_PER_SHORTFALL_TURN, healthy_available)
+                if sickened:
+                    sick += sickened
+                    events.append(
+                        DomainEvent(
+                            self.state.turn,
+                            "colonist_sickened",
+                            colony_id,
+                            {"count": sickened, "cause": "needs"},
+                        )
+                    )
+            elif sick > 0:
+                recovered = min(NATURAL_RECOVERY_PER_TURN, sick)
+                if recovered:
+                    sick -= recovered
+                    events.append(
+                        DomainEvent(
+                            self.state.turn,
+                            "colonist_recovered",
+                            colony_id,
+                            {"count": recovered, "cause": "supply"},
+                        )
+                    )
+            self._update_colony(
+                colony_id, resources=stock, hungry=hungry, population=population, sick=sick
+            )
 
     def _apply_hazards(self, events: list[DomainEvent]) -> None:
         cadence = {"grassland": 11, "desert": 9, "snow": 7}.get(self.scenario.biome, 13)

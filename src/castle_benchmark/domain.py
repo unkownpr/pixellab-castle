@@ -117,8 +117,14 @@ class ColonyState:
 
     @property
     def available_population(self) -> int:
-        """Members currently at home and able to gather or produce."""
-        return max(0, self.population - self.scouting)
+        """Members currently at home, well, and able to gather or produce.
+
+        Colonists away scouting and colonists laid up sick are both unavailable.
+        Counting the sick here is what gives sickness — and therefore the clinic
+        that cures it — a mechanical consequence: without it the sick tally is a
+        number that rises and falls while the colony keeps working at full strength.
+        """
+        return max(0, self.population - self.scouting - self.sick)
 
 
 @dataclass(frozen=True, slots=True)
