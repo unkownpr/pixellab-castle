@@ -1,7 +1,7 @@
 import json
 from dataclasses import replace
 
-from castle_benchmark.actions import ActionBatch, WaitAction
+from castle_benchmark.actions import ActionBatch, GatherAction, WaitAction
 from castle_benchmark.domain import Position, Structure, StructureKind, StructureStatus
 from castle_benchmark.engine import SimCore
 from castle_benchmark.persistence import ArtifactWriter
@@ -147,3 +147,42 @@ def test_sickness_path_round_trips_replay(tmp_path) -> None:
     verification = verify_replay(writer.run_dir)
     assert verification.ok
     assert verification.actual_hashes == verification.expected_hashes
+
+
+def test_sick_colonists_do_not_count_as_available_labour() -> None:
+    """Catches sickness being a tally that nothing mechanical ever reads.
+
+    Without this the clinic cures a number that changes nothing: a colony with every
+    colonist sick would still gather, staff producers and spend its whole action
+    budget at full strength.
+    """
+    sim = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=2)
+    colony = sim.state.colonies["c1"]
+    assert colony.available_population == colony.population
+
+    sim._update_colony("c1", sick=3)
+
+    assert sim.state.colonies["c1"].available_population == colony.population - 3
+
+
+def test_a_fully_sick_colony_cannot_work() -> None:
+    """A colony with everybody laid up has no hands, so its gather is refused."""
+    sim = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=2)
+    colony = sim.state.colonies["c1"]
+    position = next(
+        position
+        for position, cell in sim.state.world.cells.items()
+        if cell.resource and cell.resource_amount > 0 and position in colony.known_cells
+    )
+    sim._update_colony("c1", sick=colony.population)
+    assert sim.state.colonies["c1"].available_population == 0
+
+    result = sim.resolve(
+        (
+            ActionBatch(sim.state.turn, "c1", (GatherAction(position),)),
+            ActionBatch(sim.state.turn, "c2", (WaitAction(),)),
+        )
+    )
+
+    codes = [item.code for item in result.action_results if item.colony_id == "c1"]
+    assert codes == ["action_budget_exceeded"]
