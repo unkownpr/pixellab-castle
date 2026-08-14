@@ -10,6 +10,7 @@ from .actions import (
     GameAction,
     GatherAction,
     RaidAction,
+    ScoutAction,
     SetPolicyAction,
     TradeOfferAction,
     TradeRespondAction,
@@ -19,8 +20,10 @@ from .domain import (
     ColonyState,
     MatchState,
     MilitaryPosture,
+    Position,
     RelationStatus,
     ResourceStock,
+    Scout,
     Structure,
     StructureKind,
     StructureStatus,
@@ -29,6 +32,15 @@ from .domain import (
 from .scenarios import Scenario
 from .systems import BUILD_COSTS, BUILD_TURNS, HOUSING_BY_STRUCTURE, can_afford, resource_delta
 from .world import WorldCell, WorldState, generate_world, rotated_spawns, visible_cells
+
+
+# Exploration and sight constants. Kept as named module-level values so the
+# scouting trade-off and watchtower benefit stay tunable without touching the
+# resolution logic.
+SCOUT_SPEED = 3  # cells a scout advances toward its target each turn
+SCOUT_REVEAL_RADIUS = 2  # radius around the scout revealed as it travels
+SCOUT_FOOD_COST = 12  # provisioning charged when a scout is dispatched
+WATCHTOWER_SIGHT_BONUS = 2  # added to active sight radius per operational watchtower
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +93,7 @@ class SimCore:
         self.state = state
         self._next_structure = len(state.structures) + 1
         self._next_offer = 1
+        self._next_scout = len(state.scouts) + 1
 
     @classmethod
     def create(cls, scenario: Scenario, seed: int, colony_count: int) -> SimCore:
@@ -91,6 +104,7 @@ class SimCore:
         ids = tuple(f"c{index + 1}" for index in range(colony_count))
         for index, (colony_id, spawn) in enumerate(zip(ids, spawns, strict=True), start=1):
             relations = {other: RelationStatus.UNKNOWN for other in ids if other != colony_id}
+            initial_sight = visible_cells(world, (spawn,), scenario.sight_radius)
             colonies[colony_id] = ColonyState(
                 id=colony_id,
                 spawn=spawn,
@@ -99,7 +113,8 @@ class SimCore:
                 ),
                 relations=relations,
                 policies={"military_posture": MilitaryPosture.PEACEFUL.value, "rationing": "normal"},
-                known_cells=visible_cells(world, (spawn,), scenario.sight_radius),
+                known_cells=initial_sight,
+                visible_now=initial_sight,
             )
             structure_id = f"s{index}"
             structures[structure_id] = Structure(
@@ -162,6 +177,7 @@ class SimCore:
 
         self._progress_construction(events)
         self._expire_offers(events)
+        self._advance_scouts(events)
         self._apply_needs(events)
         self._apply_hazards(events)
         self._refresh_colonies()
@@ -202,6 +218,8 @@ class SimCore:
             return self._raid(colony_id, action, events)
         if isinstance(action, SetPolicyAction):
             return self._set_policy(colony_id, action, events)
+        if isinstance(action, ScoutAction):
+            return self._scout(colony_id, action, events)
         return ActionResult(colony_id, "unknown", "rejected", "unknown_action")
 
     def _update_colony(self, colony_id: str, **changes: object) -> None:
@@ -448,6 +466,113 @@ class SimCore:
         events.append(DomainEvent(self.state.turn, "policy_changed", colony_id, {"policy": action.policy, "value": action.value}))
         return ActionResult(colony_id, action.kind, "accepted", "ok")
 
+    def _scout(
+        self, colony_id: str, action: ScoutAction, events: list[DomainEvent]
+    ) -> ActionResult:
+        colony = self.state.colonies[colony_id]
+        world = self.state.world
+        assert isinstance(world, WorldState)
+        if action.target not in world.cells:
+            return ActionResult(colony_id, action.kind, "rejected", "invalid_target")
+        if colony.available_population < 1:
+            return ActionResult(colony_id, action.kind, "rejected", "insufficient_population")
+        if colony.resources.food < SCOUT_FOOD_COST:
+            return ActionResult(colony_id, action.kind, "rejected", "insufficient_resources")
+        stock = colony.resources.apply({"food": -SCOUT_FOOD_COST})
+        scout_id = f"sc{self._next_scout}"
+        self._next_scout += 1
+        scouts = dict(self.state.scouts)
+        scouts[scout_id] = Scout(
+            id=scout_id,
+            colony_id=colony_id,
+            position=colony.spawn,
+            target=action.target,
+        )
+        self.state = replace(self.state, scouts=scouts)
+        self._update_colony(colony_id, resources=stock, scouting=colony.scouting + 1)
+        events.append(
+            DomainEvent(
+                self.state.turn,
+                "scout_dispatched",
+                colony_id,
+                {"scout_id": scout_id, "x": action.target.x, "y": action.target.y, "food_cost": SCOUT_FOOD_COST},
+            )
+        )
+        return ActionResult(colony_id, action.kind, "accepted", "ok")
+
+    def _advance_scouts(self, events: list[DomainEvent]) -> None:
+        if not self.state.scouts:
+            return
+        world = self.state.world
+        assert isinstance(world, WorldState)
+        scouts = dict(self.state.scouts)
+        for scout_id in sorted(scouts):
+            scout = scouts[scout_id]
+            position = self._step_toward(scout.position, scout.target, SCOUT_SPEED)
+            reached = position == scout.target
+            revealed = visible_cells(world, (position,), SCOUT_REVEAL_RADIUS)
+            colony = self.state.colonies[scout.colony_id]
+            newly_seen = revealed - colony.known_cells
+            if newly_seen:
+                self._update_colony(
+                    scout.colony_id,
+                    known_cells=colony.known_cells | revealed,
+                )
+                events.append(
+                    DomainEvent(
+                        self.state.turn,
+                        "scout_revealed",
+                        scout.colony_id,
+                        {"scout_id": scout.id, "x": position.x, "y": position.y, "revealed": len(newly_seen)},
+                    )
+                )
+            if reached:
+                del scouts[scout_id]
+                current = self.state.colonies[scout.colony_id]
+                self._update_colony(
+                    scout.colony_id, scouting=max(0, current.scouting - 1)
+                )
+                events.append(
+                    DomainEvent(
+                        self.state.turn,
+                        "scout_arrived",
+                        scout.colony_id,
+                        {"scout_id": scout.id, "x": position.x, "y": position.y},
+                    )
+                )
+            else:
+                scouts[scout_id] = replace(scout, position=position)
+        self.state = replace(self.state, scouts=scouts)
+
+    def _step_toward(self, position: Position, target: Position, steps: int) -> Position:
+        x, y = position.x, position.y
+        for _ in range(steps):
+            if x == target.x and y == target.y:
+                break
+            dx = target.x - x
+            dy = target.y - y
+            if abs(dx) >= abs(dy):
+                x += 1 if dx > 0 else -1
+            else:
+                y += 1 if dy > 0 else -1
+        return Position(x, y)
+
+    def _active_sight(
+        self, colony: ColonyState
+    ) -> frozenset[Position]:
+        world = self.state.world
+        assert isinstance(world, WorldState)
+        towers = [
+            structure
+            for structure in self.state.structures.values()
+            if structure.colony_id == colony.id
+            and structure.kind == StructureKind.WATCHTOWER
+            and structure.status == StructureStatus.OPERATIONAL
+        ]
+        radius = self.scenario.sight_radius + WATCHTOWER_SIGHT_BONUS * len(towers)
+        origins = (colony.spawn, *(tower.position for tower in towers))
+        return visible_cells(world, origins, radius)
+
     def _progress_construction(self, events: list[DomainEvent]) -> None:
         structures = dict(self.state.structures)
         changed = False
@@ -493,7 +618,8 @@ class SimCore:
                     StructureStatus.REPAIRING,
                 }
             )
-            known = visible_cells(self.state.world, (colony.spawn,), self.scenario.sight_radius)  # type: ignore[arg-type]
+            visible_now = self._active_sight(colony)
+            known = colony.known_cells | visible_now
             population = colony.population
             if (
                 self.state.turn > 0
@@ -503,7 +629,7 @@ class SimCore:
                 and colony.resources.water >= population * 2
             ):
                 population += 1
-            self._update_colony(colony_id, housing=housing, population=population, healthy=max(0, population - colony.injured - colony.sick), known_cells=known)
+            self._update_colony(colony_id, housing=housing, population=population, healthy=max(0, population - colony.injured - colony.sick), known_cells=known, visible_now=visible_now)
 
     def _apply_needs(self, events: list[DomainEvent]) -> None:
         for colony_id, colony in tuple(self.state.colonies.items()):

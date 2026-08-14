@@ -15,6 +15,7 @@ class Observation:
     colony: dict[str, object]
     visible_cells: tuple[dict[str, object], ...]
     visible_structures: tuple[dict[str, object], ...]
+    scouts: tuple[dict[str, object], ...]
     known_colonies: dict[str, dict[str, object]]
     active_offers: tuple[dict[str, object], ...]
     valid_action_kinds: tuple[str, ...]
@@ -35,7 +36,7 @@ def project_observation(state: MatchState, colony_id: str) -> Observation:
             "buildable": cell.buildable,
             "movement_cost": cell.movement_cost,
             "resource": cell.resource,
-            "resource_amount": cell.resource_amount,
+            "resource_amount": cell.resource_amount if position in colony.visible_now else 0,
         }
         for position in sorted(colony.known_cells, key=lambda item: (item.y, item.x))
         if (cell := world.cells.get(position)) is not None
@@ -54,6 +55,18 @@ def project_observation(state: MatchState, colony_id: str) -> Observation:
         }
         for structure in sorted(state.structures.values(), key=lambda item: item.id)
         if structure.position in colony.known_cells
+    )
+    scouts = tuple(
+        {
+            "id": scout.id,
+            "colony_id": scout.colony_id,
+            "x": scout.position.x,
+            "y": scout.position.y,
+            "target_x": scout.target.x,
+            "target_y": scout.target.y,
+        }
+        for scout in sorted(state.scouts.values(), key=lambda item: item.id)
+        if scout.colony_id == colony_id or scout.position in colony.visible_now
     )
     known_colonies = {
         other_id: {
@@ -95,6 +108,7 @@ def project_observation(state: MatchState, colony_id: str) -> Observation:
         },
         visible_cells=cells,
         visible_structures=structures,
+        scouts=scouts,
         known_colonies=known_colonies,
         active_offers=offers,
         valid_action_kinds=(
@@ -106,5 +120,6 @@ def project_observation(state: MatchState, colony_id: str) -> Observation:
             "trade_respond",
             "raid",
             "set_policy",
+            "scout",
         ),
     )

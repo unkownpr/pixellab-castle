@@ -204,6 +204,15 @@ export interface VisibleStructure {
   readonly y: number;
 }
 
+export interface VisibleScout {
+  readonly id: string;
+  readonly colony_id: string;
+  readonly x: number;
+  readonly y: number;
+  readonly target_x: number;
+  readonly target_y: number;
+}
+
 export interface ColonyView {
   readonly id: string;
   readonly population: number;
@@ -221,6 +230,7 @@ export interface Observation {
   readonly colony: ColonyView;
   readonly visible_cells: readonly VisibleCell[];
   readonly visible_structures: readonly VisibleStructure[];
+  readonly scouts?: readonly VisibleScout[];
   readonly known_colonies: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   readonly active_offers: readonly Readonly<Record<string, unknown>>[];
   readonly valid_action_kinds: readonly string[];

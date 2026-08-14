@@ -35,6 +35,7 @@ def canonical_snapshot(state: MatchState) -> dict[str, object]:
                     {"x": position.x, "y": position.y}
                     for position in sorted(colony.known_cells, key=lambda item: (item.y, item.x))
                 ],
+                "scouting": colony.scouting,
             }
             for colony_id, colony in sorted(state.colonies.items())
         },
@@ -62,6 +63,15 @@ def canonical_snapshot(state: MatchState) -> dict[str, object]:
                 "status": offer.status,
             }
             for offer_id, offer in sorted(state.offers.items())
+        },
+        "scouts": {
+            scout_id: {
+                "id": scout.id,
+                "colony_id": scout.colony_id,
+                "position": {"x": scout.position.x, "y": scout.position.y},
+                "target": {"x": scout.target.x, "y": scout.target.y},
+            }
+            for scout_id, scout in sorted(state.scouts.items())
         },
     }
 
