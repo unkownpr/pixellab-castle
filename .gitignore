@@ -35,3 +35,6 @@ walk_8dir.gif
 
 # macOS
 .DS_Store
+
+# Agent scratch reports
+task-*-report.md
