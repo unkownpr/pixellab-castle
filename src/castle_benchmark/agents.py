@@ -337,6 +337,7 @@ class ExpansionistAgent:
 MILITARIST_ORDER = (
     StructureKind.FARM,
     StructureKind.WELL,
+    StructureKind.LUMBER_CAMP,
     StructureKind.BARRACKS,
     StructureKind.WALL,
     StructureKind.GATE,
@@ -346,6 +347,7 @@ MILITARIST_ORDER = (
 MILITARIST_TARGETS = {
     StructureKind.FARM: 1,
     StructureKind.WELL: 2,
+    StructureKind.LUMBER_CAMP: 1,
     StructureKind.BARRACKS: 1,
     StructureKind.WALL: 1,
     StructureKind.GATE: 1,

@@ -49,16 +49,21 @@ def add_structure(sim: SimCore, colony_id: str, kind: StructureKind, position: P
     return structure_id
 
 
-def wood_cell(sim: SimCore, colony_id: str, min_amount: int = 1) -> Position:
-    for position in sorted(sim.state.world.cells, key=lambda p: (p.y, p.x)):  # type: ignore[attr-defined]
-        cell = sim.state.world.cells[position]  # type: ignore[attr-defined]
-        if (
-            cell.resource == "wood"
-            and cell.resource_amount >= min_amount
-            and position in sim.state.colonies[colony_id].known_cells
-        ):
-            return position
-    raise AssertionError("no suitable wood cell")
+def labour_cell(sim: SimCore, colony_id: str) -> Position:
+    """A known cell rewritten to a resource untouched by extraction structures or needs.
+
+    Labour scaling is what ``test_gather_yields_less_while_scouting_and_recovers``
+    pins, so it gathers a resource with no extraction structure (no halving) and no
+    needs consumption (no drift), leaving the share-of-population scaling as the only
+    thing moving the yield.
+    """
+    colony = sim.state.colonies[colony_id]
+    world = sim.state.world
+    position = next(iter(sorted(colony.known_cells, key=lambda p: (p.y, p.x))))
+    cells = dict(world.cells)  # type: ignore[attr-defined]
+    cells[position] = replace(world.cells[position], resource="tools", resource_amount=100)  # type: ignore[attr-defined]
+    sim.state = replace(sim.state, world=replace(world, cells=cells))  # type: ignore[arg-type]
+    return position
 
 
 def any_resource_cell(sim: SimCore, colony_id: str) -> Position | None:
@@ -78,33 +83,33 @@ def test_gather_yields_less_while_scouting_and_recovers() -> None:
     sim = make_sim()
     assert sim.state.colonies["c1"].available_population == 8
 
-    first = wood_cell(sim, "c1", min_amount=GATHER_YIELD_PER_ACTION)
-    before = sim.state.colonies["c1"].resources.wood
+    first = labour_cell(sim, "c1")
+    before = sim.state.colonies["c1"].resources.tools
     sim.resolve((batch(sim, "c1", GatherAction(first)),))
-    assert sim.state.colonies["c1"].resources.wood == before + GATHER_YIELD_PER_ACTION
+    assert sim.state.colonies["c1"].resources.tools == before + GATHER_YIELD_PER_ACTION
 
     # Yield is proportional, so it drops from the very first colonist sent away
     # rather than only once the colony is nearly empty: six of eight at home.
     set_scouting(sim, "c1", 2)
     assert sim.state.colonies["c1"].available_population == 6
-    partial = wood_cell(sim, "c1", min_amount=GATHER_YIELD_PER_ACTION)
-    before = sim.state.colonies["c1"].resources.wood
+    partial = labour_cell(sim, "c1")
+    before = sim.state.colonies["c1"].resources.tools
     sim.resolve((batch(sim, "c1", GatherAction(partial)),))
-    assert sim.state.colonies["c1"].resources.wood == before + 3
+    assert sim.state.colonies["c1"].resources.tools == before + 3
 
     set_scouting(sim, "c1", 6)
     assert sim.state.colonies["c1"].available_population == 2
-    second = wood_cell(sim, "c1", min_amount=GATHER_YIELD_PER_ACTION)
-    before = sim.state.colonies["c1"].resources.wood
+    second = labour_cell(sim, "c1")
+    before = sim.state.colonies["c1"].resources.tools
     sim.resolve((batch(sim, "c1", GatherAction(second)),))
-    assert sim.state.colonies["c1"].resources.wood == before + 1
+    assert sim.state.colonies["c1"].resources.tools == before + 1
 
     set_scouting(sim, "c1", 0)
     assert sim.state.colonies["c1"].available_population == 8
-    third = wood_cell(sim, "c1", min_amount=GATHER_YIELD_PER_ACTION)
-    before = sim.state.colonies["c1"].resources.wood
+    third = labour_cell(sim, "c1")
+    before = sim.state.colonies["c1"].resources.tools
     sim.resolve((batch(sim, "c1", GatherAction(third)),))
-    assert sim.state.colonies["c1"].resources.wood == before + GATHER_YIELD_PER_ACTION
+    assert sim.state.colonies["c1"].resources.tools == before + GATHER_YIELD_PER_ACTION
 
 
 def test_short_handed_colony_staffs_producers_in_stable_id_order() -> None:
