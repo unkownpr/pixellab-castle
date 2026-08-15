@@ -17,6 +17,7 @@ import type {
   VisibleScout,
   VisibleStructure,
 } from "./api";
+import { translate } from "./i18n";
 import { nextWorldView, type WorldView } from "./operations";
 
 export const TILE_WIDTH = 48;
@@ -521,7 +522,7 @@ export class CastleRenderer {
       preserveDrawingBuffer: true,
     });
     this.app.canvas.className = "world-canvas";
-    this.app.canvas.setAttribute("aria-label", "İzometrik koloni haritası");
+    this.app.canvas.setAttribute("aria-label", translate("map.canvasLabel"));
     host.replaceChildren(this.app.canvas);
     this.app.stage.addChild(this.world);
     this.visualTokens = rendererVisualTokens();
@@ -742,7 +743,10 @@ export class CastleRenderer {
     if (version !== this.renderVersion) return;
 
     const turnLabel = new Text({
-      text: `TUR ${String(observation.turn).padStart(2, "0")} · ${observation.colony_id.toUpperCase()}`,
+      text: translate("map.turnLabel", {
+        turn: String(observation.turn).padStart(2, "0"),
+        colony: observation.colony_id.toUpperCase(),
+      }),
       style: {
         fill: visualTokens.ink,
         fontFamily: visualTokens.fontBody,
