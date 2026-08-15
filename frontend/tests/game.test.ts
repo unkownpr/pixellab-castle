@@ -2,17 +2,21 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { Observation } from "../src/api";
+import type { Observation, VisibleCell } from "../src/api";
 import {
   actionBatch,
   animationForEvent,
   characterDirectionBetween,
+  characterVisualKind,
   colonyHome,
   colonyWorkSites,
   compareIsoDepth,
   isoToScreen,
+  resourceDensity,
+  sceneryPlacements,
   snapshotToObservation,
   structureOpacity,
+  workDirection,
 } from "../src/game";
 
 describe("isometric projection", () => {
@@ -130,5 +134,102 @@ describe("character work", () => {
     expect(characterDirectionBetween({ x: 3, y: 3 }, { x: 0, y: 0 })).toBe("north");
     expect(characterDirectionBetween({ x: 0, y: 0 }, { x: 3, y: -3 })).toBe("east");
     expect(characterDirectionBetween({ x: 0, y: 0 }, { x: -3, y: 3 })).toBe("west");
+  });
+
+  it("resolves all eight grid directions to their own screen facings", () => {
+    const home = { x: 0, y: 0 };
+    const facings = [
+      characterDirectionBetween(home, { x: 1, y: 0 }),
+      characterDirectionBetween(home, { x: 0, y: 1 }),
+      characterDirectionBetween(home, { x: -1, y: 0 }),
+      characterDirectionBetween(home, { x: 0, y: -1 }),
+      characterDirectionBetween(home, { x: 1, y: 1 }),
+      characterDirectionBetween(home, { x: -1, y: -1 }),
+      characterDirectionBetween(home, { x: 1, y: -1 }),
+      characterDirectionBetween(home, { x: -1, y: 1 }),
+    ];
+
+    expect(facings).toEqual([
+      "south-east",
+      "south-west",
+      "north-west",
+      "north-east",
+      "south",
+      "north",
+      "east",
+      "west",
+    ]);
+    expect(new Set(facings).size).toBe(8);
+  });
+
+  it("uses the work state at a site, walk in transit, idle otherwise", () => {
+    expect(characterVisualKind("working")).toBe("work");
+    expect(characterVisualKind("toJob")).toBe("walk");
+    expect(characterVisualKind("toHome")).toBe("walk");
+    expect(characterVisualKind("idle")).toBe("idle");
+  });
+
+  it("falls back to the nearest vertical for a diagonal work facing", () => {
+    expect(workDirection("north-east")).toBe("north");
+    expect(workDirection("north-west")).toBe("north");
+    expect(workDirection("south-east")).toBe("south");
+    expect(workDirection("south-west")).toBe("south");
+    expect(workDirection("east")).toBe("east");
+    expect(workDirection("west")).toBe("west");
+  });
+});
+
+describe("resource scenery", () => {
+  const base = {
+    biome: "grassland",
+    water: false,
+    buildable: true,
+    movement_cost: 1,
+  } as const;
+
+  it("draws a forest as pines and thins it as it depletes", () => {
+    const full = sceneryPlacements({ x: 2, y: 1, ...base, resource: "wood", resource_amount: 80 });
+    const stripped = sceneryPlacements({ x: 2, y: 1, ...base, resource: "wood", resource_amount: 20 });
+
+    expect(full.length).toBeGreaterThan(stripped.length);
+    expect(full).toHaveLength(5);
+    expect(stripped).toHaveLength(1);
+    expect(full.every((placement) => placement.key.startsWith("prop.pine.grass"))).toBe(true);
+  });
+
+  it("uses snowy pines in a snow biome", () => {
+    const placements = sceneryPlacements({
+      x: 0, y: 0, ...base, biome: "snow", resource: "wood", resource_amount: 80,
+    });
+    expect(placements.every((placement) => placement.key.startsWith("prop.pine.snow"))).toBe(true);
+  });
+
+  it("draws rock for stone and ore", () => {
+    const stone = sceneryPlacements({ x: 4, y: 4, ...base, resource: "stone", resource_amount: 70 });
+    const ore = sceneryPlacements({ x: 4, y: 4, ...base, resource: "ore", resource_amount: 70 });
+    expect(stone.length).toBe(3);
+    expect(stone.every((placement) => placement.key === "prop.rock")).toBe(true);
+    expect(ore.every((placement) => placement.key === "prop.rock")).toBe(true);
+  });
+
+  it("draws food as a wheat field whose opacity tracks the amount", () => {
+    const field = sceneryPlacements({ x: 1, y: 2, ...base, resource: "food", resource_amount: 40 });
+    expect(field).toEqual([
+      { key: "terrain.wheat.base", dx: 0, dy: 0, ground: true, alpha: resourceDensity(40) },
+    ]);
+    expect(resourceDensity(80)).toBe(1);
+    expect(resourceDensity(32)).toBeCloseTo(0.5);
+    expect(resourceDensity(16)).toBeCloseTo(0.25);
+  });
+
+  it("places scenery deterministically for a given cell and amount", () => {
+    const cell: VisibleCell = {
+      x: 7, y: 3, ...base, biome: "snow", resource: "wood", resource_amount: 55,
+    };
+    expect(sceneryPlacements(cell)).toEqual(sceneryPlacements({ ...cell }));
+  });
+
+  it("draws nothing for a cell with no resource", () => {
+    expect(sceneryPlacements({ x: 0, y: 0, ...base, resource: null, resource_amount: 0 })).toEqual([]);
   });
 });

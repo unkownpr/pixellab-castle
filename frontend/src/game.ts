@@ -204,7 +204,19 @@ const STRUCTURE_KEYS: Readonly<Record<string, readonly string[]>> = {
   watchtower: ["structure.watchtower.operational"],
 };
 
-export type CharacterDirection = "south" | "north" | "east" | "west";
+export type CharacterDirection =
+  | "south"
+  | "south-west"
+  | "west"
+  | "north-west"
+  | "north"
+  | "north-east"
+  | "east"
+  | "south-east";
+
+export type WorkDirection = "south" | "north" | "east" | "west";
+
+export type CharacterPhase = "idle" | "toJob" | "working" | "toHome";
 
 export interface WorkSite {
   readonly kind: "gather" | "build";
@@ -228,7 +240,7 @@ const WALK_SECONDS = 1.7;
 const WORK_SECONDS = 2.6;
 const IDLE_SECONDS = 1.3;
 const WALK_FRAME_COUNT = 6;
-const WALK_DIRECTIONS: readonly CharacterDirection[] = ["south", "north", "east", "west"];
+const WORK_FRAME_COUNT = 5;
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -238,14 +250,59 @@ function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
 }
 
+// Screen-space compass read clockwise from east. The walk art is screen-facing, so
+// a colonist is drawn in the direction their sprite moves on screen, not the grid
+// axis they travel along.
+const SECTOR_DIRECTIONS: readonly CharacterDirection[] = [
+  "east",
+  "south-east",
+  "south",
+  "south-west",
+  "west",
+  "north-west",
+  "north",
+  "north-east",
+];
+
 export function characterDirectionBetween(
   from: GridPosition,
   to: GridPosition,
 ): CharacterDirection {
-  const screenX = to.x - from.x - (to.y - from.y);
-  const screenY = to.x - from.x + (to.y - from.y);
-  if (Math.abs(screenX) >= Math.abs(screenY)) return screenX >= 0 ? "east" : "west";
-  return screenY >= 0 ? "south" : "north";
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  // In the iso projection +x is down-right on screen and +y is down-left, so the
+  // screen-space travel vector is (right, down) = (2*(dx - dy), dx + dy). The factor
+  // of two accounts for a tile being twice as wide as it is tall.
+  const right = 2 * (dx - dy);
+  const down = dx + dy;
+  const angle = (Math.atan2(down, right) * 180) / Math.PI;
+  const index = Math.round((angle + 360) % 360 / 45) % 8;
+  return SECTOR_DIRECTIONS[index]!;
+}
+
+export function workDirection(direction: CharacterDirection): WorkDirection {
+  switch (direction) {
+    case "north-east":
+    case "north-west":
+      return "north";
+    case "south-east":
+    case "south-west":
+      return "south";
+    default:
+      return direction;
+  }
+}
+
+export function characterVisualKind(phase: CharacterPhase): "idle" | "walk" | "work" {
+  switch (phase) {
+    case "working":
+      return "work";
+    case "toJob":
+    case "toHome":
+      return "walk";
+    default:
+      return "idle";
+  }
 }
 
 export function colonyHome(observation: Observation, colonyId: string): GridPosition | null {
@@ -271,6 +328,98 @@ export function colonyWorkSites(observation: Observation, colonyId: string): rea
     }
   }
   return sites;
+}
+
+export interface SceneryPlacement {
+  readonly key: string;
+  readonly dx: number;
+  readonly dy: number;
+  readonly ground: boolean;
+  readonly alpha: number;
+}
+
+// A nominal "full" resource cell. The world seeds amounts between 24 and 80, so a
+// cell at or above this reads as untouched and anything below reads as thinned.
+const RESOURCE_FULL_AMOUNT = 64;
+
+export function resourceDensity(amount: number): number {
+  return Math.max(0, Math.min(1, amount / RESOURCE_FULL_AMOUNT));
+}
+
+// A deterministic 0..1-ish hash of a cell coordinate. Placement must never use
+// randomness — the same cell with the same amount must draw identically every turn —
+// so any per-cell variety derives from these coordinates instead.
+function cellHash(x: number, y: number): number {
+  let h = (x * 0x9e3779b1 + y * 0x85ebca6b) | 0;
+  h = Math.imul(h ^ (h >>> 13), 0x7f4a7c15);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+interface ScenerySlot {
+  readonly variant: "large" | "small";
+  readonly dx: number;
+  readonly dy: number;
+  readonly minAmount: number;
+}
+
+// A full forest reads as five trees — a deliberate cluster, not a scatter. Each slot
+// below has a threshold; only slots whose threshold is met by the remaining amount
+// are drawn, so an untouched forest shows the whole stand and a nearly stripped one
+// shows just the central trunk.
+const FOREST_SLOTS: readonly ScenerySlot[] = [
+  { variant: "large", dx: 0, dy: -10, minAmount: 0 },
+  { variant: "small", dx: -16, dy: -4, minAmount: 24 },
+  { variant: "small", dx: 14, dy: -6, minAmount: 40 },
+  { variant: "small", dx: -8, dy: -18, minAmount: 56 },
+  { variant: "large", dx: 9, dy: -17, minAmount: 72 },
+];
+
+const ROCK_SLOTS: readonly ScenerySlot[] = [
+  { variant: "large", dx: 0, dy: 0, minAmount: 0 },
+  { variant: "large", dx: -15, dy: -4, minAmount: 35 },
+  { variant: "large", dx: 13, dy: -6, minAmount: 60 },
+];
+
+function pineKeys(biome: VisibleCell["biome"]): { readonly large: string; readonly small: string } {
+  if (biome === "snow") return { large: "prop.pine.snow", small: "prop.pine.snow.small" };
+  return { large: "prop.pine.grass", small: "prop.pine.grass.small" };
+}
+
+export function sceneryPlacements(cell: VisibleCell): readonly SceneryPlacement[] {
+  const resource = cell.resource;
+  const amount = cell.resource_amount;
+  if (!resource || amount <= 0) return [];
+
+  if (resource === "food") {
+    // Wheat is a full-tile field, so depletion reads as the crop fading back toward
+    // the bare ground beneath rather than as a shrinking cluster of props.
+    return [{ key: "terrain.wheat.base", dx: 0, dy: 0, ground: true, alpha: resourceDensity(amount) }];
+  }
+
+  if (resource === "stone" || resource === "ore") {
+    return ROCK_SLOTS.filter((slot) => amount >= slot.minAmount).map((slot) => ({
+      key: "prop.rock",
+      dx: slot.dx,
+      dy: slot.dy,
+      ground: false,
+      alpha: 1,
+    }));
+  }
+
+  if (resource === "wood") {
+    const pines = pineKeys(cell.biome);
+    // A per-cell nudge so neighbouring forests do not sit on an identical grid.
+    const jitter = (cellHash(cell.x, cell.y) % 7) - 3;
+    return FOREST_SLOTS.filter((slot) => amount >= slot.minAmount).map((slot) => ({
+      key: slot.variant === "large" ? pines.large : pines.small,
+      dx: slot.dx + jitter,
+      dy: slot.dy,
+      ground: false,
+      alpha: 1,
+    }));
+  }
+
+  return [];
 }
 
 interface RendererVisualTokens {
@@ -332,13 +481,14 @@ interface WorldCharacter {
   readonly root: Container;
   home: GridPosition;
   job: WorkSite | null;
-  phase: "idle" | "toJob" | "working" | "toHome";
+  phase: CharacterPhase;
   elapsed: number;
   facing: CharacterDirection;
   currentX: number;
   currentY: number;
   visualState: string;
   walkSprite: AnimatedSprite | null;
+  workSprite: AnimatedSprite | null;
   idleSprite: Sprite | null;
 }
 
@@ -359,6 +509,7 @@ export class CastleRenderer {
   private readonly tickHandler = () => this.tickCharacters();
   private readonly idleTextureCache = new Map<string, Texture>();
   private readonly walkTexturesCache = new Map<string, Texture[]>();
+  private readonly workTexturesCache = new Map<string, Texture[]>();
 
   async init(host: HTMLElement, manifestUrl = "/manifest.json"): Promise<void> {
     await this.app.init({
@@ -453,11 +604,29 @@ export class CastleRenderer {
       hit.on("pointertap", () => this.selectHandler?.(cell));
       markerLayer.addChild(hit);
 
-      if (cell.resource && cell.resource_amount > 0) {
-        const resource = new Graphics()
-          .circle(position.x, position.y - 7, 2.5)
-          .fill({ color: visualTokens.accent, alpha: 0.9 });
-        markerLayer.addChild(resource);
+      const placements = sceneryPlacements(cell);
+      for (const placement of placements) {
+        const placed = await this.spriteFor(placement.key, {
+          x: position.x + placement.dx,
+          y: position.y + placement.dy,
+        });
+        if (version !== this.renderVersion) {
+          placed?.destroy();
+          return;
+        }
+        if (!placed) continue;
+        if (placement.alpha !== 1) placed.alpha = placement.alpha;
+        if (placement.ground) {
+          placed.zIndex = (cell.x + cell.y) * 1000 + cell.x + 0.001;
+          cellLayer.addChild(placed);
+        } else {
+          // Tall props share the structure layer so depth sorting keeps a tree
+          // behind a building rather than drawing over it. The tiny dy bias keeps
+          // props on the same tile in front-to-back order without ever overtaking
+          // a neighbouring tile's structure sprite.
+          placed.zIndex = (cell.x + cell.y) * 1000 + cell.x + (placement.dy + 64) / 1000;
+          structureLayer.addChild(placed);
+        }
       }
     }));
 
@@ -640,6 +809,7 @@ export class CastleRenderer {
       currentY: home.y,
       visualState: "",
       walkSprite: null,
+      workSprite: null,
       idleSprite: null,
     };
   }
@@ -657,7 +827,6 @@ export class CastleRenderer {
 
     let gridX = character.currentX;
     let gridY = character.currentY;
-    let moving = false;
     let facing = character.facing;
 
     if (!job) {
@@ -675,7 +844,6 @@ export class CastleRenderer {
       const t = Math.min(1, character.elapsed / WALK_SECONDS);
       gridX = lerp(home.x, job.x, easeInOut(t));
       gridY = lerp(home.y, job.y, easeInOut(t));
-      moving = true;
       facing = characterDirectionBetween(home, job);
       if (t >= 1) {
         character.phase = "working";
@@ -692,7 +860,6 @@ export class CastleRenderer {
       const t = Math.min(1, character.elapsed / WALK_SECONDS);
       gridX = lerp(job.x, home.x, easeInOut(t));
       gridY = lerp(job.y, home.y, easeInOut(t));
-      moving = true;
       facing = characterDirectionBetween(job, home);
       if (t >= 1) {
         character.phase = "idle";
@@ -707,18 +874,18 @@ export class CastleRenderer {
     const bob = character.phase === "working" ? Math.sin(character.elapsed * 9) * 2 : 0;
     character.root.position.set(position.x, position.y - bob);
     character.root.zIndex = Math.round(gridX + gridY) * 1000 + Math.round(gridX);
-    this.applyCharacterVisual(character, moving, facing);
+    this.applyCharacterVisual(character, characterVisualKind(character.phase), facing);
   }
 
   private applyCharacterVisual(
     character: WorldCharacter,
-    moving: boolean,
+    kind: "idle" | "walk" | "work",
     facing: CharacterDirection,
   ): void {
-    const state = moving ? `walk:${facing}` : `idle:${facing}`;
+    const state = `${kind}:${facing}`;
     if (character.visualState === state) return;
     character.visualState = state;
-    if (moving) {
+    if (kind === "walk") {
       void this.walkTexturesFor(facing).then((frames) => {
         if (character.visualState !== state || !frames) return;
         let sprite = character.walkSprite;
@@ -736,6 +903,27 @@ export class CastleRenderer {
         sprite.position.set(-anchor[0], -anchor[1]);
         sprite.visible = true;
         if (character.idleSprite) character.idleSprite.visible = false;
+        if (character.workSprite) character.workSprite.visible = false;
+      });
+    } else if (kind === "work") {
+      void this.workTexturesFor(facing).then((frames) => {
+        if (character.visualState !== state || !frames) return;
+        let sprite = character.workSprite;
+        if (!sprite) {
+          sprite = new AnimatedSprite(frames);
+          character.workSprite = sprite;
+          character.root.addChild(sprite);
+        } else if (sprite.textures !== frames) {
+          sprite.textures = frames;
+        }
+        sprite.animationSpeed = 0.14;
+        sprite.loop = true;
+        sprite.play();
+        const anchor = this.characterAnchor(`character.reference.work.${workDirection(facing)}.0`);
+        sprite.position.set(-anchor[0], -anchor[1]);
+        sprite.visible = true;
+        if (character.walkSprite) character.walkSprite.visible = false;
+        if (character.idleSprite) character.idleSprite.visible = false;
       });
     } else {
       void this.idleTextureFor(character.role, facing).then((texture) => {
@@ -752,6 +940,7 @@ export class CastleRenderer {
         sprite.position.set(-anchor[0], -anchor[1]);
         sprite.visible = true;
         if (character.walkSprite) character.walkSprite.visible = false;
+        if (character.workSprite) character.workSprite.visible = false;
       });
     }
   }
@@ -773,6 +962,25 @@ export class CastleRenderer {
     if (entries.length !== WALK_FRAME_COUNT) return null;
     const textures = await Promise.all(entries.map((entry) => Assets.load(`/${entry.path}`)));
     this.walkTexturesCache.set(direction, textures);
+    return textures;
+  }
+
+  private async workTexturesFor(direction: CharacterDirection): Promise<Texture[] | null> {
+    // The work loop only exists for the four cardinals; a diagonal facing snaps to
+    // the nearest vertical so the worker still reads as bent over a task.
+    const cardinal = workDirection(direction);
+    const cached = this.workTexturesCache.get(cardinal);
+    if (cached) return cached;
+    const keys = Array.from(
+      { length: WORK_FRAME_COUNT },
+      (_, index) => `character.reference.work.${cardinal}.${index}`,
+    );
+    const entries = keys
+      .map((key) => this.manifest?.assets[key])
+      .filter((entry): entry is AssetEntry => entry !== undefined);
+    if (entries.length !== WORK_FRAME_COUNT) return null;
+    const textures = await Promise.all(entries.map((entry) => Assets.load(`/${entry.path}`)));
+    this.workTexturesCache.set(cardinal, textures);
     return textures;
   }
 
