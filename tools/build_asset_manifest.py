@@ -21,6 +21,10 @@ DIRECTIONS = (
     "north-west",
 )
 
+# Directions the shared work loop is generated for, and how many frames it holds.
+CARDINAL_DIRECTIONS = ("north", "east", "south", "west")
+WORK_FRAMES = 5
+
 PIXELLAB_TILES = (
     {
         "id": "e7492368-8085-42db-a091-8d54b53c59a6",
@@ -124,6 +128,24 @@ def build_manifest() -> dict[str, object]:
                 frame=frame,
                 frames=6,
                 frame_duration_ms=120,
+            )
+
+        # The work loop only exists for the four cardinals: a colonist bent over a
+        # task reads the same from either diagonal, so the extra art earns nothing.
+        if direction not in CARDINAL_DIRECTIONS:
+            continue
+        for frame in range(WORK_FRAMES):
+            path = ROOT / "anim" / "Idle" / "animations" / "work" / direction / f"frame_{frame:03}.png"
+            assets[f"character.reference.work.{direction}.{frame}"] = entry(
+                path,
+                (24, 44),
+                category="character",
+                role="villager_blue",
+                state="work",
+                direction=direction,
+                frame=frame,
+                frames=WORK_FRAMES,
+                frame_duration_ms=160,
             )
 
     named_assets = {

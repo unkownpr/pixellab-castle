@@ -1728,6 +1728,386 @@
       "source": "pixellab",
       "state": "walk"
     },
+    "character.reference.work.east.0": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frame": 0,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/east/frame_000.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.east.1": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frame": 1,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/east/frame_001.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.east.2": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frame": 2,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/east/frame_002.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.east.3": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frame": 3,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/east/frame_003.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.east.4": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "east",
+      "frame": 4,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/east/frame_004.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.north.0": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frame": 0,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/north/frame_000.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.north.1": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frame": 1,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/north/frame_001.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.north.2": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frame": 2,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/north/frame_002.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.north.3": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frame": 3,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/north/frame_003.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.north.4": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "north",
+      "frame": 4,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/north/frame_004.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.south.0": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frame": 0,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/south/frame_000.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.south.1": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frame": 1,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/south/frame_001.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.south.2": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frame": 2,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/south/frame_002.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.south.3": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frame": 3,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/south/frame_003.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.south.4": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "south",
+      "frame": 4,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/south/frame_004.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.west.0": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frame": 0,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/west/frame_000.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.west.1": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frame": 1,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/west/frame_001.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.west.2": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frame": 2,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/west/frame_002.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.west.3": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frame": 3,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/west/frame_003.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
+    "character.reference.work.west.4": {
+      "anchor": [
+        24,
+        44
+      ],
+      "category": "character",
+      "direction": "west",
+      "frame": 4,
+      "frame_duration_ms": 160,
+      "frames": 5,
+      "path": "anim/Idle/animations/work/west/frame_004.png",
+      "role": "villager_blue",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab",
+      "state": "work"
+    },
     "character.scout.idle.east": {
       "anchor": [
         24,
