@@ -176,6 +176,21 @@ SURVIVALIST_WANTED = frozenset({"food", "water", "wood", "stone"})
 EXPANSIONIST_WANTED = frozenset({"food", "water", "wood", "stone", "ore", "tools"})
 MILITARIST_WANTED = frozenset({"food", "water"})
 
+# The survivalist tops its larder up whenever food falls below this.
+SURVIVALIST_GATHER_BELOW = 25
+
+# ...and it will not trade away the food it needs to eat. A colony consumes two food
+# per colonist each turn, so the floor protects this many turns of eating and scales
+# with the colony instead of being a number guessed once.
+#
+# A flat floor cannot do this job. Set above the gather threshold it is unreachable,
+# so the survivalist refuses every food-priced offer no matter how good — which is
+# what it used to do. Set at the gather threshold it trades its larder away and
+# starves on a seed where food is tight. Sizing the floor to the colony's own appetite
+# makes the refusal a decision: it trades when it is rich and holds when it is poor.
+SURVIVALIST_FOOD_RESERVE_TURNS = 3
+FOOD_EATEN_PER_COLONIST = 2
+
 
 SURVIVALIST_ORDER = (
     StructureKind.FARM,
@@ -198,9 +213,11 @@ class SurvivalistAgent:
 
     def decide(self, observation: Observation) -> ActionBatch:
         resources = _resources(observation)
-        if int(resources["food"]) < 25:
+        if int(resources["food"]) < SURVIVALIST_GATHER_BELOW:
             return _gather_batch(observation, ("food", "wood", "stone"))
-        response = _consider_offers(observation, SURVIVALIST_WANTED, {"food": 50})
+        population = int(observation.colony["population"])
+        larder = population * FOOD_EATEN_PER_COLONIST * SURVIVALIST_FOOD_RESERVE_TURNS
+        response = _consider_offers(observation, SURVIVALIST_WANTED, {"food": larder})
         if response is not None:
             return response
         batch = _build_toward(

@@ -35,6 +35,7 @@ from .systems import (
     BUILD_COSTS,
     BUILD_TURNS,
     CLINIC_HEALS_PER_TURN,
+    EXPOSED_SICKENED_PER_TURN,
     HOUSING_BY_STRUCTURE,
     NATURAL_RECOVERY_PER_TURN,
     PERISHABLES,
@@ -728,20 +729,30 @@ class SimCore:
                 )
             )
 
+    def _housing_for(self, colony_id: str) -> int:
+        """Housing a colony's structures provide while they can still shelter anyone.
+
+        A structure counts as long as it stands — a burning or damaged house still has
+        a roof tonight, so it keeps housing its colonists; only a ruin stops. This is
+        the same set ``_refresh_colonies`` and ``_apply_needs`` both read, so the two
+        phases agree on how many roofs a colony has.
+        """
+        return sum(
+            HOUSING_BY_STRUCTURE.get(structure.kind, 0)
+            for structure in self.state.structures.values()
+            if structure.colony_id == colony_id
+            and structure.status
+            in {
+                StructureStatus.OPERATIONAL,
+                StructureStatus.DAMAGED,
+                StructureStatus.BURNING,
+                StructureStatus.REPAIRING,
+            }
+        )
+
     def _refresh_colonies(self) -> None:
         for colony_id, colony in tuple(self.state.colonies.items()):
-            housing = sum(
-                HOUSING_BY_STRUCTURE.get(structure.kind, 0)
-                for structure in self.state.structures.values()
-                if structure.colony_id == colony_id
-                and structure.status
-                in {
-                    StructureStatus.OPERATIONAL,
-                    StructureStatus.DAMAGED,
-                    StructureStatus.BURNING,
-                    StructureStatus.REPAIRING,
-                }
-            )
+            housing = self._housing_for(colony_id)
             visible_now = self._active_sight(colony)
             known = colony.known_cells | visible_now
             population = colony.population
@@ -772,6 +783,10 @@ class SimCore:
                 if sick > 0:
                     sick -= 1
                 events.append(DomainEvent(self.state.turn, "population_died", colony_id, {"cause": "needs"}))
+            # Colonists without a roof are exposed. They fall sick the way a food or
+            # water shortfall sickens colonists, but only up to the number actually
+            # exposed — housed colonists are never touched by exposure.
+            exposed = max(0, population - self._housing_for(colony_id))
             if shortfall:
                 healthy_available = max(0, population - colony.injured - sick)
                 sickened = min(SICKENED_PER_SHORTFALL_TURN, healthy_available)
@@ -783,6 +798,23 @@ class SimCore:
                             "colonist_sickened",
                             colony_id,
                             {"count": sickened, "cause": "needs"},
+                        )
+                    )
+            elif exposed > 0:
+                healthy_available = max(0, population - colony.injured - sick)
+                sickened = min(
+                    EXPOSED_SICKENED_PER_TURN,
+                    max(0, exposed - sick),
+                    healthy_available,
+                )
+                if sickened:
+                    sick += sickened
+                    events.append(
+                        DomainEvent(
+                            self.state.turn,
+                            "colonist_sickened",
+                            colony_id,
+                            {"count": sickened, "cause": "exposure"},
                         )
                     )
             elif sick > 0:
