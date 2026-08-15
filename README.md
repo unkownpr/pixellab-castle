@@ -29,6 +29,12 @@ cost resources now and repay over many turns. Gathering wood, stone or ore witho
 matching extraction structure collects at half strength, so the opening is a real choice
 between digging today and building to dig faster tomorrow.
 
+**Ground.** A colony may only work cells within five steps of one of its own operational
+buildings, so the map is not a menu. Reaching a distant forest means putting an outpost
+next to it — and that outpost is also the lumber camp that removes the half-yield penalty,
+so expansion, extraction and territory are the same decision. The river carries water, and
+a colony too far from it drinks from wells instead.
+
 **Information gathering.** Fog is not decoration. Terrain and buildings stay remembered
 once seen, but discovering them costs: a scout eats provisions and occupies a colonist for
 the whole journey, and that colonist gathers nothing while away. Exploring competes
@@ -36,25 +42,60 @@ directly with producing, for the whole match rather than only at the start.
 
 **Labour allocation.** A colony gets two actions a turn, bounded further by the colonists
 actually available. Gathering scales with the share of people at home, and each producing
-structure needs a worker. Sending people scouting, or letting them fall sick, is felt
-everywhere.
+structure needs a worker. Sending people scouting, letting them fall sick, or getting them
+hurt in a raid is felt everywhere.
 
-**Diplomacy and force.** Colonies can contact, trade, ally or declare war. Trade loses a
-fifth in transit unless the seller runs a market; a raid steals food and damages a
-building; barracks blunt the loot and walls blunt the damage, but a walled colony without
-a gate cannot trade at all.
+**Diplomacy and force.** Contact and a declaration of war are unilateral; an alliance or a
+peace is a proposal the other side has to accept. Allies see what each other can see right
+now, trade without losing anything in transit, and cannot raid each other — and each
+alliance costs two influence a turn, so a colony that allies with everyone runs out of
+standing and the treaties lapse. Breaking one costs ten influence and is announced to
+everyone who has met the breaker.
 
-**Recovery.** Fire starts on a schedule, burns a building down over several turns and
-spreads to its neighbours. Ruins persist. A colony that loses its housing leaves colonists
-exposed, and they sicken until it rebuilds.
+Raiding is a decision, not a timer. A party costs six food, three influence if it is a
+surprise, and comes home with three injured colonists if it loses. Both sides count heads,
+their barracks and walls, and their posture; the attacker has to come out strictly ahead
+to take fourteen food and ten wood off the defender. A peaceful colony cannot raid at all
+until it says otherwise, which is a policy the whole table can eventually infer.
+
+**Talk.** A message written by one colony arrives in another's inbox — capped at two
+hundred characters, delivered only between colonies that have met, and attributed
+truthfully to its sender. What it says is whatever the sender wanted to say, so bargaining,
+coalitions and lies are all measurable behaviour rather than absent ones.
+
+**Recovery.** Fire starts on each colony's own schedule, burns a building down over several
+turns and spreads to its neighbours; only the headquarters is spared. A colony can throw
+water at a fire, repair what is damaged for two fifths of the build cost, or pull a
+structure down to stop the spread. Injuries mend slowly on their own and quickly at a
+clinic. Doing nothing is a choice with a price.
+
+**Winning.** A monument — thirty wood, thirty stone, twelve ore, six tools, twenty
+influence and eight turns — ends the match in its builder's favour. So does being the last
+colony with anyone left alive. Otherwise the turn limit decides.
 
 ### How it is scored
 
-`run_report` returns raw axes rather than a single number, so a run can be read rather than
-just ranked: survival and end turn, population trajectory, resources held, trade and
-aggression counts, invalid actions, timeouts and reconnects, server-measured MCP calls, and
-adapter-reported tokens and latency. Metrics are attributed per controller *tenure*, so if
-an agent drops and is replaced mid-match the two stretches stay separate.
+`run_report` returns raw axes so a run can be read rather than just ranked: survival,
+population trajectory, resources held, exploration, labour (including producer-turns lost
+to idleness), recovery (what burned, what was repaired, how far the population fell and how
+far it came back), communication, trade and aggression counts, decision quality, timeouts
+and reconnects, server-measured MCP calls, and adapter-reported tokens and latency. Metrics
+are attributed per controller *tenure*, so if an agent drops and is replaced mid-match the
+two stretches stay separate.
+
+On top of the axes it publishes one composite, because runs that cannot be ordered cannot
+be compared:
+
+    resource_value = 2*wood + 2*stone + 3*ore + 5*tools + influence
+    composite = 3*population_alive + peak_population + 2*operational_structures
+              + explored_cells/10 + 2*trades + 2*successful_raids + resource_value/25
+              - invalid_actions - starvation_turns + 40 if the colony won by monument
+
+Food and water are left out of the resource term on purpose: they are consumed, not banked,
+and counting them rewarded sitting still. Every weight is published through
+`benchmark.rules`, so optimising against the objective is legitimate play rather than
+guesswork. Beside the composite the report gives the per-axis Pareto front, so a match that
+distinguished nothing says so instead of inventing an order.
 
 ### What keeps it fair
 
@@ -96,6 +137,34 @@ Every run produces `metadata.json`, per-turn `turns.jsonl`, `snapshots.jsonl`,
 `report.json` and `summary.sqlite3`. Replay verification recomputes the canonical SHA-256
 state hash of each turn.
 
+### Suites, seats and statistics
+
+A single match is an anecdote: the map, the seat and the weather all move the result. The
+suite runner plays a seed set with every controller occupying every seat and reports the
+spread rather than one number.
+
+```bash
+uv run castle-benchmark suite \
+  --scenario basic-survival-v1 --seeds 11,17,23,29,37 --rotations all \
+  --colonies 4 --controllers survivalist,trader,expansionist,militarist \
+  --output runs/suite-baseline
+```
+
+`suite.json` carries, per controller kind, the sample size, mean, median, standard
+deviation and a 95% t-interval for the composite and for every axis, and `suite.sqlite3`
+holds the same rows for querying. Pass `--baseline-reference runs/suite-baseline/suite.json`
+on a later suite to get each controller's z-score against scripted play. An official
+comparison uses at least five seeds and the full rotation, so no agent is judged on one
+seat.
+
+### Held-out maps
+
+`--scenario procedural-v1` samples a map family instead of replaying the three published
+ones: size, biome, resource density, hazard cadence and turn budget are drawn from
+published ranges, and the instance comes from the scenario seed. The ranges are public and
+the instances are not, so an opening book memorised against `basic-survival-v1` buys
+nothing. Official held-out evaluation uses scenario seeds 1000–1999.
+
 ## Structure economy
 
 Production structures (farm, well, lumber camp, quarry, mine, workshop, clinic, market)
@@ -105,6 +174,15 @@ burning, ruined or half-built ones raise nothing. Wood, stone, ore, tools and in
 stockpile without limit; food and water need a working warehouse to go beyond the base
 ceiling. At the ceiling a gather is rejected (`store_full`), structure production stops,
 and a trade that would overfill the store is refused.
+
+A `monument` produces nothing and houses nobody; it is the win condition, and the only
+structure whose cost spans the entire production chain.
+
+Damage is no longer permanent. A `damaged` structure can be repaired for two fifths of its
+build cost over two turns, a `burning` one can be doused with water — four units, or two
+with a working well — and any structure but the headquarters can be pulled down to break a
+fire's path. Repairing a structure is not the same as replacing it: a ruin costs the full
+build again.
 
 ## MCP connection
 

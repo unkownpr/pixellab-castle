@@ -115,6 +115,8 @@
               <button data-action="repair" disabled data-i18n="actions.repair">Tamir et</button>
               <button data-action="extinguish" disabled data-i18n="actions.extinguish">Söndür</button>
               <button data-action="demolish" disabled data-i18n="actions.demolish">Yık</button>
+              <button data-action="alliance" disabled data-i18n="diplomacy.allianceProposal">İttifak öner</button>
+              <button data-action="peace" disabled data-i18n="diplomacy.peaceProposal">Barış öner</button>
             </div>
             <label class="build-choice"><span data-i18n="buildChoice.label">Yapı</span><select id="structure-select">
               <option value="house" data-i18n="structures.house">Ev</option>
@@ -129,7 +131,22 @@
               <option value="clinic" data-i18n="structures.clinic">Klinik</option>
               <option value="barracks" data-i18n="structures.barracks">Kışla</option>
               <option value="watchtower" data-i18n="structures.watchtower">Gözetleme kulesi</option>
+              <option value="monument" data-i18n="structures.monument">Anıt</option>
             </select></label>
+            <label class="compose-message"><span data-i18n="compose.message">Mesaj yaz</span>
+              <input id="message-input" type="text" maxlength="200" data-i18n-placeholder="compose.messagePlaceholder" placeholder="Mesaj yaz (en fazla 200 karakter)" />
+            </label>
+            <button data-action="message" disabled data-i18n="compose.send">Gönder</button>
+          </section>
+
+          <section class="inbox-panel" aria-labelledby="inbox-title">
+            <div class="section-label"><span id="inbox-title" data-i18n="inbox.title">İnbox</span></div>
+            <div id="inbox-content" class="inbox-messages"></div>
+          </section>
+
+          <section class="proposals-panel" aria-labelledby="proposals-title">
+            <div class="section-label"><span id="proposals-title" data-i18n="proposals.title">Açık öneriler</span></div>
+            <div id="proposals-content" class="proposals-list"></div>
           </section>
 
           <section data-operations-timeline></section>

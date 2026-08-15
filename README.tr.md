@@ -31,6 +31,12 @@ takas edilmelidir.
 yapısı olmadan toplamak yarı verimle sonuçlanır; böylece açılış, bugün kazmakla yarın daha
 hızlı kazmak için inşa etmek arasında gerçek bir seçime dönüşür.
 
+**Zemin.** Bir koloni yalnız kendi işleyen binalarından beş adım mesafedeki hücrelerde
+çalışabilir, yani harita bir menü değildir. Uzaktaki ormana uzanmak, oraya bir ileri karakol
+kurmak demektir — ve o karakol aynı zamanda yarı verim cezasını kaldıran kereste kampıdır;
+böylece genişleme, çıkarım ve toprak tek bir karar hâline gelir. Nehir su taşır; nehre uzak
+düşen koloni suyunu kuyudan çıkarır.
+
 **Bilgi toplama.** Sis dekor değildir. Arazi ve binalar bir kez görüldükten sonra hatırda
 kalır, ama onları keşfetmenin bedeli vardır: bir keşifçi erzak yer ve yol boyunca bir
 kolonisti meşgul eder; o kolonist yokken hiçbir şey toplamaz. Keşif, sadece başlangıçta
@@ -38,26 +44,59 @@ değil maç boyunca üretimle doğrudan yarışır.
 
 **Emek dağıtımı.** Bir koloni tur başına iki aksiyon alır, üstelik bu sayı gerçekten
 müsait kolonist sayısıyla sınırlanır. Toplama, evde kalanların oranıyla ölçeklenir ve her
-üretim yapısı bir işçi ister. İnsanları keşfe yollamak ya da hastalanmalarına izin vermek
-her yerde hissedilir.
+üretim yapısı bir işçi ister. İnsanları keşfe yollamak, hastalanmalarına izin vermek ya da
+bir baskında yaralanmaları her yerde hissedilir.
 
-**Diplomasi ve güç.** Koloniler temas kurabilir, ticaret yapabilir, ittifak kurabilir ya da
-savaş ilan edebilir. Satıcının pazarı yoksa ticaretin beşte biri yolda kaybolur; bir baskın
-erzak çalar ve bir binaya hasar verir; kışla yağmayı, duvar hasarı azaltır, ama kapısı
-olmayan surlu bir koloni hiç ticaret yapamaz.
+**Diplomasi ve güç.** Temas ve savaş ilanı tek taraflıdır; ittifak ve barış ise karşı
+tarafın kabul etmesi gereken birer tekliftir. Müttefikler birbirinin şu an gördüğünü görür,
+aralarındaki ticarette yolda hiçbir şey kaybolmaz ve birbirlerine baskın yapamazlar — her
+ittifak tur başına iki nüfuz yer, dolayısıyla herkesle ittifak kuran koloninin itibarı
+tükenir ve anlaşmalar düşer. Bir ittifakı bozmak on nüfuza mal olur ve bozanı tanıyan
+herkese duyurulur.
 
-**Toparlanma.** Yangın belli bir düzende çıkar, bir binayı birkaç turda yakıp yıkar ve
-komşularına sıçrar. Enkaz kalıcıdır. Barınağını kaybeden koloninin insanları açıkta kalır
-ve yeniden inşa edilene kadar hastalanır.
+Baskın bir zamanlayıcı değil, bir karardır. Baskın müfrezesi altı erzağa, sürpriz ise ayrıca
+üç nüfuza mal olur; kaybederse üç yaralıyla döner. İki taraf da başlarını, kışlalarını,
+duvarlarını ve duruşlarını sayar; saldıranın kesin olarak öne geçmesi gerekir ki savunandan
+on dört erzak ve on odun alabilsin. Barışçıl duruştaki bir koloni, aksini ilan edene kadar
+hiç baskın yapamaz — ve bu ilan, masadaki herkesin er geç çıkarabileceği bir bilgidir.
+
+**Konuşma.** Bir koloninin yazdığı mesaj diğerinin gelen kutusuna düşer — iki yüz karakterle
+sınırlı, yalnız tanışmış koloniler arasında ve göndereni doğru biçimde etiketlenmiş olarak.
+İçeriği ise gönderenin yazmak istediği şeydir; böylece pazarlık, koalisyon ve yalan ölçülebilir
+davranışlar hâline gelir.
+
+**Toparlanma.** Yangın her koloninin kendi takviminde çıkar, bir binayı birkaç turda yakıp
+yıkar ve komşularına sıçrar; yalnız karargâh muaftır. Koloni yangına su atabilir, hasarlı
+yapıyı inşa maliyetinin beşte ikisine onarabilir ya da yangının yolunu kesmek için bir yapıyı
+yıkabilir. Yaralılar kendiliğinden yavaş, klinikte hızlı iyileşir. Hiçbir şey yapmamak da
+bedeli olan bir seçimdir.
+
+**Kazanmak.** Bir anıt — otuz odun, otuz taş, on iki cevher, altı alet, yirmi nüfuz ve sekiz
+tur — maçı yapanın lehine bitirir. Ayakta kalan tek koloni olmak da öyle. Aksi hâlde tur
+sınırı karar verir.
 
 ### Nasıl puanlanıyor
 
-`run_report` tek bir sayı yerine ham eksenler döndürür, böylece bir koşu sadece sıralanmaz,
-**okunur**: hayatta kalma ve bitiş turu, nüfus eğrisi, elde tutulan kaynaklar, ticaret ve
-saldırganlık sayıları, geçersiz aksiyonlar, zaman aşımları ve yeniden bağlanmalar, sunucunun
-ölçtüğü MCP çağrıları, adaptörün bildirdiği token ve gecikme. Metrikler kontrolör **görev
-süresi** başına ayrıştırılır; bir ajan maç ortasında düşüp yerine başkası geçerse iki dönem
-ayrı kalır.
+`run_report` tek bir sayı yerine ham eksenler döndürür: hayatta kalma, nüfus eğrisi, elde
+tutulan kaynaklar, keşif, emek (boşta kalan üretim yapısı-turu dâhil), toparlanma (ne yandı,
+ne onarıldı, nüfus nereye düştü ve nereye döndü), iletişim, ticaret ve saldırganlık sayıları,
+karar kalitesi, zaman aşımları ve yeniden bağlanmalar, sunucuda ölçülen MCP çağrıları,
+adaptörün bildirdiği token ve gecikme. Metrikler kontrolör *görev süresi* başına atfedilir;
+bir ajan düşüp yerine başkası geçerse iki dilim ayrı kalır.
+
+Eksenlerin üstünde tek bir bileşik puan yayımlanır, çünkü sıralanamayan koşular
+karşılaştırılamaz:
+
+    kaynak_değeri = 2*odun + 2*taş + 3*cevher + 5*alet + nüfuz
+    bileşik = 3*yaşayan_nüfus + zirve_nüfus + 2*işleyen_yapı
+            + keşfedilen_hücre/10 + 2*ticaret + 2*başarılı_baskın + kaynak_değeri/25
+            - geçersiz_aksiyon - açlık_turu + anıtla kazandıysa 40
+
+Erzak ve su kaynak teriminin dışında bırakılmıştır: tüketilirler, biriktirilmezler ve
+sayılmaları yerinde oturmayı ödüllendiriyordu. Bütün ağırlıklar `benchmark.rules` üzerinden
+yayımlanır, yani hedefe göre optimize etmek meşru oyundur, tahmin değil. Bileşiğin yanında
+rapor eksen bazlı Pareto sınırını da verir; hiçbir şeyi ayırt etmemiş bir maç, uydurma bir
+sıralama üretmek yerine bunu söyler.
 
 ### Adaleti ne sağlıyor
 
@@ -100,6 +139,34 @@ Her koşu `metadata.json`, tur bazlı `turns.jsonl`, `snapshots.jsonl`, `report.
 `summary.sqlite3` üretir. Replay doğrulaması her turun kanonik SHA-256 durum hash'ini
 yeniden hesaplar.
 
+### Suite: koltuklar ve istatistik
+
+Tek bir maç bir anekdottur: harita da, koltuk da, hava da sonucu oynatır. Suite koşucusu bir
+seed kümesini her kontrolör her koltukta oturacak şekilde oynatır ve tek bir sayı yerine
+dağılımı raporlar.
+
+```bash
+uv run castle-benchmark suite \
+  --scenario basic-survival-v1 --seeds 11,17,23,29,37 --rotations all \
+  --colonies 4 --controllers survivalist,trader,expansionist,militarist \
+  --output runs/suite-baseline
+```
+
+`suite.json` her kontrolör türü için bileşik puanın ve her eksenin örneklem sayısını,
+ortalamasını, medyanını, standart sapmasını ve %95 t-aralığını taşır; `suite.sqlite3` aynı
+satırları sorgulanabilir tutar. Sonraki bir suite'e `--baseline-reference
+runs/suite-baseline/suite.json` verirsen her kontrolörün betikli oyuna göre z-skorunu
+alırsın. Resmî karşılaştırma en az beş seed ve tam rotasyon ister; böylece hiçbir ajan tek
+bir koltuğa göre yargılanmaz.
+
+### Saklı haritalar
+
+`--scenario procedural-v1`, yayımlanmış üç haritayı tekrar oynatmak yerine bir harita ailesi
+örnekler: boyut, biyom, kaynak yoğunluğu, afet periyodu ve tur bütçesi yayımlanmış
+aralıklardan çekilir, örnek ise senaryo seed'inden doğar. Aralıklar açıktır, örnekler
+değildir; `basic-survival-v1` üzerine ezberlenmiş bir açılış kitabı bu yüzden hiçbir işe
+yaramaz. Resmî saklı değerlendirme 1000–1999 senaryo seed'lerini kullanır.
+
 ## Yapı ekonomisi
 
 Üretim yapıları (farm, well, lumber camp, quarry, mine, workshop, clinic, market) ile
@@ -109,6 +176,14 @@ artırır; hasarlı, yanan, yıkılmış veya inşaat hâlindeki depolar hiçbir
 Ahşap, taş, maden, alet ve nüfuz sınırsız stoklanabilir; yiyecek ve su ise temel kapasiteyi
 aşmak için çalışan bir depo gerektirir. Kapasiteye ulaşınca toplama reddedilir
 (`store_full`), yapı üretimi tavanda durur ve kapasiteyi aşacak ticaret reddedilir.
+
+Bir `monument` ne üretir ne barındırır; kazanma koşuludur ve maliyeti tüm üretim zincirini
+kapsayan tek yapıdır.
+
+Hasar artık kalıcı değildir. `damaged` bir yapı inşa maliyetinin beşte ikisine iki turda
+onarılabilir, `burning` bir yapıya su atılabilir — dört birim, çalışan kuyu varsa iki — ve
+karargâh dışındaki her yapı yangının yolunu kesmek için yıkılabilir. Onarmak yenilemek
+değildir: enkaz, inşa bedelinin tamamını ister.
 
 ## MCP bağlantısı
 

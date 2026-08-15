@@ -83,6 +83,14 @@ CLINIC_HEALS_PER_TURN = 1
 SICKENED_PER_SHORTFALL_TURN = 1
 NATURAL_RECOVERY_PER_TURN = 1
 
+# Injury mends on its own, but slowly. Sickness clears in a turn of decent supply;
+# a wound takes a few. Every second well-supplied turn returns one injured colonist,
+# so a colony raided twice is back to strength in about eight turns without a clinic
+# and in two with one — the clinic stays worth its twelve wood, and a colony that
+# cannot afford one still has a way back rather than a slow, unrecoverable bleed.
+NATURAL_INJURY_RECOVERY_INTERVAL = 2
+NATURAL_INJURY_RECOVERY_PER_INTERVAL = 1
+
 # Exposure is the consequence of losing shelter. A colony whose population exceeds
 # its housing has that many colonists without a roof, and each turn it stays that way
 # EXPOSED_SICKENED_PER_TURN of them fall sick. The sickening is capped at the exposed
@@ -119,6 +127,13 @@ RAID_INJURIES_SUCCESS_ATTACKER = 0
 RAID_INJURIES_FAILURE_ATTACKER = 3
 RAID_INJURIES_SUCCESS_DEFENDER = 2
 RAID_INJURIES_FAILURE_DEFENDER = 1
+# Published for client-facing rules
+RAID_INJURIES = {
+    "success_attacker": RAID_INJURIES_SUCCESS_ATTACKER,
+    "failure_attacker": RAID_INJURIES_FAILURE_ATTACKER,
+    "success_defender": RAID_INJURIES_SUCCESS_DEFENDER,
+    "failure_defender": RAID_INJURIES_FAILURE_DEFENDER,
+}
 # Surprise raid (raiding a non-WAR target) costs this much influence beyond the food.
 # At 3 influence, a successful raid nets roughly +18 resource-units; a failed raid
 # costs 6 food, 3 influence, and three injured colonists (AM-16).

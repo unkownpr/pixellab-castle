@@ -13,11 +13,12 @@ from .actions import (
     RaidAction,
     RepairAction,
     ScoutAction,
+    SetPolicyAction,
     TradeOfferAction,
     TradeRespondAction,
     WaitAction,
 )
-from .domain import Position, StructureKind
+from .domain import MilitaryPosture, Position, StructureKind
 from .engine import SCOUT_FOOD_COST
 from .observation import Observation
 from .scenarios import get_scenario
@@ -454,6 +455,11 @@ class ExpansionistAgent:
         return _gather_batch(observation, ("food", "wood", "stone"))
 
 
+# How often the militarist is willing to spend a raid party. Eight turns is long
+# enough to rebuild the six food and heal the injuries a failed assault costs, so the
+# baseline keeps pressure on a neighbour without bleeding itself dry.
+MILITARIST_RAID_INTERVAL = 8
+
 MILITARIST_ORDER = (
     StructureKind.FARM,
     StructureKind.WELL,
@@ -498,6 +504,14 @@ class MilitaristAgent:
                 observation.colony_id,
                 (DiplomacyAction(str(unknown[0]["id"]), "contact", "We watch the borders."),),
             )
+        policies = observation.colony["policies"]
+        assert isinstance(policies, dict)
+        if policies.get("military_posture") != MilitaryPosture.EXPANSIONIST.value:
+            return ActionBatch(
+                observation.turn,
+                observation.colony_id,
+                (SetPolicyAction("military_posture", MilitaryPosture.EXPANSIONIST.value),),
+            )
         targets = sorted(observation.known_colonies)
         at_war = [target for target in targets if observation.known_colonies[target]["relation"] == "war"]
         if targets and not at_war:
@@ -506,7 +520,13 @@ class MilitaristAgent:
                 observation.colony_id,
                 (DiplomacyAction(targets[0], "declare_war", "The borders are ours."),),
             )
-        if at_war and observation.turn % 4 == 0:
+        # Raid only from a barracks, and only every eighth turn. A raid party costs food,
+        # an unbeaten defender sends it home with three injured colonists, and injury now
+        # costs labour: raiding on a timer with no force behind it is not aggression, it is
+        # a slow way to lose the match, and it makes the militarist a control for nothing.
+        counts = _kind_counts(observation)
+        armed = counts.get(StructureKind.BARRACKS.value, 0) > 0
+        if at_war and armed and observation.turn % MILITARIST_RAID_INTERVAL == 0:
             return ActionBatch(observation.turn, observation.colony_id, (RaidAction(at_war[0]),))
         resources = _resources(observation)
         batch = _build_toward(

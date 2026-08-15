@@ -31,6 +31,34 @@ def all_wait(sim: SimCore) -> tuple[ActionBatch, ...]:
     return tuple(batch(sim, colony_id, WaitAction()) for colony_id in sim.state.colonies)
 
 
+def quiet_hazards(sim: SimCore) -> SimCore:
+    """Push the hazard schedule out of reach so a test measures only what it set up.
+
+    Fire ignites per colony on its own clock, and with the headquarters exempt a colony
+    holding exactly one other structure — which is what most of these tests build — sees
+    that structure catch fire the moment its clock comes round. Tests about trade ratios
+    or raid damage should fail when trade or raiding breaks, not when the weather turns.
+    """
+    sim.scenario = replace(sim.scenario, hazard_cadence=10**6)
+    return sim
+
+
+def arm(sim: SimCore, colony_id: str) -> SimCore:
+    """Put a colony on an expansionist footing without spending its turn on the policy.
+
+    Raiding from the default peaceful posture is refused, which is the point of the
+    posture — but a test about what a raid does should not have to spend a turn and a
+    policy cooldown establishing that the raider means it.
+    """
+    colonies = dict(sim.state.colonies)
+    colony = colonies[colony_id]
+    policies = dict(colony.policies)
+    policies["military_posture"] = MilitaryPosture.EXPANSIONIST.value
+    colonies[colony_id] = replace(colony, policies=policies)
+    sim.state = replace(sim.state, colonies=colonies)
+    return sim
+
+
 def add_structure(
     sim: SimCore,
     colony_id: str,
@@ -62,7 +90,7 @@ def add_structure(
 
 def test_trade_offer_reserves_then_transfers_less_friction() -> None:
     """Catches double-spending or resource creation in accepted trades."""
-    sim = SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2)
+    sim = quiet_hazards(SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2))
     sim.resolve(
         (
             batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),
@@ -113,10 +141,12 @@ def test_peaceful_colonies_do_not_auto_attack() -> None:
 
 def test_surprise_raid_changes_relation_and_costs_influence() -> None:
     """Catches undeclared aggression without the benchmark's diplomatic cost."""
-    sim = SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2)
+    sim = quiet_hazards(SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2))
     influence_before = sim.state.colonies["c1"].resources.influence
 
     sim.resolve((batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),))
+    # Set military posture to allow raiding
+    sim.resolve((batch(sim, "c1", SetPolicyAction(policy="military_posture", value="expansionist")),))
     result = sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c2")),))
 
     assert result.state.colonies["c1"].relations["c2"] == RelationStatus.WAR
@@ -319,10 +349,16 @@ def test_workshop_stops_when_ore_runs_out() -> None:
 
 
 def test_clinic_heals_sick_then_injured() -> None:
+    """The clinic spends its one heal on the sick before it touches the injured.
+
+    Rest mends an injured colonist on its own every second well-supplied turn, so the
+    test starts on an odd turn: on that turn the only healing available is the clinic's,
+    which is what the ordering claim is about.
+    """
     sim = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
     colonies = dict(sim.state.colonies)
     colonies["c1"] = replace(colonies["c1"], sick=1, injured=1)
-    sim.state = replace(sim.state, colonies=colonies)
+    sim.state = replace(sim.state, colonies=colonies, turn=1)
     add_structure(sim, "c1", StructureKind.CLINIC)
 
     sim.resolve(all_wait(sim))
@@ -344,7 +380,7 @@ def test_market_grants_influence() -> None:
 
 
 def test_market_improves_trade_ratio_for_its_owner() -> None:
-    sim = SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2)
+    sim = quiet_hazards(SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2))
     sim.resolve(
         (
             batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),
@@ -375,7 +411,7 @@ def test_market_owner_collects_more_than_a_colony_without_one() -> None:
     """The market's value is avoided friction, not created value."""
 
     def collected(with_market: bool) -> int:
-        sim = SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2)
+        sim = quiet_hazards(SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2))
         sim.resolve(
             (
                 batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),
@@ -450,6 +486,7 @@ def test_trade_never_creates_resources() -> None:
 def test_barracks_reduces_food_lost_to_raid() -> None:
     def stolen_food(barracks: bool) -> int:
         sim = SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2)
+        arm(sim, "c1")
         sim.resolve((batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),))
         if barracks:
             add_structure(sim, "c2", StructureKind.BARRACKS)
@@ -476,6 +513,7 @@ def test_wall_reduces_structure_damage_from_raid() -> None:
         or expansionist posture to overcome the wall.
         """
         sim = SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2)
+        arm(sim, "c1")
         sim.resolve((batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),))
         if walled:
             add_structure(sim, "c2", StructureKind.WALL)
@@ -503,7 +541,7 @@ def test_wall_reduces_structure_damage_from_raid() -> None:
 
 
 def test_gate_permits_trade_while_walled() -> None:
-    sim = SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2)
+    sim = quiet_hazards(SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2))
     sim.resolve(
         (
             batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),
@@ -543,6 +581,7 @@ def test_gate_permits_trade_while_walled() -> None:
 def test_damaged_raid_mitigations_do_not_apply() -> None:
     def stolen_food(status: StructureStatus) -> int:
         sim = SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2)
+        arm(sim, "c1")
         sim.resolve((batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),))
         add_structure(sim, "c2", StructureKind.BARRACKS, status=status)
         result = sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c2")),))
@@ -559,6 +598,7 @@ def test_damaged_raid_mitigations_do_not_apply() -> None:
 def test_damaged_wall_does_not_reduce_raid_damage() -> None:
     def target_condition(status: StructureStatus) -> int:
         sim = SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2)
+        arm(sim, "c1")
         sim.resolve((batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),))
         add_structure(sim, "c2", StructureKind.WALL, status=status)
         sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c2")),))
@@ -628,8 +668,8 @@ def test_damaged_structure_of_every_producing_kind_yields_nothing() -> None:
 
 
 def test_farm_colony_outperforms_do_nothing_colony_over_full_scenario() -> None:
-    producer = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
-    idler = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1)
+    producer = quiet_hazards(SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1))
+    idler = quiet_hazards(SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=1))
     add_structure(producer, "c1", StructureKind.FARM)
 
     for _ in range(BASIC_SURVIVAL.max_turns):
@@ -641,3 +681,24 @@ def test_farm_colony_outperforms_do_nothing_colony_over_full_scenario() -> None:
             idler.resolve(all_wait(idler))
 
     assert producer.state.colonies["c1"].resources.food > idler.state.colonies["c1"].resources.food
+
+
+def test_unimplemented_actions_rejected_properly() -> None:
+    """MessageAction and DiplomacyRespondAction reject appropriately when conditions aren't met."""
+    from castle_benchmark.actions import MessageAction, DiplomacyRespondAction
+
+    sim = SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2)
+    # MessageAction without contact should be rejected
+    result = sim.resolve((
+        batch(sim, "c1", MessageAction(target_colony_id="c2", text="Hello")),
+        batch(sim, "c2", WaitAction()),
+    ))
+    assert result.action_results[0].code == "target_not_contacted"
+
+    # DiplomacyRespondAction with a non-existent proposal should be rejected
+    sim = SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=2)
+    result = sim.resolve((
+        batch(sim, "c1", DiplomacyRespondAction(proposal_id="p1", accept=True)),
+        batch(sim, "c2", WaitAction()),
+    ))
+    assert result.action_results[0].code == "proposal_unavailable"

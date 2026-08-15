@@ -12,8 +12,10 @@ from .actions import (
     BuildAction,
     DemolishAction,
     DiplomacyAction,
+    DiplomacyRespondAction,
     ExtinguishAction,
     GatherAction,
+    MessageAction,
     RaidAction,
     RepairAction,
     ScoutAction,
@@ -50,6 +52,10 @@ def scenario_to_dict(scenario: Scenario) -> dict[str, object]:
         "biome": scenario.biome,
         "spawn_points": [{"x": p.x, "y": p.y} for p in scenario.spawn_points],
         "sight_radius": scenario.sight_radius,
+        # The hazard cadence drives weather loss and, offset by the ignition bonus, fire.
+        # Leaving it out of the artifact let replay rebuild the scenario on the biome
+        # default and burn different buildings than the run it was verifying.
+        "hazard_cadence": scenario.hazard_cadence,
     }
 
 
@@ -65,6 +71,7 @@ def scenario_from_dict(data: dict[str, object]) -> Scenario:
         biome=str(data["biome"]),
         spawn_points=tuple(Position(int(item["x"]), int(item["y"])) for item in spawn_data),
         sight_radius=int(data["sight_radius"]),
+        hazard_cadence=int(data["hazard_cadence"]),
     )
 
 
@@ -109,6 +116,10 @@ def action_to_dict(action: object) -> dict[str, object]:
         return {"kind": "extinguish", "structure_id": action.structure_id}
     if isinstance(action, DemolishAction):
         return {"kind": "demolish", "structure_id": action.structure_id}
+    if isinstance(action, MessageAction):
+        return {"kind": "message", "target_colony_id": action.target_colony_id, "text": action.text}
+    if isinstance(action, DiplomacyRespondAction):
+        return {"kind": "diplomacy_respond", "proposal_id": action.proposal_id, "accept": action.accept}
     raise TypeError(f"unsupported action: {type(action).__name__}")
 
 
@@ -149,6 +160,10 @@ def action_from_dict(data: dict[str, object]) -> object:
         return ExtinguishAction(str(data["structure_id"]))
     if kind == "demolish":
         return DemolishAction(str(data["structure_id"]))
+    if kind == "message":
+        return MessageAction(str(data["target_colony_id"]), str(data["text"]))
+    if kind == "diplomacy_respond":
+        return DiplomacyRespondAction(str(data["proposal_id"]), bool(data["accept"]))
     raise ValueError(f"unknown action kind: {kind}")
 
 

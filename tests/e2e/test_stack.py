@@ -9,6 +9,10 @@ from castle_benchmark.scenarios import BASIC_SURVIVAL, OFFICIAL_SCENARIOS
 from castle_benchmark.service import GameService
 
 
+# A match can now end by winning, not only by running out of turns or colonists.
+TERMINAL_REASONS = {"turn_limit", "extinction", "monument_victory", "domination_victory"}
+
+
 def test_http_human_turn_and_complete_replayable_baseline_match(tmp_path: Path) -> None:
     service = GameService()
     client = TestClient(create_app(service, orchestrator_token="o" * 32))
@@ -63,7 +67,7 @@ def test_http_human_turn_and_complete_replayable_baseline_match(tmp_path: Path) 
 
     report = service.run_report(created["admin_token"])
     assert report["status"]["terminal"] is True
-    assert report["status"]["termination_reason"] in {"turn_limit", "extinction"}
+    assert report["status"]["termination_reason"] in TERMINAL_REASONS
 
 
 @pytest.mark.parametrize("scenario", OFFICIAL_SCENARIOS, ids=lambda scenario: scenario.id)
@@ -78,5 +82,5 @@ def test_four_baselines_finish_every_official_scenario(tmp_path: Path, scenario)
         )
     )
 
-    assert run.termination_reason in {"turn_limit", "extinction"}
+    assert run.termination_reason in TERMINAL_REASONS
     assert verify_replay(run.run_dir).ok

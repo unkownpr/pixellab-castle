@@ -10,7 +10,7 @@ from .domain import Position
 from .scenarios import Scenario
 from .systems import GATHER_RADIUS
 
-# River cells carry water as a gatherble resource. The amount (10,000) does not deplete
+# River cells carry water as a gatherable resource. The amount (10,000) does not deplete
 # inside a 100-turn match (max drawable is well under 1,000 with starting well production
 # or constructed wells). This makes rivers matter for the first time: a colony must either
 # build a well or put an OPERATIONAL structure within GATHER_RADIUS of the river.
@@ -70,7 +70,7 @@ def generate_world(scenario: Scenario, seed: int) -> WorldState:
     """Generate a world from the scenario and seed.
 
     Note: Hashes for existing seeds change with two changes:
-    - River cells now carry water as a gatherble resource (non-depleting amount)
+    - River cells now carry water as a gatherable resource (non-depleting amount)
     - AM-14 guarantees every spawn has food and wood within GATHER_RADIUS by converting
       the nearest buildable, non-water, resource-free cell if needed.
     """
@@ -90,7 +90,6 @@ def generate_world(scenario: Scenario, seed: int) -> WorldState:
             resource = None
             amount = 0
             if water:
-                # River cells carry water as a gatherble resource (large, non-depleting amount)
                 resource = "water"
                 amount = RIVER_WATER_AMOUNT
             elif resource_rng.random() < 0.18:

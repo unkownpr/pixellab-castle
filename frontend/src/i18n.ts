@@ -308,6 +308,35 @@ const en = {
   "action.repair": "repair {structure_id}",
   "action.extinguish": "extinguish {structure_id}",
   "action.demolish": "demolish {structure_id}",
+  "action.message": "send message to {target}",
+  "action.diplomacy.alliance": "propose alliance to {target}",
+  "action.diplomacy.peace": "propose peace to {target}",
+
+  "inbox.title": "Inbox",
+  "inbox.empty": "No messages.",
+  "inbox.messageFrom": "From {colony}",
+  "inbox.channel": "Channel: {channel}",
+
+  "proposals.title": "Open proposals",
+  "proposals.empty": "No pending proposals.",
+  "proposals.alliance": "{source} proposes alliance",
+  "proposals.peace": "{source} proposes peace",
+  "proposals.expires": "Expires turn {turn}",
+  "proposals.accept": "Accept",
+  "proposals.decline": "Decline",
+
+  "compose.message": "Compose message",
+  "compose.messagePlaceholder": "Type message (max 200 characters)",
+  "compose.send": "Send",
+  "compose.characterCount": "{count}/200",
+
+  "diplomacy.allianceProposal": "Propose alliance",
+  "diplomacy.peaceProposal": "Propose peace",
+
+  "terminal.monumentVictory": "monument victory",
+  "terminal.dominationVictory": "domination victory",
+  "terminal.turnLimit": "turn limit",
+  "terminal.extinction": "extinction",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -620,6 +649,35 @@ const tr: Record<TranslationKey, string> = {
   "action.repair": "{structure_id} onarımı",
   "action.extinguish": "{structure_id} söndürme",
   "action.demolish": "{structure_id} yıkılması",
+  "action.message": "{target} bölgesine mesaj gönder",
+  "action.diplomacy.alliance": "{target} bölgesine ittifak önerisi",
+  "action.diplomacy.peace": "{target} bölgesine barış önerisi",
+
+  "inbox.title": "İnbox",
+  "inbox.empty": "Mesaj yok.",
+  "inbox.messageFrom": "{colony} bölgesinden",
+  "inbox.channel": "Kanal: {channel}",
+
+  "proposals.title": "Açık öneriler",
+  "proposals.empty": "Bekleyen öneri yok.",
+  "proposals.alliance": "{source} ittifak öneriyor",
+  "proposals.peace": "{source} barış öneriyor",
+  "proposals.expires": "Tur {turn}'de sona eriyor",
+  "proposals.accept": "Kabul et",
+  "proposals.decline": "Reddet",
+
+  "compose.message": "Mesaj oluştur",
+  "compose.messagePlaceholder": "Mesaj yazın (maks 200 karakter)",
+  "compose.send": "Gönder",
+  "compose.characterCount": "{count}/200",
+
+  "diplomacy.allianceProposal": "İttifak önerisi",
+  "diplomacy.peaceProposal": "Barış önerisi",
+
+  "terminal.monumentVictory": "anıt zaferi",
+  "terminal.dominationVictory": "egemenlik zaferi",
+  "terminal.turnLimit": "tur sınırı",
+  "terminal.extinction": "tükeniş",
 };
 
 export const messages: Record<Lang, Record<TranslationKey, string>> = { en, tr };
@@ -681,6 +739,12 @@ export function translateStatic(root: ParentNode = document): void {
     const key = element.dataset.i18nAriaLabel;
     if (key && key in messages.en) {
       element.setAttribute("aria-label", translate(key as TranslationKey));
+    }
+  });
+  root.querySelectorAll<HTMLElement>("[data-i18n-placeholder]").forEach((element) => {
+    const key = element.dataset.i18nPlaceholder;
+    if (key && key in messages.en) {
+      element.setAttribute("placeholder", translate(key as TranslationKey));
     }
   });
 }
@@ -756,4 +820,25 @@ export function metricName(metric: string): string {
   if (metric in RESOURCE_KEYS) return resourceName(metric);
   const key = METRIC_KEYS[metric];
   return key ? translate(key) : metric.replaceAll("_", " ");
+}
+
+const CHANNEL_KEYS: Readonly<Record<string, string>> = {
+  diplomacy: "Diplomacy",
+  trade: "Trade",
+  direct: "Direct",
+  treaty: "Treaty",
+};
+
+export function channelName(channel: string): string {
+  return CHANNEL_KEYS[channel] ?? channel;
+}
+
+const TERMINAL_REASON_KEYS: Readonly<Record<string, TranslationKey>> = {
+  monument_victory: "terminal.monumentVictory",
+  domination_victory: "terminal.dominationVictory",
+};
+
+export function terminalReason(reason: string): string {
+  const key = TERMINAL_REASON_KEYS[reason];
+  return key ? translate(key) : reason.replaceAll("_", " ");
 }

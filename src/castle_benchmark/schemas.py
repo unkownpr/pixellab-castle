@@ -260,6 +260,7 @@ class DecisionQualityMetricResponse(ContractModel):
     invalid_actions: int
     wait_turns: int = 0
     action_diversity: float = 0.0
+    opportunity_waits: int = 0
     starvation_turns: int = 0
     store_full_rejections: int = 0
 

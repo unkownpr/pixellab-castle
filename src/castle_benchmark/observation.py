@@ -21,6 +21,8 @@ class Observation:
     scouts: tuple[dict[str, object], ...]
     known_colonies: dict[str, dict[str, object]]
     active_offers: tuple[dict[str, object], ...]
+    inbox: tuple[dict[str, object], ...]
+    open_proposals: tuple[dict[str, object], ...]
     valid_action_kinds: tuple[str, ...]
 
 
@@ -91,6 +93,28 @@ def project_observation(state: MatchState, colony_id: str) -> Observation:
         for offer in sorted(state.offers.values(), key=lambda item: item.id)
         if offer.status == "open" and colony_id in {offer.source_colony_id, offer.target_colony_id}
     )
+    messages = tuple(
+        {
+            "turn": msg.turn,
+            "from_colony_id": msg.from_colony_id,
+            "channel": msg.channel,
+            "text": msg.text,
+        }
+        for msg in state.inboxes.get(colony_id, ())
+    )
+    proposals = tuple(
+        {
+            "id": proposal.id,
+            "source_colony_id": proposal.source_colony_id,
+            "target_colony_id": proposal.target_colony_id,
+            "operation": proposal.operation,
+            "message": proposal.message,
+            "expires_turn": proposal.expires_turn,
+            "status": proposal.status,
+        }
+        for proposal in sorted(state.proposals.values(), key=lambda item: item.id)
+        if proposal.status == "open" and colony_id in {proposal.source_colony_id, proposal.target_colony_id}
+    )
     return Observation(
         schema_version="1.0",
         scenario_id=state.scenario_id,
@@ -114,6 +138,8 @@ def project_observation(state: MatchState, colony_id: str) -> Observation:
         scouts=scouts,
         known_colonies=known_colonies,
         active_offers=offers,
+        inbox=messages,
+        open_proposals=proposals,
         valid_action_kinds=(
             "wait",
             "gather",
@@ -127,6 +153,8 @@ def project_observation(state: MatchState, colony_id: str) -> Observation:
             "repair",
             "extinguish",
             "demolish",
+            "message",
+            "diplomacy_respond",
         ),
     )
 
