@@ -77,6 +77,19 @@ WATCHTOWER_SIGHT_BONUS = 2  # added to active sight radius per operational watch
 GATHER_YIELD_PER_ACTION = 4  # units one gather action collects at full strength
 WORKERS_PER_PRODUCER = 1  # colonists needed to staff one producing structure a turn
 
+# Gathering a resource the colony has no extraction structure for collects at half
+# strength. The mapping ties each extractable resource to the OPERATIONAL structure
+# that restores full yield; food, water and anything else without an entry keep
+# their present yield. GATHER_PENALTY_DIVISOR is the halving factor: the
+# labour-scaled yield is divided by it (see ``_gather``) whenever the matching
+# structure is not OPERATIONAL.
+GATHER_EXTRACTION_STRUCTURES: dict[str, StructureKind] = {
+    "wood": StructureKind.LUMBER_CAMP,
+    "stone": StructureKind.QUARRY,
+    "ore": StructureKind.MINE,
+}
+GATHER_PENALTY_DIVISOR = 2
+
 # Hazard constants. Fire consumes a fixed amount of structure condition each turn a
 # structure keeps burning; a structure reduced to zero condition becomes a ruin.
 FIRE_DAMAGE_PER_TURN = 40
@@ -290,6 +303,21 @@ class SimCore:
         staffed_yield = (
             GATHER_YIELD_PER_ACTION * colony.available_population // colony.population
         )
+        # Labour scaling comes first: the share of colonists at home scales the base
+        # yield, then the missing extraction structure halves what is left. Halving
+        # after scaling keeps a colony short-handed AND without a camp strictly worse
+        # off than one with only one of those problems, and flooring at one stops a
+        # positive gather from rounding away to nothing.
+        if (
+            staffed_yield > 0
+            and cell.resource in GATHER_EXTRACTION_STRUCTURES
+            and not has_operational(
+                self.state.structures,
+                colony_id,
+                GATHER_EXTRACTION_STRUCTURES[cell.resource],
+            )
+        ):
+            staffed_yield = max(1, staffed_yield // GATHER_PENALTY_DIVISOR)
         amount = min(staffed_yield, cell.resource_amount)
         if amount <= 0:
             return ActionResult(colony_id, action.kind, "rejected", "no_available_population")

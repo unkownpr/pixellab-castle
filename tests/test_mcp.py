@@ -842,6 +842,11 @@ async def test_rules_publish_every_structure_kind_from_live_constants() -> None:
     assert rules["gather"] == {
         "yield_per_action": engine.GATHER_YIELD_PER_ACTION,
         "scales_with_available_population": True,
+        "extraction_structures": {
+            resource: kind.value
+            for resource, kind in engine.GATHER_EXTRACTION_STRUCTURES.items()
+        },
+        "penalty_divisor": engine.GATHER_PENALTY_DIVISOR,
     }
     assert rules["labour"] == {"workers_per_producer": engine.WORKERS_PER_PRODUCER}
     assert rules["scouting"] == {

@@ -112,8 +112,9 @@ def test_gather_depletes_deposit_and_adds_stock() -> None:
 
     result = sim.resolve((batch(sim, "c1", GatherAction(position)),))
 
-    assert result.state.colonies["c1"].resources.wood == before + 4
-    assert result.state.world.cells[position].resource_amount == cell.resource_amount - 4
+    # No lumber camp yet, so wood gathers at half strength.
+    assert result.state.colonies["c1"].resources.wood == before + 2
+    assert result.state.world.cells[position].resource_amount == cell.resource_amount - 2
 
 
 def test_controller_cannot_gather_or_build_in_hidden_cells() -> None:

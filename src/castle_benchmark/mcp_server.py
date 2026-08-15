@@ -173,6 +173,11 @@ def build_rules() -> dict[str, object]:
         "gather": {
             "yield_per_action": engine.GATHER_YIELD_PER_ACTION,
             "scales_with_available_population": True,
+            "extraction_structures": {
+                resource: kind.value
+                for resource, kind in engine.GATHER_EXTRACTION_STRUCTURES.items()
+            },
+            "penalty_divisor": engine.GATHER_PENALTY_DIVISOR,
         },
         "labour": {
             "workers_per_producer": engine.WORKERS_PER_PRODUCER,
