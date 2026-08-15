@@ -814,11 +814,21 @@ async def test_rules_publish_every_structure_kind_from_live_constants() -> None:
     assert rules["clinic"] == {"heals_per_turn": systems.CLINIC_HEALS_PER_TURN}
     assert rules["raid"] == {
         "food_loot": systems.RAID_FOOD_LOOT,
+        "wood_loot": systems.RAID_WOOD_LOOT,
         "structure_damage": systems.RAID_STRUCTURE_DAMAGE,
         "injuries": systems.RAID_INJURIES,
         "barracks_loot_reduction": systems.BARRACKS_RAID_LOOT_REDUCTION,
         "wall_damage_reduction": systems.WALL_RAID_DAMAGE_REDUCTION,
+        "party_size": systems.RAID_PARTY_SIZE,
+        "party_food_cost": systems.RAID_PARTY_FOOD,
+        "surprise_influence_cost": systems.RAID_INFLUENCE_COST_SURPRISE,
+        "power": rules["raid"]["power"],
     }
+    # The power formulas are published as readable expressions rather than numbers, so
+    # the contract check is that all three are present and mention the deciding terms.
+    assert set(rules["raid"]["power"]) == {"attacker", "defender", "success_requires"}
+    assert "barracks" in rules["raid"]["power"]["attacker"]
+    assert "wall" in rules["raid"]["power"]["defender"]
     assert rules["trade"] == {
         "ratio_without_market": {
             "received": systems.TRADE_RATIO_BASE[0],
@@ -847,6 +857,7 @@ async def test_rules_publish_every_structure_kind_from_live_constants() -> None:
             for resource, kind in engine.GATHER_EXTRACTION_STRUCTURES.items()
         },
         "penalty_divisor": engine.GATHER_PENALTY_DIVISOR,
+        "radius": engine.GATHER_RADIUS,
     }
     assert rules["labour"] == {"workers_per_producer": engine.WORKERS_PER_PRODUCER}
     assert rules["scouting"] == {
@@ -907,6 +918,14 @@ async def test_rules_are_match_independent_and_leak_no_state() -> None:
         "labour",
         "scouting",
         "fire",
+        "alliance",
+        "diplomacy",
+        "messages",
+        "policies",
+        "monument",
+        "scoring",
+        "repair",
+        "extinguish",
         "terminal_conditions",
         "scenarios",
     }

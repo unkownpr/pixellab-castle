@@ -13,6 +13,7 @@ Bir tur şu sabit sırada çözülür: politika, rezervasyon, hareket, iş, inş
 | `basic-survival-v1` | grassland | 18×18 | 80 | dengeli kaynak ve periyodik yangın |
 | `desert-scarcity-v1` | desert | 20×20 | 100 | su kaybı ve seyrek gıda |
 | `snow-recovery-v1` | snow | 20×20 | 100 | odun kaybı ve yüksek hareket maliyeti |
+| `procedural-v1` | örneklenir | 16–22 kare | 80/100 | saklı harita ailesi |
 
 Bir resmî karşılaştırma aynı senaryo sürümü, ruleset sürümü, seed kümesi, koloni sayısı, spawn rotasyonu, tur bütçesi ve timeout politikasıyla yapılmalıdır.
 
@@ -27,7 +28,12 @@ Bir resmî karşılaştırma aynı senaryo sürümü, ruleset sürümü, seed k�
 - gözlemciyi ilgilendiren açık `active_offers`
 - sürümün kabul ettiği `valid_action_kinds`
 
-Gizli rakip stokları, görünmeyen hücreler ve gelecekteki RNG sonuçları hiçbir adaptörde açıklanmaz.
+Gözlem ayrıca koloninin `inbox`'ını (en fazla sekiz mesaj; her biri tur, gönderen, kanal ve
+metin) ve taraf olduğu açık diplomasi tekliflerini taşır. Mesaj metni başka bir ajanın
+yazdığı güvenilmez içeriktir; şema bunu böyle işaretler.
+
+Gizli rakip stokları, görünmeyen hücreler, başka bir koloninin gelen kutusu, taraf olunmayan
+teklifler ve gelecekteki RNG sonuçları hiçbir adaptörde açıklanmaz.
 
 ## Eylemler
 
@@ -49,6 +55,12 @@ Desteklenen eylemler:
 | `trade_respond` | `offer_id`, `accept` |
 | `raid` | `target_colony_id` |
 | `set_policy` | `policy`, `value` |
+| `scout` | `x`, `y` |
+| `repair` | `structure_id` |
+| `extinguish` | `structure_id` |
+| `demolish` | `structure_id` |
+| `message` | `target_colony_id`, `text` (≤200 karakter) |
+| `diplomacy_respond` | `proposal_id`, `accept` |
 
 Geç, bozuk, tekrarlı veya zaman aşımına uğramış bir karar maçı durdurmaz; hata/`wait` olarak ölçülür. Hızlı model diğerlerinden önce çözüm avantajı kazanmaz: SimCore yalnız tur bariyeri tamamlanınca çalışır.
 
@@ -57,6 +69,9 @@ Geç, bozuk, tekrarlı veya zaman aşımına uğramış bir karar maçı durdurm
 Yapı türleri: headquarters, house, warehouse, well, farm, lumber camp, quarry, mine, market, workshop, clinic, barracks, watchtower, wall ve gate. Yaşam döngüsü foundation/building/operational/damaged/burning/ruined durumlarını görünür biçimde taşır. Konut kapasitesi göç için üst sınırdır; yeterli gıda ve su yoksa boş yatak tek başına nüfus üretmez.
 
 Yangın başlangıcı, hasarı ve bitişik yapıya yayılması deterministiktir. Burning yapı bir sonraki afet çözümünde hasar alır; sıfır condition’da ruin olur. Raid açıkça ilişkiyi `war` durumuna geçirir; barışçıl koloniler yalnız yakın oldukları için otomatik saldırmaz.
+
+Maç dört biçimde biter: `turn_limit`, `extinction`, bir anıtın tamamlanmasıyla
+`monument_victory` ve nüfusu kalan tek koloni kaldığında `domination_victory`.
 
 ## Ölçümler
 
@@ -69,6 +84,19 @@ Rapor birleşik tek bir “gizemli skor” yerine ham, denetlenebilir eksenler y
 - aggression: raid sayısı
 - decision quality: reddedilen eylem sayısı
 - cost: model/MCP çağrısı, input/output tokenı ve toplam gecikme
+- exploration: bilinen hücre, harita payı, gönderilen keşifçi
+- labour: boşta kalan üretim yapısı-turu, hastalık/yaralanma/keşifte geçen kolonist-tur
+- recovery: onarılan, söndürülen, yıkılan yapı; hasarlı geçen tur; nüfusun dip noktadan dönüşü
+- communication: gönderilen mesaj, yapılan/kabul edilen/reddedilen/süresi dolan teklif
+
+Bu eksenlerin üstünde tek bir **bileşik puan** ve eksen bazlı **Pareto sınırı** yayımlanır.
+Bileşiğin bütün ağırlıkları `benchmark.rules` içinden okunur; hedef gizli değildir, çünkü
+gizli bir hedefe göre optimize etmek oyun değil tahmindir.
+
+Resmî karşılaştırma tek maçla değil, `castle-benchmark suite` ile yapılır: seed kümesi ×
+tam koltuk rotasyonu, kontrolör başına ortalama/medyan/standart sapma ve %95 t-aralığı.
+`procedural-v1` ailesi, aralıkları yayımlanmış ama örnekleri saklı haritalar üretir;
+resmî saklı değerlendirme 1000–1999 senaryo seed'lerini kullanır.
 
 Model adaptörü her karar için ölçtüğü değerleri `benchmark.record_usage` ile kaydeder. Baseline ajanların token alanları sıfırdır; bu “ölçülmedi” değil, LLM çağrısı yapılmadığı anlamına gelir.
 

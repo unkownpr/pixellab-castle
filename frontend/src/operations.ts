@@ -200,7 +200,12 @@ function describeAction(action: Readonly<Record<string, unknown>>): string {
     case "wait": return translate("action.wait");
     case "gather": return translate("action.gather", { x: String(action.x), y: String(action.y) });
     case "build": return translate("action.build", { structure: structureName(String(action.structure)), x: String(action.x), y: String(action.y) });
-    case "diplomacy": return translate("action.diplomacy", { op: translate("action.contact"), target: String(action.target_colony_id) });
+    case "diplomacy": {
+      const op = String(action.operation ?? "contact");
+      if (op === "alliance") return translate("action.diplomacy.alliance", { target: String(action.target_colony_id) });
+      if (op === "peace") return translate("action.diplomacy.peace", { target: String(action.target_colony_id) });
+      return translate("action.diplomacy", { op: translate("action.contact"), target: String(action.target_colony_id) });
+    }
     case "trade_offer": return translate("action.tradeOffer", { target: String(action.target_colony_id) });
     case "trade_respond": return action.accept
       ? translate("action.tradeRespond.accept")
@@ -208,6 +213,11 @@ function describeAction(action: Readonly<Record<string, unknown>>): string {
     case "raid": return translate("action.raid", { target: String(action.target_colony_id) });
     case "set_policy": return translate("action.setPolicy", { policy: String(action.policy), value: String(action.value) });
     case "scout": return translate("action.scout", { x: String(action.x), y: String(action.y) });
+    case "repair": return translate("action.repair", { structure_id: String(action.structure_id) });
+    case "extinguish": return translate("action.extinguish", { structure_id: String(action.structure_id) });
+    case "demolish": return translate("action.demolish", { structure_id: String(action.structure_id) });
+    case "message": return translate("action.message", { target: String(action.target_colony_id) });
+    case "diplomacy_respond": return action.accept ? translate("proposals.accept") : translate("proposals.decline");
     default: return kind;
   }
 }

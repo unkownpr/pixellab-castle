@@ -17,6 +17,10 @@ from castle_benchmark.scenarios import BASIC_SURVIVAL
 import pytest
 
 
+# A match can now end by winning, not only by running out of turns or colonists.
+TERMINAL_REASONS = {"turn_limit", "extinction", "monument_victory", "domination_victory"}
+
+
 def drive(agent, seed: int = 17):
     """Run a single-colony match to terminal, collecting build intents and scout activity."""
     sim = SimCore.create(BASIC_SURVIVAL, seed, 1)
@@ -124,5 +128,5 @@ def test_full_baseline_match_round_trips_replay(tmp_path) -> None:
         )
     )
 
-    assert report.termination_reason in {"turn_limit", "extinction"}
+    assert report.termination_reason in TERMINAL_REASONS
     assert verify_replay(report.run_dir).ok

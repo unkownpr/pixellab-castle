@@ -3,7 +3,7 @@ import type { ControllerAction } from "./game";
 export type StructureKind =
   | "headquarters" | "house" | "warehouse" | "well" | "farm"
   | "lumber_camp" | "quarry" | "mine" | "market" | "workshop"
-  | "clinic" | "barracks" | "watchtower" | "wall" | "gate";
+  | "clinic" | "barracks" | "watchtower" | "wall" | "gate" | "monument";
 
 export type StructureStatus =
   | "planned" | "foundation" | "building" | "operational"
@@ -222,6 +222,26 @@ export interface ColonyView {
   readonly policies: Readonly<Record<string, string>>;
 }
 
+export type MessageChannel = "diplomacy" | "trade" | "direct" | "treaty";
+
+export interface Message {
+  readonly turn: number;
+  readonly from_colony_id: string;
+  readonly channel: MessageChannel;
+  readonly text: string;
+}
+
+export type DiplomacyOperation = "alliance" | "peace";
+
+export interface DiplomacyProposal {
+  readonly id: string;
+  readonly source_colony_id: string;
+  readonly target_colony_id: string;
+  readonly operation: DiplomacyOperation;
+  readonly message: string;
+  readonly expires_turn: number;
+}
+
 export interface Observation {
   readonly schema_version: "1.0" | "1.1";
   readonly scenario_id: string;
@@ -234,6 +254,8 @@ export interface Observation {
   readonly known_colonies: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   readonly active_offers: readonly Readonly<Record<string, unknown>>[];
   readonly valid_action_kinds: readonly string[];
+  readonly inbox?: readonly Message[];
+  readonly open_proposals?: readonly DiplomacyProposal[];
 }
 
 export interface SpectatorColony {

@@ -53,8 +53,10 @@ def test_deadline_turns_missing_external_input_into_measured_wait(
 
     assert any(event.kind == "controller_timed_out" and event.colony_id == "c2" for event in result.events)
     assert service.run_report(session.admin_token)["metrics"]["cost"]["c2"]["timeouts"] == 1
-    assert result.action_results[0].colony_id == "c1"
-    assert result.action_results[1].colony_id == "c2"
+    # Both colonies are accounted for, but not in a fixed order: initiative is a seeded
+    # per-turn rotation now, so asserting c1 comes first would be asserting the old
+    # alphabetical bias the rotation exists to remove.
+    assert {item.colony_id for item in result.action_results} == {"c1", "c2"}
 
 
 def test_reconnect_and_replacement_preserve_tenure_and_revoke_old_capability(

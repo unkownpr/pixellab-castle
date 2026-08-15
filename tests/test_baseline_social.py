@@ -2,7 +2,12 @@ from dataclasses import replace
 
 import pytest
 
-from castle_benchmark.actions import DiplomacyAction, RaidAction, TradeRespondAction
+from castle_benchmark.actions import (
+    DiplomacyAction,
+    RaidAction,
+    SetPolicyAction,
+    TradeRespondAction,
+)
 from castle_benchmark.agents import (
     AGENT_TYPES,
     ExpansionistAgent,
@@ -10,7 +15,14 @@ from castle_benchmark.agents import (
     SurvivalistAgent,
     TraderAgent,
 )
-from castle_benchmark.domain import RelationStatus
+from castle_benchmark.domain import (
+    MilitaryPosture,
+    Position,
+    RelationStatus,
+    Structure,
+    StructureKind,
+    StructureStatus,
+)
 from castle_benchmark.engine import SimCore
 from castle_benchmark.observation import project_observation
 from castle_benchmark.scenarios import BASIC_SURVIVAL
@@ -42,13 +54,37 @@ def _observation(resources=None, offers=()) -> object:
     return obs
 
 
-def _militarist_observation(relations: dict[str, RelationStatus], turn: int = 8) -> object:
-    """The militarist's view of a four-colony match with the given outward relations."""
+def _militarist_observation(
+    relations: dict[str, RelationStatus],
+    turn: int = 8,
+    *,
+    posture: str = MilitaryPosture.EXPANSIONIST.value,
+    armed: bool = True,
+) -> object:
+    """The militarist's view of a four-colony match with the given outward relations.
+
+    The militarist will not raid from a peaceful posture or without a barracks, so a
+    test that wants to see a raid has to grant it both; the defaults do, and the tests
+    that exercise those two gates pass ``posture`` or ``armed`` explicitly.
+    """
     sim = SimCore.create(BASIC_SURVIVAL, seed=17, colony_count=4)
     c4 = sim.state.colonies["c4"]
     colonies = dict(sim.state.colonies)
-    colonies["c4"] = replace(c4, relations=relations)
-    sim.state = replace(sim.state, colonies=colonies, turn=turn)
+    policies = dict(c4.policies)
+    policies["military_posture"] = posture
+    colonies["c4"] = replace(c4, relations=relations, policies=policies)
+    structures = dict(sim.state.structures)
+    if armed:
+        structures["s_barracks_c4"] = Structure(
+            id="s_barracks_c4",
+            colony_id="c4",
+            kind=StructureKind.BARRACKS,
+            position=Position(c4.spawn.x + 1, c4.spawn.y),
+            status=StructureStatus.OPERATIONAL,
+            progress=1,
+            required_progress=1,
+        )
+    sim.state = replace(sim.state, colonies=colonies, structures=structures, turn=turn)
     return project_observation(sim.state, "c4")
 
 
@@ -155,6 +191,36 @@ def test_militarist_raids_only_when_at_war() -> None:
     decision = MilitaristAgent().decide(observation)
 
     assert any(isinstance(action, RaidAction) for action in decision.actions)
+
+
+def test_militarist_adopts_an_expansionist_posture_before_it_fights() -> None:
+    """A peaceful colony cannot raid at all, so the posture is the militarist's first move."""
+    observation = _militarist_observation(
+        {other: RelationStatus.WAR for other in ("c1", "c2", "c3")},
+        posture=MilitaryPosture.PEACEFUL.value,
+    )
+
+    decision = MilitaristAgent().decide(observation)
+
+    assert not any(isinstance(action, RaidAction) for action in decision.actions)
+    assert any(
+        isinstance(action, SetPolicyAction)
+        and action.policy == "military_posture"
+        and action.value == MilitaryPosture.EXPANSIONIST.value
+        for action in decision.actions
+    )
+
+
+def test_militarist_will_not_raid_without_a_barracks() -> None:
+    """An unarmed raid party comes home with three injured colonists and nothing else."""
+    observation = _militarist_observation(
+        {other: RelationStatus.WAR for other in ("c1", "c2", "c3")},
+        armed=False,
+    )
+
+    decision = MilitaristAgent().decide(observation)
+
+    assert not any(isinstance(action, RaidAction) for action in decision.actions)
 
 
 @pytest.mark.parametrize("seed", [17, 23, 91])

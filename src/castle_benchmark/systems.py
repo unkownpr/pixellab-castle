@@ -4,6 +4,12 @@ from typing import Mapping
 
 from .domain import ResourceStock, Structure, StructureKind, StructureStatus
 
+# Monument victory (A10/AM-18). Completing a monument ends the match. The cost
+# forces the full production chain (mine→workshop for ore/tools, market for
+# influence) and prevents rushing before roughly turn 35 in an eighty-turn match.
+# Monument_victory is worth 40 composite points, roughly two thirds of survival.
+MONUMENT_COST = {"wood": 30, "stone": 30, "ore": 12, "tools": 6, "influence": 20}
+MONUMENT_BUILD_TURNS = 8
 
 BUILD_COSTS: dict[StructureKind, dict[str, int]] = {
     StructureKind.HOUSE: {"wood": 12, "stone": 4},
@@ -20,10 +26,12 @@ BUILD_COSTS: dict[StructureKind, dict[str, int]] = {
     StructureKind.WATCHTOWER: {"wood": 12, "stone": 6},
     StructureKind.WALL: {"stone": 8},
     StructureKind.GATE: {"wood": 8, "stone": 8},
+    StructureKind.MONUMENT: MONUMENT_COST,
 }
 
 BUILD_TURNS: dict[StructureKind, int] = {kind: 3 for kind in BUILD_COSTS}
 BUILD_TURNS[StructureKind.WALL] = 2
+BUILD_TURNS[StructureKind.MONUMENT] = MONUMENT_BUILD_TURNS
 
 # Perishable storage capacity. Only food and water spoil: wood, stone, ore, tools
 # and influence can be stockpiled without bound. A colony's base ceiling for each
@@ -75,6 +83,14 @@ CLINIC_HEALS_PER_TURN = 1
 SICKENED_PER_SHORTFALL_TURN = 1
 NATURAL_RECOVERY_PER_TURN = 1
 
+# Injury mends on its own, but slowly. Sickness clears in a turn of decent supply;
+# a wound takes a few. Every second well-supplied turn returns one injured colonist,
+# so a colony raided twice is back to strength in about eight turns without a clinic
+# and in two with one — the clinic stays worth its twelve wood, and a colony that
+# cannot afford one still has a way back rather than a slow, unrecoverable bleed.
+NATURAL_INJURY_RECOVERY_INTERVAL = 2
+NATURAL_INJURY_RECOVERY_PER_INTERVAL = 1
+
 # Exposure is the consequence of losing shelter. A colony whose population exceeds
 # its housing has that many colonists without a roof, and each turn it stays that way
 # EXPOSED_SICKENED_PER_TURN of them fall sick. The sickening is capped at the exposed
@@ -84,21 +100,97 @@ NATURAL_RECOVERY_PER_TURN = 1
 # clinic, bring them back once there are roofs enough.
 EXPOSED_SICKENED_PER_TURN = 1
 
-# Raid effects and their mitigations. BARRACKS cuts the food a raid can carry away;
-# WALL absorbs part of the condition damage raids deal to structures.
-RAID_FOOD_LOOT = 3
+# A colony with zero able colonists cannot act and cannot recover — sickness and injury
+# become an absorbing state, making the recovery axis unmeasurable rather than hard.
+# This floor ensures (population - scouting - sick - injured) >= 1 as long as population > 0,
+# so even a heavily burdened colony can gather water or staff a clinic to begin recovery.
+MIN_ABLE_COLONISTS = 1
+
+# Raid effects and their mitigations. Each raid party can include up to this many
+# healthy colonists (A8). Raiding requires the attacker to pay this much food
+# upfront (AM-16); success means getting this much food and wood, capped by the
+# defender's stores and the attacker's perishable capacity. BARRACKS reduces food
+# loot; walls reduce structure damage; defeat costs the attacker this many injured.
+RAID_PARTY_SIZE = 3
+RAID_PARTY_FOOD = 6
+RAID_FOOD_LOOT = 14
+RAID_WOOD_LOOT = 10
 RAID_STRUCTURE_DAMAGE = 20
-RAID_INJURIES = 1
-BARRACKS_RAID_LOOT_REDUCTION = 2
+BARRACKS_RAID_LOOT_REDUCTION = 4
 WALL_RAID_DAMAGE_REDUCTION = 10
+# Injuries sustained by attacker and defender depending on raid outcome (AM-16).
+# Success: attacker goes home intact (0 injuries), defender loses 2; failure: both
+# sides suffer, attacker 3 and defender 1. Injuries are clamped to available healthy
+# population minus existing sick and injured, ensuring no colonist's count goes
+# negative (AM-4).
+RAID_INJURIES_SUCCESS_ATTACKER = 0
+RAID_INJURIES_FAILURE_ATTACKER = 3
+RAID_INJURIES_SUCCESS_DEFENDER = 2
+RAID_INJURIES_FAILURE_DEFENDER = 1
+# Published for client-facing rules
+RAID_INJURIES = {
+    "success_attacker": RAID_INJURIES_SUCCESS_ATTACKER,
+    "failure_attacker": RAID_INJURIES_FAILURE_ATTACKER,
+    "success_defender": RAID_INJURIES_SUCCESS_DEFENDER,
+    "failure_defender": RAID_INJURIES_FAILURE_DEFENDER,
+}
+# Surprise raid (raiding a non-WAR target) costs this much influence beyond the food.
+# At 3 influence, a successful raid nets roughly +18 resource-units; a failed raid
+# costs 6 food, 3 influence, and three injured colonists (AM-16).
+RAID_INFLUENCE_COST_SURPRISE = 3
 
 # Trade ratios as (received, paid) fractions, applied to what a side collects.
 # Trading without a MARKET loses part of the consignment in transit; a MARKET
-# removes that friction. Both ratios are <= 1 on purpose: a trade may destroy
-# resources but must never create them, otherwise two colonies with markets can
-# mint value by passing goods back and forth every turn.
+# removes that friction. Allies trade at full value (A5). All ratios are <= 1 on
+# purpose: a trade may destroy resources but must never create them, otherwise two
+# colonies with markets can mint value by passing goods back and forth every turn.
 TRADE_RATIO_BASE = (4, 5)
 TRADE_RATIO_MARKET = (1, 1)
+TRADE_RATIO_ALLIANCE = (1, 1)
+
+# Alliance mechanics (A5). Each alliance costs this much influence per turn from each
+# ally, deducted during the upkeep phase. Lapsing alliances are ordered sorted to
+# ensure deterministic recovery when a colony cannot pay (AM-7). Breaking an alliance
+# (declaring war on an ally) costs this much influence and emits a treaty_broken event
+# delivered to all colonies that have contacted the breaker.
+ALLIANCE_UPKEEP_INFLUENCE = 2
+TREATY_BREAK_INFLUENCE = 10
+
+# Repair costs a fraction of the structure's build cost: numerator / denominator.
+# This gives repairing roughly 2/5 of the build cost, making it cheaper than rebuilding
+# but expensive enough that fire and damage matter. The cost is split across the same
+# resources as the build, scaled by the same fraction and rounded up.
+REPAIR_COST_NUMERATOR = 2
+REPAIR_COST_DENOMINATOR = 5
+
+# A REPAIRING structure advances one turn toward completion like BUILDING does.
+# REPAIR_TURNS = 2 means a repair cycle is as fast as any build, so recovering
+# from damage is not a long idle.
+REPAIR_TURNS = 2
+
+# Extinguishing a BURNING structure costs water. Without a WELL, the cost is
+# EXTINGUISH_WATER_COST. A WELL halves it to EXTINGUISH_WATER_COST_WITH_WELL.
+# At 4 and 2 water, fire costs a colony about 10 actions and 20 water across a
+# match — a real tax on the 160-action budget, not a second job (AM-15).
+EXTINGUISH_WATER_COST = 4
+EXTINGUISH_WATER_COST_WITH_WELL = 2
+
+# Fire ignition is slower than weather: it happens every (hazard_cadence + 4)
+# turns instead of every hazard_cadence turns. Grassland sees roughly five fires
+# in eighty turns instead of seven, making extinguish and repair meaningful.
+FIRE_IGNITION_CADENCE_BONUS = 4
+
+# Gathering works within a Manhattan distance of this many cells from any
+# OPERATIONAL structure (including the HQ). Five cells matches the sight radius,
+# giving the rule a readable story: a colony can work what its buildings can see.
+# Beyond this radius, expansion pays because a distant forest is still out of reach (AM-13).
+GATHER_RADIUS = 5
+
+# Message delivery (A7). An inbox holds up to this many messages in FIFO order;
+# incoming messages beyond the cap are rejected. Message text is capped at this
+# many characters; control characters are stripped.
+INBOX_CAPACITY = 8
+MAX_MESSAGE_LENGTH = 200
 
 
 def can_afford(stock: ResourceStock, cost: dict[str, int]) -> bool:
@@ -293,3 +385,17 @@ def scaled_amount(amount: int, ratio: tuple[int, int]) -> int:
 
 def scaled_receipt(items: tuple[tuple[str, int], ...], ratio: tuple[int, int]) -> dict[str, int]:
     return {name: scaled_amount(amount, ratio) for name, amount in items}
+
+
+def repair_cost(build_cost: dict[str, int]) -> dict[str, int]:
+    """Calculate repair cost as a fraction of build cost, rounded up per resource.
+
+    Each resource in the build cost is multiplied by REPAIR_COST_NUMERATOR,
+    divided by REPAIR_COST_DENOMINATOR, and rounded up using ceiling division.
+    """
+    result = {}
+    for name, amount in build_cost.items():
+        # Ceiling division: -(-a // b) is equivalent to math.ceil(a / b) for positive integers
+        repair_amount = -(-amount * REPAIR_COST_NUMERATOR // REPAIR_COST_DENOMINATOR)
+        result[name] = repair_amount
+    return result

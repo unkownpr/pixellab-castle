@@ -670,4 +670,48 @@ describe("decision feed", () => {
     expect(root.textContent).toContain("accepted");
     expect(root.textContent).not.toContain("secret");
   });
+
+  it("describes repair, extinguish, and demolish actions with structure ids", () => {
+    const actions = [
+      { kind: "repair", structure_id: "s123" },
+      { kind: "extinguish", structure_id: "s456" },
+      { kind: "demolish", structure_id: "s789" },
+    ];
+    const items = decisionFeedItems(snapshot(
+      [slot("c1", "connected", { identity: { ...identity, display_name: "Claude" } })],
+      [event(1, "turn_resolved", null, {
+        decisions: [{
+          colony_id: "c1",
+          actions,
+          results: actions.map((a) => ({ status: "accepted", code: "ok" })),
+        }],
+      })],
+    ));
+
+    expect(items[0]!.actions).toEqual(["repair s123", "extinguish s456", "demolish s789"]);
+  });
+
+  it("translates structure action descriptions in both languages", () => {
+    const root = document.createElement("section");
+    const controller = new OperationsController();
+    const actions = [{ kind: "repair", structure_id: "s1" }];
+    controller.applySnapshot(snapshot(
+      [slot("c1", "connected", { identity: { ...identity, display_name: "Test" } })],
+      [event(1, "turn_resolved", null, {
+        decisions: [{
+          colony_id: "c1",
+          actions,
+          results: [{ status: "accepted", code: "ok" }],
+        }],
+      })],
+    ));
+
+    setLanguage("en");
+    renderOperationsRoom(root, controller);
+    expect(root.textContent).toContain("repair s1");
+
+    setLanguage("tr");
+    renderOperationsRoom(root, controller);
+    expect(root.textContent).toContain("s1 onarımı");
+  });
 });

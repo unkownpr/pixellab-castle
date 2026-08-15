@@ -11,6 +11,10 @@ from castle_benchmark.runner import verify_replay
 from castle_benchmark.scenarios import get_scenario
 from castle_benchmark.service import GameService
 
+
+# A match can now end by winning, not only by running out of turns or colonists.
+TERMINAL_REASONS = {"turn_limit", "extinction", "monument_victory", "domination_victory"}
+
 OFFICIAL_BIOMES = ("basic-survival-v1", "desert-scarcity-v1", "snow-recovery-v1")
 
 
@@ -124,7 +128,7 @@ async def test_four_remote_agents_finish_and_export_replay(
 
     report = await _call(server, "benchmark.run_report", {"admin_token": admin_token})
     assert report["status"]["terminal"] is True
-    assert report["status"]["termination_reason"] in {"turn_limit", "extinction"}
+    assert report["status"]["termination_reason"] in TERMINAL_REASONS
 
     _export_and_verify_replay(
         service,

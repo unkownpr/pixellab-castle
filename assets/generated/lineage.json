@@ -200,5 +200,33 @@
     "frame": 8,
     "frames": 9,
     "frame_duration_ms": 120
+  },
+  {
+    "key": "structure.monument.operational",
+    "path": "assets/generated/buildings/monument.png",
+    "job_id": "0d50ec61-452c-45db-b7d5-6d4e25a75ab7",
+    "seed": 8130,
+    "prompt": "towering medieval stone victory monument with carved obelisk, banners and stepped plinth, readable isometric game building sprite"
+  },
+  {
+    "key": "effect.repair",
+    "path": "assets/generated/effects/repair.png",
+    "job_id": "48a5bce5-69ca-4c8c-8450-2130b8525c70",
+    "seed": 8132,
+    "prompt": "repair scaffold with hammer, fresh timber planks and bright spark flecks, isolated overlay on transparent background"
+  },
+  {
+    "key": "effect.extinguish",
+    "path": "assets/generated/effects/extinguish.png",
+    "job_id": "8968b6ec-9681-40da-a46c-93c82ea262d1",
+    "seed": 8133,
+    "prompt": "bucket of water thrown as a splash arc with steam and droplets dousing embers, isolated effect on transparent background"
+  },
+  {
+    "key": "effect.damage",
+    "path": "assets/generated/effects/damage.png",
+    "job_id": "2e04fa70-86a0-40fb-a9ad-47acdeaf6408",
+    "seed": 8134,
+    "prompt": "damage decal only: jagged black cracks, soot smudges and two thin smoke wisps, no building, floating on empty transparent space"
   }
 ]

@@ -12,7 +12,7 @@ from castle_benchmark.actions import (
 )
 from castle_benchmark.agents import AGENT_TYPES
 from castle_benchmark.domain import Position, Structure, StructureKind, StructureStatus
-from castle_benchmark.engine import SimCore
+from castle_benchmark.engine import GATHER_RADIUS, SimCore
 from castle_benchmark.observation import project_observation
 from castle_benchmark.scenarios import BASIC_SURVIVAL
 from castle_benchmark.systems import (
@@ -69,14 +69,16 @@ def set_resources(sim: SimCore, colony_id: str, **values: int) -> None:
 def food_cell(sim: SimCore, colony_id: str = "c1") -> Position:
     world = sim.state.world
     colony = sim.state.colonies[colony_id]
+    spawn = colony.spawn
+    # Find a buildable cell within GATHER_RADIUS
     for position in sorted(colony.known_cells, key=lambda p: (p.y, p.x)):
         cell = world.cells[position]
-        if cell.buildable:
+        if cell.buildable and abs(position.x - spawn.x) + abs(position.y - spawn.y) <= GATHER_RADIUS:
             cells = dict(world.cells)
             cells[position] = replace(cell, resource="food", resource_amount=100)
             sim.state = replace(sim.state, world=replace(world, cells=cells))
             return position
-    raise AssertionError("no known buildable cell")
+    raise AssertionError("no buildable cell within gather radius")
 
 
 def test_food_and_water_stop_at_cap_while_wood_stone_ore_accumulate() -> None:

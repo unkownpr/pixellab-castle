@@ -67,6 +67,38 @@ class ScoutAction:
     kind: Literal["scout"] = "scout"
 
 
+@dataclass(frozen=True, slots=True)
+class RepairAction:
+    structure_id: str
+    kind: Literal["repair"] = "repair"
+
+
+@dataclass(frozen=True, slots=True)
+class ExtinguishAction:
+    structure_id: str
+    kind: Literal["extinguish"] = "extinguish"
+
+
+@dataclass(frozen=True, slots=True)
+class DemolishAction:
+    structure_id: str
+    kind: Literal["demolish"] = "demolish"
+
+
+@dataclass(frozen=True, slots=True)
+class MessageAction:
+    target_colony_id: str
+    text: str
+    kind: Literal["message"] = "message"
+
+
+@dataclass(frozen=True, slots=True)
+class DiplomacyRespondAction:
+    proposal_id: str
+    accept: bool
+    kind: Literal["diplomacy_respond"] = "diplomacy_respond"
+
+
 GameAction: TypeAlias = (
     WaitAction
     | GatherAction
@@ -77,6 +109,11 @@ GameAction: TypeAlias = (
     | RaidAction
     | SetPolicyAction
     | ScoutAction
+    | RepairAction
+    | ExtinguishAction
+    | DemolishAction
+    | MessageAction
+    | DiplomacyRespondAction
 )
 
 

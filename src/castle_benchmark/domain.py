@@ -57,6 +57,7 @@ class StructureKind(StrEnum):
     WATCHTOWER = "watchtower"
     WALL = "wall"
     GATE = "gate"
+    MONUMENT = "monument"
 
 
 class StructureStatus(StrEnum):
@@ -119,12 +120,12 @@ class ColonyState:
     def available_population(self) -> int:
         """Members currently at home, well, and able to gather or produce.
 
-        Colonists away scouting and colonists laid up sick are both unavailable.
-        Counting the sick here is what gives sickness — and therefore the clinic
-        that cures it — a mechanical consequence: without it the sick tally is a
-        number that rises and falls while the colony keeps working at full strength.
+        Colonists away scouting, laid up sick, and those recovering from injuries are
+        all unavailable. Injured colonists count as unavailable until healed, making
+        damage from raids and fire a meaningful cost: every injury reduces production
+        and gathering capacity directly.
         """
-        return max(0, self.population - self.scouting - self.sick)
+        return max(0, self.population - self.scouting - self.sick - self.injured)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +134,36 @@ class Scout:
     colony_id: str
     position: Position
     target: Position
+
+
+@dataclass(frozen=True, slots=True)
+class Message:
+    """A message delivered to a colony's inbox.
+
+    Channel identifies the context: diplomacy messages accompany proposals,
+    trade messages accompany offers, direct messages are standalone,
+    treaty messages accompany treaty events.
+    """
+    turn: int
+    from_colony_id: str
+    channel: str  # diplomacy, trade, direct, treaty
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class DiplomacyProposal:
+    """A proposal for alliance or peace, requiring consent to change relations.
+
+    Proposals expire after four turns and are answered by DiplomacyRespondAction.
+    Relations change only on acceptance.
+    """
+    id: str
+    source_colony_id: str
+    target_colony_id: str
+    operation: str  # alliance, peace
+    message: str
+    expires_turn: int
+    status: str = "open"  # open, accepted, rejected
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,5 +187,7 @@ class MatchState:
     structures: dict[str, Structure]
     offers: dict[str, TradeOffer] = field(default_factory=dict)
     scouts: dict[str, Scout] = field(default_factory=dict)
+    proposals: dict[str, DiplomacyProposal] = field(default_factory=dict)
+    inboxes: dict[str, tuple[Message, ...]] = field(default_factory=dict)
     terminal: bool = False
     termination_reason: str | None = None

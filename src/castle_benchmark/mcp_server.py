@@ -14,8 +14,8 @@ from typing import Any
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import ValidationError
 
-from . import engine, systems
-from .domain import StructureKind
+from . import engine, metrics, systems
+from .domain import MilitaryPosture, StructureKind
 from .lobby import ControllerIdentity
 from .scenarios import OFFICIAL_SCENARIOS
 from .schemas import (
@@ -146,12 +146,49 @@ def build_rules() -> dict[str, object]:
             "tools_per_turn": systems.WORKSHOP_TOOLS_PER_TURN,
         },
         "clinic": {"heals_per_turn": systems.CLINIC_HEALS_PER_TURN},
+        # The composite is published rather than hidden: optimising against a stated
+        # objective is legitimate play, while optimising against a secret one is guessing.
+        "scoring": {
+            "composite_weights": {
+                "population_alive": metrics.POPULATION_ALIVE_WEIGHT,
+                "peak_population": metrics.PEAK_POPULATION_WEIGHT,
+                "operational_structures": metrics.OPERATIONAL_STRUCTURES_WEIGHT,
+                "exploration_divisor": metrics.EXPLORATION_DIVISOR,
+                "trades_completed": metrics.TRADES_WEIGHT,
+                "successful_raids": metrics.SUCCESSFUL_RAIDS_WEIGHT,
+                "resource_value_divisor": metrics.RESOURCE_VALUE_DIVISOR,
+                "invalid_actions": metrics.INVALID_ACTIONS_PENALTY,
+                "starvation_turns": metrics.STARVATION_TURNS_PENALTY,
+                "monument_victory": metrics.MONUMENT_VICTORY_BONUS,
+            },
+            "resource_value_weights": {
+                "wood": metrics.RESOURCE_WEIGHT_WOOD,
+                "stone": metrics.RESOURCE_WEIGHT_STONE,
+                "ore": metrics.RESOURCE_WEIGHT_ORE,
+                "tools": metrics.RESOURCE_WEIGHT_TOOLS,
+                "influence": metrics.RESOURCE_WEIGHT_INFLUENCE,
+            },
+            "food_and_water_excluded_from_resource_value": True,
+        },
         "raid": {
             "food_loot": systems.RAID_FOOD_LOOT,
+            "wood_loot": systems.RAID_WOOD_LOOT,
             "structure_damage": systems.RAID_STRUCTURE_DAMAGE,
             "injuries": systems.RAID_INJURIES,
             "barracks_loot_reduction": systems.BARRACKS_RAID_LOOT_REDUCTION,
             "wall_damage_reduction": systems.WALL_RAID_DAMAGE_REDUCTION,
+            "party_size": systems.RAID_PARTY_SIZE,
+            "party_food_cost": systems.RAID_PARTY_FOOD,
+            "surprise_influence_cost": systems.RAID_INFLUENCE_COST_SURPRISE,
+            # The comparison an agent needs in order to decide whether a raid is worth
+            # the party: both sides count heads up to the party size, structures add a
+            # capped bonus, posture adds one, and the attacker must come out strictly
+            # ahead. Headquarters are never the damage target while anything else stands.
+            "power": {
+                "attacker": "min(healthy_available, party_size) + min(3, 2 * barracks) + (1 if expansionist)",
+                "defender": "min(healthy_available, 2) + min(3, 2 * wall + 2 * barracks) + (1 if defensive)",
+                "success_requires": "attacker_power > defender_power",
+            },
         },
         "trade": {
             "ratio_without_market": {
@@ -181,6 +218,16 @@ def build_rules() -> dict[str, object]:
                 for resource, kind in engine.GATHER_EXTRACTION_STRUCTURES.items()
             },
             "penalty_divisor": engine.GATHER_PENALTY_DIVISOR,
+            "radius": engine.GATHER_RADIUS,
+        },
+        "repair": {
+            "cost_numerator": systems.REPAIR_COST_NUMERATOR,
+            "cost_denominator": systems.REPAIR_COST_DENOMINATOR,
+            "turns": systems.REPAIR_TURNS,
+        },
+        "extinguish": {
+            "water_cost": systems.EXTINGUISH_WATER_COST,
+            "water_cost_with_well": systems.EXTINGUISH_WATER_COST_WITH_WELL,
         },
         "labour": {
             "workers_per_producer": engine.WORKERS_PER_PRODUCER,
@@ -195,10 +242,48 @@ def build_rules() -> dict[str, object]:
             "damage_per_turn": engine.FIRE_DAMAGE_PER_TURN,
             "spreads_to_orthogonal_adjacent_operational_structures": True,
             "ruins_persist": True,
+            "ignition_cadence_bonus": systems.FIRE_IGNITION_CADENCE_BONUS,
+        },
+        "alliance": {
+            "upkeep_influence_per_ally": systems.ALLIANCE_UPKEEP_INFLUENCE,
+            "trade_ratio_with_ally": {
+                "received": systems.TRADE_RATIO_ALLIANCE[0],
+                "paid": systems.TRADE_RATIO_ALLIANCE[1],
+            },
+        },
+        "diplomacy": {
+            "treaty_break_influence": systems.TREATY_BREAK_INFLUENCE,
+            "proposal_expiry_turns": 4,
+        },
+        "messages": {
+            "inbox_capacity": systems.INBOX_CAPACITY,
+            "max_length": systems.MAX_MESSAGE_LENGTH,
+        },
+        "policies": {
+            "military_posture": {
+                "values": [posture.value for posture in MilitaryPosture],
+                "peaceful_cannot_raid": True,
+                "defensive_attacker_power_bonus": 0,
+                "defensive_defender_power_bonus": 1,
+                "expansionist_attacker_power_bonus": 1,
+                "expansionist_gather_yield_bonus": 1,
+            },
+            "rationing": {
+                "values": ["normal", "tight"],
+                "tight_halves_needs": True,
+                "tight_blocks_immigration": True,
+                "tight_blocks_natural_recovery": True,
+            },
+        },
+        "monument": {
+            "build_cost": systems.MONUMENT_COST,
+            "build_turns": systems.MONUMENT_BUILD_TURNS,
         },
         "terminal_conditions": {
             "turn_limit": "the scenario max_turns is reached",
             "extinction": "every colony is at zero population",
+            "monument_victory": "a colony completes a monument",
+            "domination_victory": "only one colony has population above zero",
         },
         "scenarios": tuple(
             {

@@ -237,6 +237,9 @@ class GrowthMetricResponse(ContractModel):
     initial_population: int
     peak_population: int
     housing: int
+    # The low-water mark is what makes the recovery axis readable: a colony that ended
+    # at twelve after falling to four played a different match from one that never dipped.
+    min_population: int = 0
 
 
 class ResourceMetricResponse(ContractModel):
@@ -255,6 +258,41 @@ class ProsperityMetricResponse(ContractModel):
 
 class DecisionQualityMetricResponse(ContractModel):
     invalid_actions: int
+    wait_turns: int = 0
+    action_diversity: float = 0.0
+    opportunity_waits: int = 0
+    starvation_turns: int = 0
+    store_full_rejections: int = 0
+
+
+class ExplorationMetricResponse(ContractModel):
+    known_cells: int
+    exploration_share: float
+    scouts_dispatched: int
+    cells_revealed_by_scouts: int
+
+
+class LabourMetricResponse(ContractModel):
+    idle_producers_sum: int
+    colonist_turns_sick: int
+    colonist_turns_injured: int
+    colonist_turns_scouting: int
+
+
+class RecoveryMetricResponse(ContractModel):
+    structures_repaired: int
+    structures_extinguished: int
+    structures_demolished: int
+    turns_with_damaged_structures: int
+    population_recovery: int
+
+
+class CommunicationMetricResponse(ContractModel):
+    messages_sent: int
+    proposals_made: int
+    proposals_accepted: int
+    proposals_rejected: int
+    proposals_expired: int
 
 
 class CostMetricResponse(ContractModel):
@@ -308,8 +346,17 @@ class BenchmarkMetricsResponse(ContractModel):
     prosperity: dict[str, ProsperityMetricResponse]
     trade: dict[str, int]
     aggression: dict[str, int]
+    exploration: dict[str, ExplorationMetricResponse] = Field(default_factory=dict)
+    labour: dict[str, LabourMetricResponse] = Field(default_factory=dict)
+    recovery: dict[str, RecoveryMetricResponse] = Field(default_factory=dict)
+    communication: dict[str, CommunicationMetricResponse] = Field(default_factory=dict)
     decision_quality: dict[str, DecisionQualityMetricResponse]
     cost: dict[str, CostMetricResponse]
+    # The composite is the published ranking number and the Pareto front says whether
+    # the match distinguished anything at all; both are admin-side projections of the
+    # same terminal state, so they travel with the axes rather than beside them.
+    composites: dict[str, float] = Field(default_factory=dict)
+    pareto_front: tuple[str, ...] = ()
     presence: PresenceMetricResponse | None = None
     server_measured: AggregateServerMeasuredResponse | None = None
     adapter_reported_model_usage: dict[str, AdapterReportedUsageResponse] | None = None

@@ -37,8 +37,11 @@ import {
   type Lang,
 } from "./i18n";
 import { updateMatchStateIndicator, type MatchPhase } from "./matchState";
+import { renderInboxInto, renderProposalsInto, terminationReason } from "./intel";
 
-type ActionKind = "wait" | "gather" | "build" | "policy" | "diplomacy" | "trade" | "raid";
+type ActionKind =
+  | "wait" | "gather" | "build" | "policy" | "diplomacy" | "trade" | "raid"
+  | "repair" | "extinguish" | "demolish" | "alliance" | "peace" | "message";
 
 function required<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -319,9 +322,13 @@ export class BenchmarkWorkbench {
   }
 
   private async takeAction(kind: ActionKind): Promise<void> {
-    if (!this.activeMatchId || !this.humanController || !this.observation || this.busy) return;
     const action = this.humanAction(kind);
     if (!action) return;
+    await this.submitControllerAction(action);
+  }
+
+  private async submitControllerAction(action: ControllerAction): Promise<void> {
+    if (!this.activeMatchId || !this.humanController || !this.observation || this.busy) return;
     this.setBusy(true);
     try {
       const result = await this.api.submitActions(this.activeMatchId, this.humanController.token, {
@@ -337,7 +344,10 @@ export class BenchmarkWorkbench {
       this.matchTerminal = status.terminal === true;
       if (this.matchTerminal) {
         this.setMatchPhase("finished");
-        this.log(translate("ui.matchComplete", { reason: String(status.termination_reason ?? "terminal") }), "event");
+        this.log(
+          translate("ui.matchComplete", { reason: terminationReason(status.termination_reason) }),
+          "event",
+        );
       }
     } catch (error) {
       this.logError(error);
@@ -347,9 +357,10 @@ export class BenchmarkWorkbench {
   }
 
   private humanAction(kind: ActionKind): ControllerAction | null {
+    if (!this.observation) return null;
     if (kind === "wait") return { kind: "wait" };
     if (kind === "policy") return { kind: "set_policy", policy: "military_posture", value: "defensive" };
-    if (["diplomacy", "trade", "raid"].includes(kind)) {
+    if (["diplomacy", "trade", "raid", "alliance", "peace", "message"].includes(kind)) {
       const known = Object.values(this.observation?.known_colonies ?? {});
       const target = known.find((colony) => colony.contacted !== true) ?? known[0];
       const targetId = typeof target?.id === "string" ? target.id : null;
@@ -360,10 +371,42 @@ export class BenchmarkWorkbench {
       if (kind === "diplomacy") {
         return { kind: "diplomacy", target_colony_id: targetId, operation: "contact", message: translate("ui.diplomacyMessage") };
       }
+      if (kind === "alliance" || kind === "peace") {
+        return { kind: "diplomacy", target_colony_id: targetId, operation: kind, message: translate("ui.diplomacyMessage") };
+      }
+      if (kind === "message") {
+        const field = document.querySelector<HTMLInputElement>("#message-input");
+        const text = field?.value.trim() ?? "";
+        if (!text) {
+          this.log(translate("compose.messagePlaceholder"), "warning");
+          return null;
+        }
+        if (field) field.value = "";
+        return { kind: "message", target_colony_id: targetId, text };
+      }
       if (kind === "trade") {
         return { kind: "trade_offer", target_colony_id: targetId, give: [["wood", 2]], receive: [["food", 2]], message: translate("ui.tradeMessage") };
       }
       return { kind: "raid", target_colony_id: targetId };
+    }
+    if (["repair", "extinguish", "demolish"].includes(kind)) {
+      const ownStructures = this.observation?.visible_structures.filter(
+        (s) => s.colony_id === this.observation?.colony_id,
+      ) ?? [];
+      let target = null;
+      if (kind === "repair") {
+        target = ownStructures.find((s) => s.status === "damaged");
+      } else if (kind === "extinguish") {
+        target = ownStructures.find((s) => s.status === "burning");
+      } else {
+        // demolish: any non-HQ structure
+        target = ownStructures.find((s) => s.kind !== "headquarters");
+      }
+      if (!target) {
+        this.log(translate("ui.selectCellFirst"), "warning");
+        return null;
+      }
+      return { kind, structure_id: target.id };
     }
     if (!this.selectedCell) {
       this.log(translate("ui.selectCellFirst"), "warning");
@@ -504,6 +547,28 @@ export class BenchmarkWorkbench {
       resources.append(row);
     }
     required("#colony-stats").replaceChildren(population, resources);
+    this.renderInbox(observation);
+    this.renderProposals(observation);
+  }
+
+  private renderInbox(observation: Observation): void {
+    const host = document.querySelector("#inbox-content");
+    if (host) renderInboxInto(host, observation.inbox ?? []);
+  }
+
+  private renderProposals(observation: Observation): void {
+    const host = document.querySelector("#proposals-content");
+    if (!host) return;
+    renderProposalsInto(
+      host,
+      observation.open_proposals ?? [],
+      observation.colony_id,
+      (proposalId, accept) => void this.respondToProposal(proposalId, accept),
+    );
+  }
+
+  private async respondToProposal(proposalId: string, accept: boolean): Promise<void> {
+    await this.submitControllerAction({ kind: "diplomacy_respond", proposal_id: proposalId, accept });
   }
 
   private selectCell(cell: VisibleCell): void {
