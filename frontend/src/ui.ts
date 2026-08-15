@@ -69,6 +69,8 @@ export class BenchmarkWorkbench {
   private activeMatchId: string | null = null;
   private humanController: { readonly colonyId: string; readonly token: string } | null = null;
   private observation: Observation | null = null;
+  private scenarios: readonly ScenarioSummary[] = [];
+  private scenarioLabel: string | null = null;
   private selectedCell: VisibleCell | null = null;
   private replayFrames: readonly ReplaySnapshot[] = [];
   private busy = false;
@@ -153,6 +155,22 @@ export class BenchmarkWorkbench {
     this.applyMatchState();
     this.applyConnection();
     this.applyWorldLabels();
+    // Anything holding live data has just been overwritten by translateStatic, or
+    // was built once in the previous language: the scenario list carries translated
+    // biome names, the scenario caption carries the running match, and the turn
+    // caption is painted into the canvas.
+    this.renderScenarioOptions();
+    this.restoreScenarioLabel();
+    if (this.observation) void this.renderer.render(this.observation);
+  }
+
+  private setScenarioLabel(text: string): void {
+    this.scenarioLabel = text;
+    required("#scenario-label").textContent = text;
+  }
+
+  private restoreScenarioLabel(): void {
+    if (this.scenarioLabel) required("#scenario-label").textContent = this.scenarioLabel;
   }
 
   private syncLanguageControl(lang: Lang): void {
@@ -187,14 +205,20 @@ export class BenchmarkWorkbench {
 
   private async loadScenarios(): Promise<void> {
     try {
-      const scenarios = await this.api.scenarios();
-      const select = required<HTMLSelectElement>("#scenario-select");
-      select.replaceChildren(...scenarios.map((scenario) => this.scenarioOption(scenario)));
+      this.scenarios = await this.api.scenarios();
+      this.renderScenarioOptions();
       this.setConnection("connection.connected", true);
     } catch (error) {
       this.setConnection("connection.unreachable", false);
       this.logError(error);
     }
+  }
+
+  private renderScenarioOptions(): void {
+    const select = required<HTMLSelectElement>("#scenario-select");
+    const chosen = select.value;
+    select.replaceChildren(...this.scenarios.map((scenario) => this.scenarioOption(scenario)));
+    if (chosen) select.value = chosen;
   }
 
   private scenarioOption(scenario: ScenarioSummary): HTMLOptionElement {
@@ -384,7 +408,7 @@ export class BenchmarkWorkbench {
 
   private renderSpectatorStats(view: SpectatorView): void {
     required<HTMLOutputElement>("#turn-output").value = `T${view.turn}`;
-    required("#scenario-label").textContent = view.scenario_id.toUpperCase();
+    this.setScenarioLabel(view.scenario_id.toUpperCase());
     const container = document.createElement("div");
     container.className = "spectator-colonies";
     for (const [colonyId, colony] of Object.entries(view.colonies)) {
@@ -451,7 +475,7 @@ export class BenchmarkWorkbench {
 
   private renderStats(observation: Observation): void {
     required<HTMLOutputElement>("#turn-output").value = `T${observation.turn}`;
-    required("#scenario-label").textContent = observation.scenario_id.toUpperCase();
+    this.setScenarioLabel(observation.scenario_id.toUpperCase());
     const population = document.createElement("div");
     population.className = "population-line";
     const populationLabel = document.createElement("span");
