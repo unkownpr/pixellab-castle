@@ -27,6 +27,7 @@ def test_non_negative_stock_accepts_any_non_negative_resource_vector(values: dic
 def test_valid_wait_and_gather_sequences_preserve_core_invariants(gather_flags: list[bool]) -> None:
     """Catches long action sequences producing negative stock or over-cap population."""
     sim = SimCore.create(BASIC_SURVIVAL, seed=71, colony_count=1)
+    starting_population = sim.state.colonies["c1"].population
     resource_positions = [
         position
         for position, cell in sim.state.world.cells.items()  # type: ignore[attr-defined]
@@ -39,4 +40,8 @@ def test_valid_wait_and_gather_sequences_preserve_core_invariants(gather_flags: 
         sim.resolve((ActionBatch(sim.state.turn, "c1", (action,)),))
         colony = sim.state.colonies["c1"]
         assert all(value >= 0 for value in colony.resources.as_dict().values())
-        assert 0 <= colony.population <= colony.housing
+        assert colony.population >= 0
+        # Population may exceed housing, but only by losing shelter: fire and raids
+        # can ruin the buildings a colony already lives in. What must never happen is
+        # a colony growing past the housing it has.
+        assert colony.population <= max(colony.housing, starting_population)

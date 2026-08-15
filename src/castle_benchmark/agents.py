@@ -71,6 +71,58 @@ def _can_afford(resources: dict[str, int], kind: StructureKind) -> bool:
     return all(int(resources.get(name, 0)) >= amount for name, amount in BUILD_COSTS[kind].items())
 
 
+def _incoming_offers(observation: Observation) -> list[dict[str, object]]:
+    return [
+        offer
+        for offer in observation.active_offers
+        if offer["target_colony_id"] == observation.colony_id
+    ]
+
+
+def _offer_would_help(
+    observation: Observation,
+    offer: dict[str, object],
+    wanted: frozenset[str],
+    reserve: dict[str, int] | None = None,
+) -> bool:
+    """Whether accepting ``offer`` helps this colony.
+
+    An offer helps only when the colony can pay its side without dipping a reserved
+    resource below its floor and at least one of the goods on offer is something it
+    actually wants. The ``wanted`` set ranks how willing a baseline is to trade; the
+    ``reserve`` floor stops a cautious colony selling the food it needs to survive.
+    """
+    resources = _resources(observation)
+    requested = offer["receive"]
+    assert isinstance(requested, dict)
+    for name, amount in requested.items():
+        available = int(resources.get(name, 0))
+        floor = int(reserve.get(name, 0)) if reserve else 0
+        if available - int(amount) < floor:
+            return False
+    give = offer["give"]
+    assert isinstance(give, dict)
+    return any(name in wanted for name in give)
+
+
+def _consider_offers(
+    observation: Observation,
+    wanted: frozenset[str],
+    reserve: dict[str, int] | None = None,
+) -> ActionBatch | None:
+    """Answer the first incoming offer, or ``None`` when there is nothing to answer."""
+    offers = _incoming_offers(observation)
+    if not offers:
+        return None
+    offer = offers[0]
+    accept = _offer_would_help(observation, offer, wanted, reserve)
+    return ActionBatch(
+        observation.turn,
+        observation.colony_id,
+        (TradeRespondAction(str(offer["id"]), accept),),
+    )
+
+
 def _gather_batch(observation: Observation, preferred: tuple[str, ...]) -> ActionBatch:
     position = _resource_cell(observation, preferred)
     if position is None:
@@ -115,6 +167,16 @@ def _scout_target(observation: Observation) -> Position | None:
     return Position(scenario.width // 2, scenario.height // 2)
 
 
+# Trade willingness. Every baseline answers an incoming offer, but what it wants to
+# receive and how much of its own stock it will spend differ. The trader is the most
+# willing (no reserve, broadest wants), the militarist the least (food and water only,
+# and it protects a food floor).
+TRADER_WANTED = frozenset({"food", "water", "wood", "stone", "ore", "tools"})
+SURVIVALIST_WANTED = frozenset({"food", "water", "wood", "stone"})
+EXPANSIONIST_WANTED = frozenset({"food", "water", "wood", "stone", "ore", "tools"})
+MILITARIST_WANTED = frozenset({"food", "water"})
+
+
 SURVIVALIST_ORDER = (
     StructureKind.FARM,
     StructureKind.WELL,
@@ -138,6 +200,9 @@ class SurvivalistAgent:
         resources = _resources(observation)
         if int(resources["food"]) < 25:
             return _gather_batch(observation, ("food", "wood", "stone"))
+        response = _consider_offers(observation, SURVIVALIST_WANTED, {"food": 50})
+        if response is not None:
+            return response
         batch = _build_toward(
             observation, resources, SURVIVALIST_ORDER, SURVIVALIST_TARGETS, ("wood", "stone", "food")
         )
@@ -168,22 +233,10 @@ class TraderAgent:
     name: str = "trader"
 
     def decide(self, observation: Observation) -> ActionBatch:
+        response = _consider_offers(observation, TRADER_WANTED)
+        if response is not None:
+            return response
         resources = _resources(observation)
-        incoming = [
-            offer
-            for offer in observation.active_offers
-            if offer["target_colony_id"] == observation.colony_id
-        ]
-        if incoming:
-            offer = incoming[0]
-            requested = offer["receive"]
-            assert isinstance(requested, dict)
-            affordable = all(int(resources.get(name, 0)) >= int(amount) for name, amount in requested.items())
-            return ActionBatch(
-                observation.turn,
-                observation.colony_id,
-                (TradeRespondAction(str(offer["id"]), affordable),),
-            )
         built = _build_toward(
             observation, resources, TRADER_ORDER, TRADER_TARGETS, ("wood", "stone", "food")
         )
@@ -244,6 +297,9 @@ class ExpansionistAgent:
     name: str = "expansionist"
 
     def decide(self, observation: Observation) -> ActionBatch:
+        response = _consider_offers(observation, EXPANSIONIST_WANTED, {"food": 15})
+        if response is not None:
+            return response
         resources = _resources(observation)
         if (
             observation.turn == 1
@@ -287,6 +343,9 @@ class MilitaristAgent:
     name: str = "militarist"
 
     def decide(self, observation: Observation) -> ActionBatch:
+        response = _consider_offers(observation, MILITARIST_WANTED, {"food": 10})
+        if response is not None:
+            return response
         unknown = [item for item in observation.known_colonies.values() if not item["contacted"]]
         if unknown:
             return ActionBatch(
@@ -295,8 +354,15 @@ class MilitaristAgent:
                 (DiplomacyAction(str(unknown[0]["id"]), "contact", "We watch the borders."),),
             )
         targets = sorted(observation.known_colonies)
-        if targets and observation.turn >= 4 and observation.turn % 4 == 0:
-            return ActionBatch(observation.turn, observation.colony_id, (RaidAction(targets[0]),))
+        at_war = [target for target in targets if observation.known_colonies[target]["relation"] == "war"]
+        if targets and not at_war:
+            return ActionBatch(
+                observation.turn,
+                observation.colony_id,
+                (DiplomacyAction(targets[0], "declare_war", "The borders are ours."),),
+            )
+        if at_war and observation.turn % 4 == 0:
+            return ActionBatch(observation.turn, observation.colony_id, (RaidAction(at_war[0]),))
         resources = _resources(observation)
         batch = _build_toward(
             observation, resources, MILITARIST_ORDER, MILITARIST_TARGETS, ("wood", "stone", "food")
