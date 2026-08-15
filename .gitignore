@@ -10,3 +10,4 @@ node_modules/
 frontend/dist/
 runs/
 .DS_Store
+.playwright-mcp/
