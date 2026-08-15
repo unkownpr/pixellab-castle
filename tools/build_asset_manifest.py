@@ -166,6 +166,7 @@ def build_manifest() -> dict[str, object]:
         "terrain.snow.base": "snow_tile.png",
         "terrain.dirt.base": "dirt_tile.png",
         "terrain.wheat.base": "wheat_tile.png",
+        "terrain.water.base": "water_tile.png",
     }
     for key, filename in named_assets.items():
         path = ROOT / filename

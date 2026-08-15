@@ -782,10 +782,13 @@ export class CastleRenderer {
   }
 
   private terrainKey(cell: VisibleCell): string {
-    const terrainFamily = cell.biome === "grassland" ? "grass" : cell.biome === "desert" ? "sand" : "snow";
-    if (cell.water) return `terrain.${terrainFamily}.wang.15`;
+    // Water gets its own full-height tile. The wang set is 48x36 while the base
+    // tiles are 48x48, so borrowing a wang tile for water sank every river cell
+    // twelve pixels and left the background showing through in a staircase along
+    // the bank.
+    if (cell.water) return "terrain.water.base";
     if (cell.biome === "desert") return "terrain.sand.base";
-    if (cell.biome === "snow") return "terrain.snow.wang.0";
+    if (cell.biome === "snow") return "terrain.snow.base";
     return "terrain.grass.base";
   }
 

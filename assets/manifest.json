@@ -4982,6 +4982,19 @@
       "source": "pixellab",
       "wang_mask": 9
     },
+    "terrain.water.base": {
+      "anchor": [
+        24,
+        42
+      ],
+      "category": "terrain",
+      "path": "water_tile.png",
+      "size": [
+        48,
+        48
+      ],
+      "source": "pixellab"
+    },
     "terrain.wheat.base": {
       "anchor": [
         24,
