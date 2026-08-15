@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import logging
 import os
 import secrets
 import time
@@ -53,6 +54,54 @@ from .schemas import (
 )
 from .mcp_server import build_mcp_server
 from .service import GameService, ServiceError, UnauthorizedError
+
+logger = logging.getLogger("castle_benchmark.api")
+
+
+class AccessLogMiddleware:
+    """Log method, path and status after each HTTP response without recording secrets."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        start = time.monotonic()
+        status = 500
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status
+            if message["type"] == "http.response.start":
+                status = message["status"]
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        except Exception:
+            logger.exception(
+                "unhandled error on %s %s", scope.get("method"), scope.get("path")
+            )
+            raise
+        finally:
+            duration_ms = (time.monotonic() - start) * 1000
+            if status >= 500:
+                logger.error(
+                    "%s %s -> %s (%.1fms)",
+                    scope.get("method"),
+                    scope.get("path"),
+                    status,
+                    duration_ms,
+                )
+            else:
+                logger.info(
+                    "%s %s -> %s (%.1fms)",
+                    scope.get("method"),
+                    scope.get("path"),
+                    status,
+                    duration_ms,
+                )
 
 
 class RequestBodyLimitMiddleware:
@@ -225,6 +274,7 @@ def create_app(
             allow_headers=["Authorization", "Content-Type"],
         )
     app.add_middleware(RequestBodyLimitMiddleware, max_bytes=MAX_PAYLOAD_BYTES)
+    app.add_middleware(AccessLogMiddleware)
 
     app.router.routes.append(mcp_app.routes[0])
 
@@ -244,6 +294,13 @@ def create_app(
 
     @app.exception_handler(ServiceError)
     async def service_error_handler(_request: Request, exc: ServiceError) -> JSONResponse:
+        logger.warning(
+            "%s %s -> %s (%s)",
+            _request.method,
+            _request.url.path,
+            exc.status_code,
+            exc.code,
+        )
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": {"code": exc.code, "message": exc.message}},
@@ -275,15 +332,26 @@ def create_app(
             return direct_peer
 
     @app.get("/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    def health() -> Response:
+        return JSONResponse(
+            content={
+                "status": "ok",
+                "version": "0.1.0",
+                "active_matches": game.match_count(),
+            }
+        )
 
     @app.get("/api/scenarios")
     def scenarios() -> tuple[dict[str, object], ...]:
         return game.list_scenarios()
 
-    def create_match(request: CreateMatchRequest, response: Response) -> CreateMatchResponse:
+    def create_match(
+        request: CreateMatchRequest,
+        response: Response,
+        authorization: str | None = Header(default=None),
+    ) -> CreateMatchResponse:
         response.headers["Cache-Control"] = "no-store"
+        authorize_orchestrator(authorization)
         return CreateMatchResponse(
             **asdict(game.create_match(request.scenario_id, request.seed, request.colony_count))
         )

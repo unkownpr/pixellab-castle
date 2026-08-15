@@ -259,12 +259,18 @@ export class BenchmarkWorkbench {
 
   private async createDevelopmentQuickPlay(): Promise<void> {
     if (this.busy) return;
+    const orchestratorInput = required<HTMLInputElement>("#orchestrator-token");
+    const orchestratorToken = orchestratorInput.value;
+    orchestratorInput.value = "";
     this.setBusy(true);
     try {
-      const created = await this.api.createDevelopmentMatch({
-        scenario_id: required<HTMLSelectElement>("#scenario-select").value,
-        seed: Number(required<HTMLInputElement>("#seed-input").value),
-      });
+      const created = await this.api.createDevelopmentMatch(
+        {
+          scenario_id: required<HTMLSelectElement>("#scenario-select").value,
+          seed: Number(required<HTMLInputElement>("#seed-input").value),
+        },
+        orchestratorToken,
+      );
       const token = created.controller_tokens.c1;
       if (!token) throw new Error(translate("ui.devCapabilityMissing"));
       this.lobby?.dispose();

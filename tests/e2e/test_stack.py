@@ -11,9 +11,10 @@ from castle_benchmark.service import GameService
 
 def test_http_human_turn_and_complete_replayable_baseline_match(tmp_path: Path) -> None:
     service = GameService()
-    client = TestClient(create_app(service))
+    client = TestClient(create_app(service, orchestrator_token="o" * 32))
     created = client.post(
         "/api/matches",
+        headers={"Authorization": f"Bearer {'o' * 32}"},
         json={"scenario_id": BASIC_SURVIVAL.id, "seed": 17, "colony_count": 4},
     ).json()
     tokens = created["controller_tokens"]

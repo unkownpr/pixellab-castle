@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import secrets
+import time
 import uuid
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
@@ -27,7 +29,12 @@ from .lobby import (
     PresenceStatus,
     SessionStatus,
     register_admin_token_resolver,
+    unregister_admin_token_resolver,
 )
+
+logger = logging.getLogger("castle_benchmark.service")
+
+MATCH_TTL_SECONDS = 3600
 
 
 class ServiceError(Exception):
@@ -135,6 +142,7 @@ class LiveMatch:
     resolved_turns: list[ResolvedTurn] = field(default_factory=list)
     persisted_turn_count: int = 0
     mcp_invocations_by_tool: dict[str, int] = field(default_factory=dict)
+    completed_at: float | None = None
     turn_lock: object = field(default_factory=RLock)
 
 
@@ -155,10 +163,59 @@ class GameService:
         self._pairing_peer_attempts: dict[str, tuple[int, float]] = {}
         self._server_mcp_invocations_by_tool: dict[str, int] = {}
         self._lobby_lock = RLock()
+        self._access_lock = RLock()
 
     @staticmethod
     def _secret_digest(secret: str) -> str:
         return sha256(secret.encode()).hexdigest()
+
+    def match_count(self) -> int:
+        with self._lobby_lock:
+            return len(self._matches)
+
+    def _discard_match(self, match_id: str) -> None:
+        """Remove every registry entry for a finished match, including its capabilities."""
+        with self._access_lock:
+            for token in tuple(self._access):
+                if self._access[token].match_id == match_id:
+                    del self._access[token]
+        self._matches.pop(match_id, None)
+        self._lobbies.pop(match_id, None)
+        unregister_admin_token_resolver(match_id)
+        for digest in tuple(self._pairings):
+            if self._pairings[digest][0] == match_id:
+                del self._pairings[digest]
+
+    def _prune_stale_pairings(self, now: float) -> None:
+        """Drop pairing grants whose slot moved on, expired, or belongs to a gone match."""
+        with self._lobby_lock:
+            for digest in tuple(self._pairings):
+                match_id, colony_id = self._pairings[digest]
+                session = self._lobbies.get(match_id)
+                if session is None:
+                    del self._pairings[digest]
+                    continue
+                slot = self._slot(session, colony_id)
+                if slot.pairing_digest != digest:
+                    del self._pairings[digest]
+                elif (
+                    slot.pairing_expires_at is not None
+                    and not slot.pairing_consumed
+                    and now >= slot.pairing_expires_at
+                ):
+                    del self._pairings[digest]
+
+    def _prune_stale_matches(self, now: float) -> None:
+        """Evict completed matches after their retention window so memory stays bounded."""
+        with self._lobby_lock:
+            for match_id in tuple(self._matches):
+                match = self._matches[match_id]
+                if (
+                    match.completed_at is not None
+                    and now - match.completed_at > MATCH_TTL_SECONDS
+                ):
+                    self._discard_match(match_id)
+        self._prune_stale_pairings(now)
 
     def _prune_pairing_attempts(self, now: float) -> None:
         cutoff = now - 60.0
@@ -203,9 +260,10 @@ class GameService:
             raise NotFoundError("lobby session does not exist") from exc
 
     def _admin_token_for_match(self, match_id: str) -> str:
-        for token, access in self._access.items():
-            if access.match_id == match_id and access.admin:
-                return token
+        with self._access_lock:
+            for token, access in self._access.items():
+                if access.match_id == match_id and access.admin:
+                    return token
         raise NotFoundError("admin capability no longer exists")
 
     def _assert_session_running(self, access: Access) -> None:
@@ -350,7 +408,8 @@ class GameService:
     ) -> str:
         token = secrets.token_urlsafe(24)
         slot.capability_digest = self._secret_digest(token)
-        self._access[token] = Access(match.id, slot.colony_id, False)
+        with self._access_lock:
+            self._access[token] = Access(match.id, slot.colony_id, False)
         return token
 
     def _submit_baseline_batches(self, match: LiveMatch, session: LobbySession) -> None:
@@ -429,6 +488,8 @@ class GameService:
         match.last_result = result
         match.resolved_turns.append(ResolvedTurn(batches, action_controller_ids, result))
         match.pending_controller_ids.clear()
+        if match.sim.state.terminal and match.completed_at is None:
+            match.completed_at = now if now is not None else time.time()
         if session is not None:
             decisions = self._decision_entries(batches, action_controller_ids, result)
             self._record_operational_event(
@@ -445,6 +506,12 @@ class GameService:
                     match,
                     "match_completed",
                     reason=match.sim.state.termination_reason,
+                )
+                logger.info(
+                    "match %s completed turn %s: %s",
+                    match.id,
+                    match.sim.state.turn,
+                    match.sim.state.termination_reason,
                 )
             elif now is not None:
                 match.deadline_at = now + match.deadline_seconds
@@ -546,10 +613,22 @@ class GameService:
             admin_capability_digest=self._secret_digest(admin_token),
             slots=slots,
         )
-        self._matches[match_id] = match
-        self._access[admin_token] = Access(match_id, None, True)
-        register_admin_token_resolver(match_id, lambda: self._admin_token_for_match(match_id))
-        self._lobbies[match_id] = session
+        self._prune_stale_matches(time.time())
+        with self._lobby_lock:
+            self._matches[match_id] = match
+            self._lobbies[match_id] = session
+            register_admin_token_resolver(
+                match_id, lambda: self._admin_token_for_match(match_id)
+            )
+        with self._access_lock:
+            self._access[admin_token] = Access(match_id, None, True)
+        logger.info(
+            "session %s created (%s, seed %s, %s colonies)",
+            match_id,
+            scenario_id,
+            seed,
+            colony_count,
+        )
         return session
 
     def configure_slot(
@@ -706,6 +785,12 @@ class GameService:
             self._begin_tenure(match, slot, now)
             self._record_controller_event(match, "controller_claimed", slot, now)
             self._record_presence_change(match, slot, previous_presence, now)
+            logger.info(
+                "colony %s claimed by controller %s in match %s",
+                colony_id,
+                slot.controller_id,
+                match_id,
+            )
             return PairingGrant(match_id, colony_id, controller_token=controller_token)
 
     def claim_slot_contract(
@@ -871,6 +956,7 @@ class GameService:
         self._record_operational_event(
             match, "turn_opened", deadline_at=match.deadline_at
         )
+        logger.info("match %s started", match.id)
         for slot in session.slots:
             self._begin_tenure(match, slot, now)
             if slot.controller_type is ControllerType.EXTERNAL:
@@ -959,9 +1045,10 @@ class GameService:
             slot = self._slot(session, colony_id)
             previous_presence = slot.presence
             self._end_tenure(match, colony_id, now)
-            for token, access in tuple(self._access.items()):
-                if not access.admin and access.match_id == match.id and access.colony_id == colony_id:
-                    del self._access[token]
+            with self._access_lock:
+                for token, access in tuple(self._access.items()):
+                    if not access.admin and access.match_id == match.id and access.colony_id == colony_id:
+                        del self._access[token]
             slot.generation += 1
             slot.controller_type = replacement_type
             slot.baseline_kind = baseline_kind
@@ -988,6 +1075,12 @@ class GameService:
                 match, "controller_replaced", slot, now, replacement_type=replacement_type.value
             )
             self._record_presence_change(match, slot, previous_presence, now)
+            logger.info(
+                "colony %s in match %s replaced with %s",
+                colony_id,
+                match.id,
+                replacement_type.value,
+            )
             return SlotMutationReceipt(
                 match.id,
                 slot.colony_id,
@@ -1006,13 +1099,14 @@ class GameService:
             slot = self._slot(session, colony_id)
             if slot.controller_type is not ControllerType.HUMAN:
                 raise ConflictError("not_human_slot", code="not_human_slot")
-            for token, access in tuple(self._access.items()):
-                if (
-                    not access.admin
-                    and access.match_id == match.id
-                    and access.colony_id == colony_id
-                ):
-                    return token
+            with self._access_lock:
+                for token, access in tuple(self._access.items()):
+                    if (
+                        not access.admin
+                        and access.match_id == match.id
+                        and access.colony_id == colony_id
+                    ):
+                        return token
             raise NotFoundError("human controller capability does not exist")
 
     def write_resolved_turns(self, admin_token: str, writer: ArtifactWriter) -> None:
@@ -1085,19 +1179,32 @@ class GameService:
         tokens = {colony_id: secrets.token_urlsafe(24) for colony_id in sim.state.colonies}
         admin_token = secrets.token_urlsafe(24)
         match = LiveMatch(match_id, sim, tokens, metrics=MetricCollector.create(sim.state))
-        self._matches[match_id] = match
-        for colony_id, token in tokens.items():
-            self._access[token] = Access(match_id, colony_id, False)
-        self._access[admin_token] = Access(match_id, None, True)
+        self._prune_stale_matches(time.time())
+        with self._lobby_lock:
+            self._matches[match_id] = match
+        with self._access_lock:
+            for colony_id, token in tokens.items():
+                self._access[token] = Access(match_id, colony_id, False)
+            self._access[admin_token] = Access(match_id, None, True)
+        logger.info(
+            "match %s created (%s, seed %s, %s colonies)",
+            match_id,
+            scenario_id,
+            seed,
+            colony_count,
+        )
         return CreatedMatch(match_id, scenario_id, tokens, admin_token)
 
     def _authorize(self, token: str) -> tuple[Access, LiveMatch]:
         matched_token: str | None = None
         if isinstance(token, str):
-            for candidate in tuple(self._access):
-                if secrets.compare_digest(candidate, token):
-                    matched_token = candidate
-        access = self._access.get(matched_token) if matched_token is not None else None
+            with self._access_lock:
+                for candidate in self._access:
+                    if secrets.compare_digest(candidate, token):
+                        matched_token = candidate
+                access = self._access.get(matched_token) if matched_token is not None else None
+        else:
+            access = None
         if access is None:
             raise UnauthorizedError("invalid controller capability")
         match = self._matches.get(access.match_id)
@@ -1113,14 +1220,15 @@ class GameService:
     def observe(self, token: str, requested_colony_id: str | None = None) -> Observation:
         access, match = self._authorize(token)
         self._assert_session_running(access)
-        if access.admin:
-            colony_id = requested_colony_id or sorted(match.sim.state.colonies)[0]
-        else:
-            colony_id = access.colony_id
-            if requested_colony_id is not None and requested_colony_id != colony_id:
-                raise ForbiddenError("controller cannot observe another colony")
-        assert colony_id is not None
-        return project_observation(match.sim.state, colony_id)
+        with match.turn_lock:
+            if access.admin:
+                colony_id = requested_colony_id or sorted(match.sim.state.colonies)[0]
+            else:
+                colony_id = access.colony_id
+                if requested_colony_id is not None and requested_colony_id != colony_id:
+                    raise ForbiddenError("controller cannot observe another colony")
+            assert colony_id is not None
+            return project_observation(match.sim.state, colony_id)
 
     def spectator_view(self, token: str) -> dict[str, object]:
         """Return the whole fog-free world, reachable only by the session admin.
@@ -1133,7 +1241,8 @@ class GameService:
         access, match = self._authorize(token)
         if not access.admin:
             raise ForbiddenError("spectator view requires an admin capability")
-        return project_spectator_view(match.sim.state)
+        with match.turn_lock:
+            return project_spectator_view(match.sim.state)
 
     def submit_actions(
         self, token: str, turn: int, actions: Iterable[dict[str, object]]
@@ -1195,21 +1304,23 @@ class GameService:
 
     def match_status(self, token: str) -> dict[str, object]:
         access, match = self._authorize(token)
-        return {
-            "match_id": match.id,
-            "scenario_id": match.sim.state.scenario_id,
-            "turn": match.sim.state.turn,
-            "terminal": match.sim.state.terminal,
-            "termination_reason": match.sim.state.termination_reason,
-            "pending_colonies": tuple(sorted(match.pending)),
-            "scope": "admin" if access.admin else access.colony_id,
-        }
+        with match.turn_lock:
+            return {
+                "match_id": match.id,
+                "scenario_id": match.sim.state.scenario_id,
+                "turn": match.sim.state.turn,
+                "terminal": match.sim.state.terminal,
+                "termination_reason": match.sim.state.termination_reason,
+                "pending_colonies": tuple(sorted(match.pending)),
+                "scope": "admin" if access.admin else access.colony_id,
+            }
 
     def last_events(self, token: str) -> tuple[dict[str, object], ...]:
         _, match = self._authorize(token)
-        if match.last_result is None:
-            return ()
-        return tuple(asdict(event) for event in match.last_result.events)
+        with match.turn_lock:
+            if match.last_result is None:
+                return ()
+            return tuple(asdict(event) for event in match.last_result.events)
 
     def record_usage(
         self,

@@ -135,9 +135,11 @@ def test_admin_snapshots_are_immutable_after_later_replacement() -> None:
 
 def test_http_contract_rejects_cross_colony_observation(service: GameService) -> None:
     """Catches HTTP adapting away the direct-service authorization rule."""
-    client = TestClient(create_app(service))
+    client = TestClient(create_app(service, orchestrator_token="o" * 32))
     created = client.post(
-        "/api/matches", json={"scenario_id": "basic-survival-v1", "seed": 79, "colony_count": 2}
+        "/api/matches",
+        headers={"Authorization": f"Bearer {'o' * 32}"},
+        json={"scenario_id": "basic-survival-v1", "seed": 79, "colony_count": 2},
     )
     assert created.status_code == 201
     payload = created.json()
@@ -174,9 +176,11 @@ def test_turn_resolves_only_after_all_controllers_submit(service: GameService) -
 
 def test_stale_http_action_has_stable_error_code(service: GameService) -> None:
     """Catches adapter-specific stale-turn behavior or unstable error text."""
-    client = TestClient(create_app(service))
+    client = TestClient(create_app(service, orchestrator_token="o" * 32))
     payload = client.post(
-        "/api/matches", json={"scenario_id": "basic-survival-v1", "seed": 89, "colony_count": 1}
+        "/api/matches",
+        headers={"Authorization": f"Bearer {'o' * 32}"},
+        json={"scenario_id": "basic-survival-v1", "seed": 89, "colony_count": 1},
     ).json()
     token = payload["controller_tokens"]["c1"]
 
@@ -539,9 +543,10 @@ def test_operations_projection_bounds_retained_events_without_resetting_sequence
 
 def test_legacy_local_match_report_remains_a_typed_http_contract() -> None:
     """Catches session-only report fields turning the legacy compatibility route into a 500."""
-    client = TestClient(create_app(GameService()))
+    client = TestClient(create_app(GameService(), orchestrator_token="o" * 32))
     created = client.post(
         "/api/matches",
+        headers={"Authorization": f"Bearer {'o' * 32}"},
         json={"scenario_id": "basic-survival-v1", "seed": 229, "colony_count": 1},
     ).json()
 

@@ -355,6 +355,38 @@ def test_remote_app_disables_legacy_bulk_capability_creation() -> None:
     assert response.status_code == 404
 
 
+def test_local_match_creation_requires_orchestrator_capability() -> None:
+    """Catches the legacy local shortcut minting capabilities without any secret."""
+    client = TestClient(create_app(GameService(), orchestrator_token=ORCHESTRATOR))
+
+    anonymous = client.post(
+        "/api/matches",
+        json={"scenario_id": "basic-survival-v1", "seed": 149, "colony_count": 1},
+    )
+    assert anonymous.status_code == 401
+    assert anonymous.json()["detail"]["code"] == "unauthorized"
+
+    authorized = client.post(
+        "/api/matches",
+        headers={"Authorization": f"Bearer {ORCHESTRATOR}"},
+        json={"scenario_id": "basic-survival-v1", "seed": 149, "colony_count": 1},
+    )
+    assert authorized.status_code == 201
+
+
+def test_local_match_creation_without_configured_capability_fails_closed() -> None:
+    """Catches local match creation falling open when no orchestrator secret is set."""
+    client = TestClient(create_app(GameService()))
+
+    response = client.post(
+        "/api/matches",
+        headers={"Authorization": f"Bearer {ORCHESTRATOR}"},
+        json={"scenario_id": "basic-survival-v1", "seed": 149, "colony_count": 1},
+    )
+
+    assert response.status_code == 401
+
+
 def test_operations_websocket_ticket_is_short_lived_and_single_use() -> None:
     """Catches browser operations auth reusing an admin secret or replayable ticket."""
     now = 400.0

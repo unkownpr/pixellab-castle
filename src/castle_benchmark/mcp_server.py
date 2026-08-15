@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import json
+import logging
 import os
 import secrets
 import time
@@ -28,6 +29,8 @@ from .schemas import (
     project_run_report,
 )
 from .service import GameService, ServiceError
+
+logger = logging.getLogger("castle_benchmark.mcp")
 
 
 class SecureFastMCP(FastMCP):
@@ -251,6 +254,7 @@ def build_mcp_server(
 
     def error(exc: ServiceError | ValidationError | ValueError) -> str:
         if isinstance(exc, ServiceError):
+            logger.warning("MCP request rejected: %s", exc.code)
             return encode({"error": {"code": exc.code, "message": exc.message}})
         return encode(
             {"error": {"code": "invalid_request", "message": "request validation failed"}}
@@ -658,6 +662,10 @@ def build_mcp_server(
 
 
 def main() -> None:
+    logging.basicConfig(
+        level=os.environ.get("CASTLE_BENCHMARK_LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
     parser = argparse.ArgumentParser(prog="castle-benchmark-mcp")
     parser.add_argument(
         "--transport",

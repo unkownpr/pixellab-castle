@@ -18,6 +18,11 @@ def register_admin_token_resolver(match_id: str, resolver: Callable[[], str]) ->
     _ADMIN_TOKEN_RESOLVERS[match_id] = resolver
 
 
+def unregister_admin_token_resolver(match_id: str) -> None:
+    """Drop the resolver for a match that is being discarded from memory."""
+    _ADMIN_TOKEN_RESOLVERS.pop(match_id, None)
+
+
 def resolve_admin_token(match_id: str) -> str:
     return _ADMIN_TOKEN_RESOLVERS[match_id]()
 

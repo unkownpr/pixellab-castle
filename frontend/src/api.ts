@@ -293,22 +293,32 @@ export class BenchmarkApi {
     return this.request("/api/scenarios");
   }
 
-  async createMatch(input: {
-    readonly scenario_id: string;
-    readonly seed: number;
-    readonly colony_count: number;
-  }): Promise<MatchCreated> {
+  async createMatch(
+    input: {
+      readonly scenario_id: string;
+      readonly seed: number;
+      readonly colony_count: number;
+    },
+    orchestratorToken?: string,
+  ): Promise<MatchCreated> {
     if (input.colony_count !== 1) {
       throw new Error("Legacy development quick play supports one colony only");
     }
-    return this.request("/api/matches", { method: "POST", body: JSON.stringify(input) });
+    return this.request(
+      "/api/matches",
+      { method: "POST", body: JSON.stringify(input) },
+      orchestratorToken,
+    );
   }
 
-  async createDevelopmentMatch(input: {
-    readonly scenario_id: string;
-    readonly seed: number;
-  }): Promise<MatchCreated> {
-    return this.createMatch({ ...input, colony_count: 1 });
+  async createDevelopmentMatch(
+    input: {
+      readonly scenario_id: string;
+      readonly seed: number;
+    },
+    orchestratorToken?: string,
+  ): Promise<MatchCreated> {
+    return this.createMatch({ ...input, colony_count: 1 }, orchestratorToken);
   }
 
   async createSession(input: CreateSessionInput, orchestratorToken?: string): Promise<SessionCreated> {

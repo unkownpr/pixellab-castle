@@ -9,7 +9,9 @@ def test_built_frontend_is_served_without_shadowing_api(tmp_path):
     client = TestClient(create_app(static_dir=tmp_path))
 
     assert "Castle Console" in client.get("/").text
-    assert client.get("/health").json() == {"status": "ok"}
+    health = client.get("/health").json()
+    assert health["status"] == "ok"
+    assert health["active_matches"] == 0
 
 
 def test_serve_command_has_safe_local_defaults():

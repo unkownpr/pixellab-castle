@@ -3,11 +3,20 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import json
+import logging
 import os
 from pathlib import Path
 
 from .runner import RunConfig, run_match, verify_replay
 from .scenarios import get_scenario
+
+
+def configure_logging() -> None:
+    level = os.environ.get("CASTLE_BENCHMARK_LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
 
 
 _SERVE_ORIGINS_ENV = "CASTLE_BENCHMARK_SERVE_ALLOWED_ORIGINS"
@@ -99,6 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    configure_logging()
     args = build_parser().parse_args()
     if args.command == "run":
         kinds = ("survivalist", "trader", "expansionist", "militarist")[: args.colonies]

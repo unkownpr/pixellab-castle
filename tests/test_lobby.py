@@ -1,11 +1,18 @@
 import json
+import time
 from dataclasses import asdict
 from hashlib import sha256
 
 import pytest
 
-from castle_benchmark.lobby import ControllerIdentity
-from castle_benchmark.service import ConflictError, ForbiddenError, GameService, ServiceError
+from castle_benchmark.lobby import ControllerIdentity, resolve_admin_token
+from castle_benchmark.service import (
+    MATCH_TTL_SECONDS,
+    ConflictError,
+    ForbiddenError,
+    GameService,
+    ServiceError,
+)
 
 
 class Clock:
@@ -179,3 +186,37 @@ def test_admin_capability_cannot_submit_lobby_gameplay(service: GameService) -> 
         service.submit_actions(session.admin_token, turn=0, actions=({"kind": "wait"},))
     with pytest.raises(ForbiddenError, match="admin capabilities cannot submit"):
         service.submit_actions(legacy.admin_token, turn=0, actions=({"kind": "wait"},))
+
+
+def test_completed_matches_are_evicted_after_retention(service: GameService) -> None:
+    """Catches finished matches and their capabilities leaking without bound."""
+    session = service.create_session("orch", "basic-survival-v1", 17, 1)
+    admin_token = session.admin_token
+    match_id = session.match_id
+
+    match = service._matches[match_id]
+    match.completed_at = time.time() - MATCH_TTL_SECONDS - 10.0
+
+    service._prune_stale_matches(time.time())
+
+    assert match_id not in service._matches
+    assert match_id not in service._lobbies
+    assert not any(access.match_id == match_id for access in service._access.values())
+    with pytest.raises(KeyError):
+        resolve_admin_token(match_id)
+    with pytest.raises(Exception, match="invalid controller capability"):
+        service._authorize(admin_token)
+
+
+def test_fresh_completed_matches_survive_pruning(service: GameService) -> None:
+    """Catches retention eviction dropping a match that has not yet aged out."""
+    session = service.create_session("orch", "basic-survival-v1", 17, 1)
+    match_id = session.match_id
+
+    match = service._matches[match_id]
+    match.completed_at = time.time() - 1.0
+
+    service._prune_stale_matches(time.time())
+
+    assert match_id in service._matches
+    assert service.match_count() == 1
