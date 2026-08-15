@@ -4,6 +4,7 @@ import type {
   OperationalEvent,
   RunReport,
 } from "./api";
+import { metricName, structureName, translate, type TranslationKey } from "./i18n";
 
 export type AgentRosterState =
   | "unassigned"
@@ -33,16 +34,16 @@ export interface AgentRosterRow {
   readonly latencyText: string;
 }
 
-const STATE_PRESENTATION: Readonly<Record<AgentRosterState, readonly [string, StatusShape]>> = {
-  unassigned: ["Unassigned", "dash"],
-  ready: ["Ready", "bar"],
-  pairing: ["Pairing", "bar"],
-  connected: ["Connected", "circle"],
-  thinking: ["Thinking", "diamond"],
-  submitted: ["Submitted", "square"],
-  "timed-out": ["Timed out", "triangle"],
-  disconnected: ["Disconnected", "ring"],
-  "taken-over": ["Taken over", "split"],
+const STATE_PRESENTATION: Readonly<Record<AgentRosterState, readonly [TranslationKey, StatusShape]>> = {
+  unassigned: ["state.unassigned", "dash"],
+  ready: ["state.ready", "bar"],
+  pairing: ["state.pairing", "bar"],
+  connected: ["state.connected", "circle"],
+  thinking: ["state.thinking", "diamond"],
+  submitted: ["state.submitted", "square"],
+  "timed-out": ["state.timedOut", "triangle"],
+  disconnected: ["state.disconnected", "ring"],
+  "taken-over": ["state.takenOver", "split"],
 };
 
 function rosterState(value: string): AgentRosterState {
@@ -77,11 +78,11 @@ export function agentRosterRows(snapshot: OperationsSnapshot, report: RunReport 
     .sort((left, right) => left.colony_id.localeCompare(right.colony_id, undefined, { numeric: true }))
     .map((slot) => {
       const state = rosterState(slot.presence);
-      const [statusText, statusShape] = STATE_PRESENTATION[state];
+      const [statusKey, statusShape] = STATE_PRESENTATION[state];
       const latencyMs = latestLatency(report, slot.colony_id, slot.generation);
       const fallbackName = slot.controller_type === "baseline"
-        ? slot.baseline_kind ?? "Baseline"
-        : slot.controller_type === "human" ? "Human operator" : "External agent";
+        ? slot.baseline_kind ?? translate("roster.baseline")
+        : slot.controller_type === "human" ? translate("roster.human") : translate("roster.external");
       return {
         colonyId: slot.colony_id,
         displayName: slot.identity?.display_name ?? fallbackName,
@@ -89,7 +90,7 @@ export function agentRosterRows(snapshot: OperationsSnapshot, report: RunReport 
         provider: slot.identity?.provider ?? "—",
         model: slot.identity?.model ?? "—",
         state,
-        statusText,
+        statusText: translate(statusKey),
         statusShape,
         generation: slot.generation,
         takenOver: state === "taken-over" || (snapshot.tenures[slot.colony_id]?.length ?? 0) > 1,
@@ -111,21 +112,21 @@ export interface TimelineItem {
   readonly tone: "neutral" | "attention" | "danger" | "success";
 }
 
-const EVENT_LABELS: Readonly<Record<string, string>> = {
-  turn_opened: "Turn opened",
-  controller_submitted: "Decision submitted",
-  turn_resolved: "Turn resolved",
-  metric_updated: "Metrics updated",
-  controller_presence_changed: "Presence changed",
-  controller_connected: "Controller connected",
-  controller_disconnected: "Controller disconnected",
-  controller_ready: "Controller ready",
-  controller_timed_out: "Controller timed out",
-  controller_replaced: "Controller replaced",
-  controller_claimed: "Controller claimed",
-  heartbeat_rejected: "Heartbeat rejected",
-  pairing_rejected: "Pairing rejected",
-  match_completed: "Match completed",
+const EVENT_LABELS: Readonly<Record<string, TranslationKey>> = {
+  turn_opened: "event.turnOpened",
+  controller_submitted: "event.controllerSubmitted",
+  turn_resolved: "event.turnResolved",
+  metric_updated: "event.metricUpdated",
+  controller_presence_changed: "event.presenceChanged",
+  controller_connected: "event.controllerConnected",
+  controller_disconnected: "event.controllerDisconnected",
+  controller_ready: "event.controllerReady",
+  controller_timed_out: "event.controllerTimedOut",
+  controller_replaced: "event.controllerReplaced",
+  controller_claimed: "event.controllerClaimed",
+  heartbeat_rejected: "event.heartbeatRejected",
+  pairing_rejected: "event.pairingRejected",
+  match_completed: "event.matchCompleted",
 };
 
 const SAFE_EVENT_FIELDS = [
@@ -164,12 +165,13 @@ export function timelineItems(events: readonly OperationalEvent[]): readonly Tim
       if (candidate.colony_id && explicitGeneration !== null) generations.set(candidate.colony_id, explicitGeneration);
       const generation = explicitGeneration ?? generations.get(colony) ?? 0;
       const current = String(candidate.data.current ?? "");
+      const labelKey = EVENT_LABELS[candidate.kind];
       return {
         sequence: candidate.sequence,
         turn: candidate.turn,
         kind: candidate.kind,
         colonyId: candidate.colony_id,
-        label: EVENT_LABELS[candidate.kind] ?? candidate.kind.replaceAll("_", " "),
+        label: labelKey ? translate(labelKey) : candidate.kind.replaceAll("_", " "),
         detail: eventDetail(candidate.data),
         segmentId: `${colony}:${generation}`,
         boundary: candidate.kind === "controller_replaced" || current === "taken_over",
@@ -195,15 +197,17 @@ function colonyDisplayName(snapshot: OperationsSnapshot, colonyId: string): stri
 function describeAction(action: Readonly<Record<string, unknown>>): string {
   const kind = String(action.kind ?? "unknown");
   switch (kind) {
-    case "wait": return "wait";
-    case "gather": return `gather (${String(action.x)}, ${String(action.y)})`;
-    case "build": return `build ${String(action.structure)} (${String(action.x)}, ${String(action.y)})`;
-    case "diplomacy": return `${String(action.operation)} ${String(action.target_colony_id)}`;
-    case "trade_offer": return `trade offer to ${String(action.target_colony_id)}`;
-    case "trade_respond": return `${action.accept ? "accept" : "decline"} offer ${String(action.offer_id)}`;
-    case "raid": return `raid ${String(action.target_colony_id)}`;
-    case "set_policy": return `policy ${String(action.policy)} = ${String(action.value)}`;
-    case "scout": return `scout (${String(action.x)}, ${String(action.y)})`;
+    case "wait": return translate("action.wait");
+    case "gather": return translate("action.gather", { x: String(action.x), y: String(action.y) });
+    case "build": return translate("action.build", { structure: structureName(String(action.structure)), x: String(action.x), y: String(action.y) });
+    case "diplomacy": return translate("action.diplomacy", { op: translate("action.contact"), target: String(action.target_colony_id) });
+    case "trade_offer": return translate("action.tradeOffer", { target: String(action.target_colony_id) });
+    case "trade_respond": return action.accept
+      ? translate("action.tradeRespond.accept")
+      : `${translate("action.tradeRespond.decline")} ${translate("action.tradeRespond.offer", { id: String(action.offer_id) })}`;
+    case "raid": return translate("action.raid", { target: String(action.target_colony_id) });
+    case "set_policy": return translate("action.setPolicy", { policy: String(action.policy), value: String(action.value) });
+    case "scout": return translate("action.scout", { x: String(action.x), y: String(action.y) });
     default: return kind;
   }
 }
@@ -366,55 +370,55 @@ export function metricSeries(report: RunReport): readonly MetricSeries[] {
   return [
     {
       axis: "survival",
-      label: "Survival",
+      label: translate("metrics.survival"),
       provenance: "simulation-raw",
       values: valuesFromNested(metrics.survival, ["turns", "population"]),
     },
     {
       axis: "growth",
-      label: "Growth · population trajectory",
+      label: translate("metrics.growth"),
       provenance: "simulation-raw",
       values: valuesFromNested(metrics.growth, ["initial_population", "peak_population", "housing"]),
     },
     {
       axis: "prosperity",
-      label: "Prosperity · raw resources",
+      label: translate("metrics.prosperity"),
       provenance: "simulation-raw",
       values: resourceValues(metrics.prosperity),
     },
     {
       axis: "diplomacy",
-      label: "Diplomacy · trade / aggression",
+      label: translate("metrics.diplomacy"),
       provenance: "simulation-raw",
       values: diplomacy,
     },
     {
       axis: "resilience",
-      label: "Resilience · unavailable as a raw axis",
+      label: translate("metrics.resilience"),
       provenance: "unavailable",
       values: [],
     },
     {
       axis: "action-validity",
-      label: "Action validity · invalid actions",
+      label: translate("metrics.actionValidity"),
       provenance: "simulation-raw",
       values: valuesFromNested(metrics.decision_quality, ["invalid_actions"]),
     },
     {
       axis: "presence",
-      label: "Timeouts / reconnects",
+      label: translate("metrics.timeouts"),
       provenance: "server-measured",
       values: segmented.presence.length ? segmented.presence : presenceValues,
     },
     {
       axis: "server-mcp",
-      label: "MCP calls",
+      label: translate("metrics.mcpCalls"),
       provenance: "server-measured",
       values: segmented.server.length ? segmented.server : valuesFromScalars(serverMeasured.mcp_calls, "mcp_calls"),
     },
     {
       axis: "adapter-usage",
-      label: "Tokens / cumulative latency",
+      label: translate("metrics.tokens"),
       provenance: "adapter-reported",
       values: segmented.adapter.length
         ? segmented.adapter
@@ -477,7 +481,7 @@ export class OperationsController {
     selectedTurn: null,
     selectedSequence: null,
     selectedTab: "decision",
-    announcement: "Operations room waiting for a sanitized snapshot.",
+    announcement: translate("ops.announcement.waiting"),
   };
 
   constructor(private readonly options: OperationsControllerOptions = {}) {}
@@ -506,7 +510,7 @@ export class OperationsController {
     return this.snapshot;
   }
 
-  reset(announcement = "Operations room waiting for a sanitized snapshot."): void {
+  reset(announcement = translate("ops.announcement.waiting")): void {
     this.snapshot = null;
     this.report = null;
     this.lastSequence = 0;
@@ -552,14 +556,14 @@ export class OperationsController {
       selectedAgentId,
       selectedSequence: selectedEvent?.sequence ?? null,
       selectedTurn: selectedEvent?.turn ?? next.turn,
-      announcement: `Turn ${next.turn}. ${roster.length} controllers in the operations roster.`,
+      announcement: translate("ops.announcement.turn", { turn: next.turn, count: roster.length }),
     };
     this.changed();
   }
 
   setReport(report: RunReport): void {
     this.report = report;
-    this.currentState = { ...this.currentState, announcement: "Raw benchmark metrics updated." };
+    this.currentState = { ...this.currentState, announcement: translate("ops.announcement.metricsUpdated") };
     this.changed();
   }
 
@@ -592,7 +596,7 @@ export class OperationsController {
     this.currentState = {
       ...this.currentState,
       selectedTurn: nextEvent.turn,
-      announcement: `${EVENT_LABELS[nextEvent.kind] ?? nextEvent.kind.replaceAll("_", " ")} · turn ${nextEvent.turn}.`,
+      announcement: `${EVENT_LABELS[nextEvent.kind] ? translate(EVENT_LABELS[nextEvent.kind]!) : nextEvent.kind.replaceAll("_", " ")} · ${translate("timeline.turn", { turn: nextEvent.turn })}`,
     };
     this.changed();
     return "applied";
@@ -667,11 +671,11 @@ export class OperationsController {
 
 type OperationsHostName = "live" | "roster" | "tabs" | "inspector" | "timeline" | "decisions" | "metrics";
 
-const TAB_LABELS: Readonly<Record<InspectorTab, string>> = {
-  decision: "Decision",
-  resources: "Resources",
-  diplomacy: "Diplomacy",
-  cost: "Cost",
+const TAB_LABELS: Readonly<Record<InspectorTab, TranslationKey>> = {
+  decision: "tab.decision",
+  resources: "tab.resources",
+  diplomacy: "tab.diplomacy",
+  cost: "tab.cost",
 };
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -711,10 +715,10 @@ function ensureOperationsHosts(root: HTMLElement): void {
 }
 
 function renderRoster(host: HTMLElement, controller: OperationsController): void {
-  const title = element("h2", "section-title", "Agent roster");
+  const title = element("h2", "section-title", translate("roster.title"));
   const list = element("div", "agent-roster");
   list.setAttribute("role", "listbox");
-  list.setAttribute("aria-label", "Agent roster");
+  list.setAttribute("aria-label", translate("roster.title"));
 
   for (const row of controller.roster) {
     const selected = row.colonyId === controller.state.selectedAgentId;
@@ -737,23 +741,23 @@ function renderRoster(host: HTMLElement, controller: OperationsController): void
     );
     const state = element("span", "agent-state", row.statusText);
     const latency = element("span", "agent-latency", row.latencyText);
-    latency.setAttribute("aria-label", `Adapter-reported cumulative latency ${row.latencyText}`);
+    latency.setAttribute("aria-label", translate("roster.latencyAria", { value: row.latencyText }));
     option.append(shape, identity, state, latency);
     list.append(option);
   }
   host.replaceChildren(title, list);
   if (!controller.roster.length) {
-    host.append(element("p", "operations-empty", "No sanitized controller snapshot yet."));
+    host.append(element("p", "operations-empty", translate("roster.empty")));
   }
 }
 
 function renderTabs(host: HTMLElement, controller: OperationsController): void {
   host.className = "inspector-tabs";
   host.setAttribute("role", "tablist");
-  host.setAttribute("aria-label", "Agent inspector");
+  host.setAttribute("aria-label", translate("intel.title"));
   const tabs = INSPECTOR_TABS.map((tab) => {
     const selected = controller.state.selectedTab === tab;
-    const button = element("button", "inspector-tab", TAB_LABELS[tab]);
+    const button = element("button", "inspector-tab", translate(TAB_LABELS[tab]));
     button.type = "button";
     button.id = `operations-tab-${tab}`;
     button.dataset.tab = tab;
@@ -773,29 +777,29 @@ function renderInspector(host: HTMLElement, controller: OperationsController): v
   host.setAttribute("role", "tabpanel");
   host.setAttribute("aria-labelledby", `operations-tab-${controller.state.selectedTab}`);
 
-  const heading = element("h3", "inspector-title", selected?.displayName ?? "No agent selected");
+  const heading = element("h3", "inspector-title", selected?.displayName ?? translate("inspector.none"));
   const body = element("dl", "inspector-spec");
   const rows: readonly [string, string][] = controller.state.selectedTab === "decision"
     ? [
-      ["Turn", controller.state.selectedTurn === null ? "—" : String(controller.state.selectedTurn)],
-      ["State", selected?.statusText ?? "—"],
-      ["Controller", selected?.controllerType ?? "—"],
+      [translate("inspector.turn"), controller.state.selectedTurn === null ? "—" : String(controller.state.selectedTurn)],
+      [translate("inspector.state"), selected?.statusText ?? "—"],
+      [translate("inspector.controller"), selected?.controllerType ?? "—"],
     ]
     : controller.state.selectedTab === "resources"
       ? [
-        ["Source", "Authoritative colony observation"],
-        ["Detail", "Select a visible world cell or load a replay frame."],
+        [translate("inspector.source"), translate("inspector.sourceValue")],
+        [translate("inspector.detail"), translate("inspector.detailValue")],
       ]
       : controller.state.selectedTab === "diplomacy"
         ? [
-          ["Raw axes", "Trade and aggression"],
-          ["Composite score", "Unavailable — not inferred"],
+          [translate("inspector.rawAxes"), translate("inspector.rawAxesValue")],
+          [translate("inspector.composite"), translate("inspector.compositeValue")],
         ]
         : [
-          ["Provider", selected?.provider ?? "—"],
-          ["Model", selected?.model ?? "—"],
-          ["Latency", selected?.latencyText ?? "—"],
-          ["Attribution", "Adapter-reported unless marked server-measured"],
+          [translate("inspector.provider"), selected?.provider ?? "—"],
+          [translate("inspector.model"), selected?.model ?? "—"],
+          [translate("inspector.latency"), selected?.latencyText ?? "—"],
+          [translate("inspector.attribution"), translate("inspector.attributionValue")],
         ];
   for (const [term, description] of rows) {
     body.append(element("dt", undefined, term), element("dd", undefined, description));
@@ -804,9 +808,9 @@ function renderInspector(host: HTMLElement, controller: OperationsController): v
 }
 
 function renderTimeline(host: HTMLElement, controller: OperationsController): void {
-  const title = element("h2", "section-title", "Service timeline");
+  const title = element("h2", "section-title", translate("timeline.title"));
   const list = element("ol", "operations-timeline");
-  list.setAttribute("aria-label", "Ordered service events");
+  list.setAttribute("aria-label", translate("timeline.aria"));
   for (const [index, item] of controller.timeline.entries()) {
     const selected = item.sequence === controller.state.selectedSequence;
     const row = element("li", "timeline-item");
@@ -819,11 +823,11 @@ function renderTimeline(host: HTMLElement, controller: OperationsController): vo
     action.dataset.sequence = String(item.sequence);
     action.tabIndex = selected || (controller.state.selectedSequence === null && index === 0) ? 0 : -1;
 
-    const marker = element("span", "timeline-marker", item.boundary ? "Tenure" : `#${item.sequence}`);
+    const marker = element("span", "timeline-marker", item.boundary ? translate("timeline.tenure") : `#${item.sequence}`);
     const description = element("span", "timeline-description");
     description.append(
       element("strong", undefined, item.label),
-      element("span", undefined, `Turn ${item.turn}${item.colonyId ? ` · ${item.colonyId}` : ""}`),
+      element("span", undefined, `${translate("timeline.turn", { turn: item.turn })}${item.colonyId ? ` · ${item.colonyId}` : ""}`),
     );
     if (item.detail) description.append(element("small", undefined, item.detail));
     action.append(marker, description);
@@ -831,22 +835,22 @@ function renderTimeline(host: HTMLElement, controller: OperationsController): vo
     list.append(row);
   }
   if (!controller.timeline.length) {
-    list.append(element("li", "operations-empty", "No ordered service events yet."));
+    list.append(element("li", "operations-empty", translate("timeline.empty")));
   }
   host.replaceChildren(title, list);
 }
 
 function renderDecisionFeed(host: HTMLElement, controller: OperationsController): void {
-  const title = element("h2", "section-title", "Decision feed");
+  const title = element("h2", "section-title", translate("decisions.title"));
   const list = element("ol", "decision-feed");
-  list.setAttribute("aria-label", "Submitted actions as they resolve");
+  list.setAttribute("aria-label", translate("decisions.aria"));
   for (const item of controller.decisions) {
     const row = element("li", "decision-item");
     row.dataset.colonyId = item.colonyId;
     const header = element("span", "decision-header");
     header.append(
       element("strong", undefined, item.displayName),
-      element("span", undefined, `Turn ${item.turn}`),
+      element("span", undefined, translate("timeline.turn", { turn: item.turn })),
     );
     const body = element("span", "decision-body", item.actions.join(" · ") || "—");
     const outcomes = element("span", "decision-outcomes");
@@ -855,7 +859,7 @@ function renderDecisionFeed(host: HTMLElement, controller: OperationsController)
         element(
           "span",
           `decision-result decision-${result.status}`,
-          result.status === "accepted" ? "accepted" : `rejected · ${result.detail}`,
+          result.status === "accepted" ? translate("decisions.accepted") : translate("decisions.rejected", { detail: result.detail }),
         ),
       );
     }
@@ -863,7 +867,7 @@ function renderDecisionFeed(host: HTMLElement, controller: OperationsController)
     list.append(row);
   }
   if (!controller.decisions.length) {
-    list.append(element("li", "operations-empty", "No resolved decisions yet."));
+    list.append(element("li", "operations-empty", translate("decisions.empty")));
   }
   host.replaceChildren(title, list);
 }
@@ -873,10 +877,17 @@ function metricValueLabel(value: MetricValue, controller: OperationsController):
   const provider = value.provider ?? agent?.provider;
   const model = value.model ?? agent?.model;
   const generation = value.segmentId?.split(":").at(-1);
-  const segment = generation ? ` · generation ${generation}` : "";
+  const segment = generation ? ` · ${translate("metrics.generation", { n: generation })}` : "";
   const attribution = provider && provider !== "—" ? ` · ${provider}/${model ?? "—"}` : "";
-  return `${value.colonyId}${segment}${attribution} · ${value.metric.replaceAll("_", " ")}`;
+  return `${value.colonyId}${segment}${attribution} · ${metricName(value.metric)}`;
 }
+
+const PROVENANCE_KEYS: Readonly<Record<MetricProvenance, TranslationKey>> = {
+  "simulation-raw": "metrics.provenance.simulationRaw",
+  "server-measured": "metrics.provenance.serverMeasured",
+  "adapter-reported": "metrics.provenance.adapterReported",
+  unavailable: "metrics.provenance.unavailable",
+};
 
 function renderMetrics(host: HTMLElement, controller: OperationsController): void {
   const previousValues = new Map(
@@ -884,16 +895,17 @@ function renderMetrics(host: HTMLElement, controller: OperationsController): voi
       .map((node) => [node.dataset.metricKey ?? "", node.textContent ?? ""] as const),
   );
   host.className = "metric-dock";
-  host.setAttribute("aria-label", "Raw benchmark metric comparison");
+  host.setAttribute("aria-label", translate("metrics.aria"));
+  const title = element("h2", "section-title", translate("metrics.title"));
   if (!controller.metrics.length) {
-    host.replaceChildren(element("p", "operations-empty", "Raw run report not available."));
+    host.replaceChildren(title, element("p", "operations-empty", translate("metrics.empty2")));
     return;
   }
   const sections = controller.metrics.map((series) => {
     const section = element("section", "metric-series");
     section.dataset.axis = series.axis;
     const heading = element("h3", undefined, series.label);
-    const provenance = element("p", "metric-provenance", series.provenance);
+    const provenance = element("p", "metric-provenance", translate(PROVENANCE_KEYS[series.provenance]));
     const values = element("ul", "metric-values");
     const maximum = Math.max(1, ...series.values.map(({ value }) => value));
     for (const value of series.values) {
@@ -918,7 +930,7 @@ function renderMetrics(host: HTMLElement, controller: OperationsController): voi
     section.append(heading, provenance, values);
     return section;
   });
-  host.replaceChildren(...sections);
+  host.replaceChildren(title, ...sections);
 }
 
 export function renderOperationsRoom(root: HTMLElement, controller: OperationsController): void {

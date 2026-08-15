@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   AdminWebSocketMessage,
@@ -19,6 +19,7 @@ import {
   renderOperationsRoom,
   timelineItems,
 } from "../src/operations";
+import { setLanguage } from "../src/i18n";
 
 const identity = {
   display_name: "Codex North",
@@ -100,6 +101,10 @@ function snapshot(
 afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
+});
+
+beforeEach(() => {
+  setLanguage("en");
 });
 
 describe("operations projections", () => {

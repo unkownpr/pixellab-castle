@@ -3,128 +3,145 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Castle Benchmark · Agent Operations</title>
+    <title data-i18n="app.title">Castle Benchmark · Agent Operations</title>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <div id="app">
       <header class="topbar">
         <div class="identity">
-          <strong>Castle Benchmark</strong>
-          <small>Agent operations · protocol v1.1</small>
+          <strong data-i18n="app.name">Castle Benchmark</strong>
+          <small data-i18n="app.subtitle">Agent operations · protocol v1.1</small>
         </div>
-        <div class="run-state" role="status">
-          <span class="status-shape" data-status-shape="circle" aria-hidden="true"></span>
-          <span id="connection-label">Yerel çekirdek hazır</span>
+        <div class="topbar-status">
+          <div id="match-state" class="match-state" role="status" data-phase="idle">
+            <span class="status-shape" data-status-shape="dash" aria-hidden="true"></span>
+            <span id="match-state-label" data-i18n="matchState.idle">Boşta — başlamak için bir lobby oluştur.</span>
+          </div>
+          <div class="run-state" role="status">
+            <span class="status-shape" data-status-shape="circle" aria-hidden="true"></span>
+            <span id="connection-label" data-i18n="connection.localReady">Yerel çekirdek hazır</span>
+          </div>
+          <label class="language-switch">
+            <span class="visually-hidden" data-i18n="language.switch">Dil</span>
+            <select id="language-select" aria-label="Dil">
+              <option value="tr" selected>Türkçe</option>
+              <option value="en">English</option>
+            </select>
+          </label>
         </div>
       </header>
 
       <main class="workbench">
         <aside class="panel setup-panel" aria-labelledby="setup-title">
           <header class="panel-heading">
-            <h1 id="setup-title">Operasyonu kur</h1>
-            <p>Lobby ve çalışan karşılaşma aynı güvenli kabuğu paylaşır.</p>
+            <h1 id="setup-title" data-i18n="setup.title">Operasyonu kur</h1>
+            <p data-i18n="setup.subtitle">Lobby ve çalışan karşılaşma aynı güvenli kabuğu paylaşır.</p>
           </header>
           <form id="match-form">
-            <label>Senaryo<select id="scenario-select" name="scenario"></select></label>
+            <label><span data-i18n="setup.scenario">Senaryo</span><select id="scenario-select" name="scenario"></select></label>
             <div class="field-pair">
-              <label>Seed<input id="seed-input" name="seed" type="number" value="17" /></label>
-              <label>Koloni<input id="colony-input" name="colonies" type="number" min="1" max="8" value="1" /></label>
+              <label><span data-i18n="setup.seed">Seed</span><input id="seed-input" name="seed" type="number" value="17" /></label>
+              <label><span data-i18n="setup.colonies">Koloni</span><input id="colony-input" name="colonies" type="number" min="1" max="8" value="1" /></label>
             </div>
-            <label>Tur süresi (saniye)<input id="deadline-input" name="deadline" type="number" min="1" max="300" value="30" /></label>
-            <label>Orchestrator capability
+            <label><span data-i18n="setup.deadline">Tur süresi (saniye)</span><input id="deadline-input" name="deadline" type="number" min="1" max="300" value="30" /></label>
+            <label><span data-i18n="setup.orchestratorLabel">Orchestrator capability</span>
               <input id="orchestrator-token" name="orchestrator-token" type="password" autocomplete="off" aria-describedby="orchestrator-help" />
             </label>
-            <small id="orchestrator-help">Yalnız session oluşturma isteğinde kullanılır; gönderimden sonra alan silinir ve depolanmaz.</small>
-            <button class="primary" type="submit">Agent lobby oluştur</button>
-            <button id="dev-quick-play" type="button">Tek kolonili hızlı oyun</button>
-            <label class="replay-import">Replay snapshots.jsonl
+            <small id="orchestrator-help" data-i18n="setup.orchestratorHelp">Sunucunun orkestratör anahtarı (CASTLE_BENCHMARK_ORCHESTRATOR_TOKEN). Yalnız session oluşturma isteğinde kullanılır; gönderimden sonra alan silinir ve depolanmaz.</small>
+            <button class="primary" type="submit" data-i18n="setup.createButton">Agent lobby oluştur</button>
+            <button id="dev-quick-play" type="button" data-i18n="setup.quickPlay">Tek kolonili hızlı oyun</button>
+            <label class="replay-import"><span data-i18n="setup.replayImport">Replay snapshots.jsonl</span>
               <input id="replay-input" type="file" accept=".jsonl,application/json" />
             </label>
             <div id="replay-controls" class="replay-controls" hidden>
-              <button id="replay-prev" type="button" aria-label="Önceki replay turu">←</button>
-              <input id="replay-range" type="range" min="0" max="0" value="0" aria-label="Replay turu" />
-              <button id="replay-next" type="button" aria-label="Sonraki replay turu">→</button>
+              <button id="replay-prev" type="button" data-i18n-aria-label="replay.prev" aria-label="Önceki replay turu">←</button>
+              <input id="replay-range" type="range" min="0" max="0" value="0" data-i18n-aria-label="replay.scrub" aria-label="Replay turu" />
+              <button id="replay-next" type="button" data-i18n-aria-label="replay.next" aria-label="Sonraki replay turu">→</button>
             </div>
           </form>
           <div id="lobby-root" aria-live="polite"></div>
-          <section data-operations-roster aria-label="Agent roster"></section>
+          <section data-operations-roster data-i18n-aria-label="roster.title" aria-label="Agent roster"></section>
         </aside>
 
-        <section id="world-stage" class="map-panel" aria-label="Oyun alanı">
+        <section id="world-stage" class="map-panel" data-i18n-aria-label="map.region" aria-label="Oyun alanı">
           <div class="map-toolbar">
-            <span id="scenario-label">BİLİNMEYEN BİYOM</span>
-            <span id="fog-label">SİS: AKTİF</span>
+            <span id="scenario-label" data-i18n="map.unknownBiome">BİLİNMEYEN BİYOM</span>
+            <span id="fog-label" data-i18n="map.fogActive">SİS: AKTİF</span>
           </div>
-          <div id="world-host" class="world-host"><div class="map-placeholder">Harita çekirdeği bekliyor</div></div>
-          <div class="world-controls" role="group" aria-label="Harita görünümü">
-            <button type="button" data-world-view="pan-up" aria-label="Haritayı yukarı kaydır">↑</button>
-            <button type="button" data-world-view="pan-left" aria-label="Haritayı sola kaydır">←</button>
-            <button type="button" data-world-view="reset" aria-label="Harita görünümünü sıfırla">⌂</button>
-            <button type="button" data-world-view="pan-right" aria-label="Haritayı sağa kaydır">→</button>
-            <button type="button" data-world-view="pan-down" aria-label="Haritayı aşağı kaydır">↓</button>
-            <button type="button" data-world-view="zoom-out" aria-label="Haritayı uzaklaştır">−</button>
-            <button type="button" data-world-view="zoom-in" aria-label="Haritayı yakınlaştır">+</button>
+          <div id="world-host" class="world-host"><div class="map-placeholder" data-i18n="map.placeholder">Harita çekirdeği bekliyor</div></div>
+          <div class="world-controls" role="group" data-i18n-aria-label="map.viewControls" aria-label="Harita görünümü">
+            <button type="button" data-world-view="pan-up" data-i18n-aria-label="map.panUp" aria-label="Haritayı yukarı kaydır">↑</button>
+            <button type="button" data-world-view="pan-left" data-i18n-aria-label="map.panLeft" aria-label="Haritayı sola kaydır">←</button>
+            <button type="button" data-world-view="reset" data-i18n-aria-label="map.reset" aria-label="Harita görünümünü sıfırla">⌂</button>
+            <button type="button" data-world-view="pan-right" data-i18n-aria-label="map.panRight" aria-label="Haritayı sağa kaydır">→</button>
+            <button type="button" data-world-view="pan-down" data-i18n-aria-label="map.panDown" aria-label="Haritayı aşağı kaydır">↓</button>
+            <button type="button" data-world-view="zoom-out" data-i18n-aria-label="map.zoomOut" aria-label="Haritayı uzaklaştır">−</button>
+            <button type="button" data-world-view="zoom-in" data-i18n-aria-label="map.zoomIn" aria-label="Haritayı yakınlaştır">+</button>
           </div>
           <div class="map-key" aria-hidden="true">
-            <span><i class="key-resource"></i>Kaynak</span>
-            <span><i class="key-colony"></i>Koloni</span>
+            <span><i class="key-resource"></i><span data-i18n="map.keyResource">Kaynak</span></span>
+            <span><i class="key-colony"></i><span data-i18n="map.keyColony">Koloni</span></span>
           </div>
         </section>
 
         <aside class="panel intel-panel" aria-labelledby="intel-title">
           <header class="panel-heading">
-            <h2 id="intel-title">Agent inspector</h2>
-            <p>Karar, gözlem ve maliyet attribution’ı tek seçime bağlıdır.</p>
+            <h2 id="intel-title" data-i18n="intel.title">Agent inspector</h2>
+            <p data-i18n="intel.subtitle">Karar, gözlem ve maliyet atfı tek seçime bağlıdır.</p>
           </header>
           <div data-operations-tabs></div>
           <section data-operations-inspector></section>
 
           <section class="ledger" aria-labelledby="ledger-title">
-            <div class="section-label"><span id="ledger-title">Koloni gözlemi</span><output id="turn-output">T–</output></div>
-            <div id="colony-stats" class="empty-state">Henüz aktif koloni yok.</div>
+            <div class="section-label"><span id="ledger-title" data-i18n="ledger.title">Koloni gözlemi</span><output id="turn-output">T–</output></div>
+            <div id="colony-stats" class="empty-state" data-i18n="ledger.empty">Henüz aktif koloni yok.</div>
           </section>
           <section class="selection" aria-labelledby="selection-title">
-            <div class="section-label"><span id="selection-title">Seçili hücre</span><output id="cell-coordinates">—</output></div>
-            <p id="cell-details">Haritada bir hücre seç.</p>
+            <div class="section-label"><span id="selection-title" data-i18n="selection.title">Seçili hücre</span><output id="cell-coordinates">—</output></div>
+            <p id="cell-details" data-i18n="selection.hint">Haritada bir hücre seç.</p>
           </section>
 
           <section class="human-controls" aria-labelledby="human-controls-title">
-            <div class="section-label"><span id="human-controls-title">İnsan kontrolü</span></div>
+            <div class="section-label"><span id="human-controls-title" data-i18n="humanControls.title">İnsan kontrolü</span></div>
             <div class="action-grid" id="action-grid">
-              <button data-action="wait" disabled>Bekle</button>
-              <button data-action="gather" disabled>Topla</button>
-              <button data-action="build" disabled>İnşa et</button>
-              <button data-action="policy" disabled>Politika uygula</button>
-              <button data-action="diplomacy" disabled>Temas kur</button>
-              <button data-action="trade" disabled>Ticaret öner</button>
-              <button data-action="raid" disabled>Baskın yap</button>
+              <button data-action="wait" disabled data-i18n="actions.wait">Bekle</button>
+              <button data-action="gather" disabled data-i18n="actions.gather">Topla</button>
+              <button data-action="build" disabled data-i18n="actions.build">İnşa et</button>
+              <button data-action="policy" disabled data-i18n="actions.policy">Politika uygula</button>
+              <button data-action="diplomacy" disabled data-i18n="actions.diplomacy">Temas kur</button>
+              <button data-action="trade" disabled data-i18n="actions.trade">Ticaret öner</button>
+              <button data-action="raid" disabled data-i18n="actions.raid">Baskın yap</button>
             </div>
-            <label class="build-choice">Yapı<select id="structure-select">
-              <option value="house">Ev</option><option value="well">Kuyu</option>
-              <option value="farm">Tarla</option><option value="warehouse">Depo</option>
-              <option value="market">Pazar</option><option value="lumber_camp">Kereste kampı</option>
-              <option value="quarry">Taş ocağı</option><option value="mine">Maden</option>
-              <option value="workshop">Atölye</option><option value="clinic">Klinik</option>
-              <option value="barracks">Kışla</option><option value="watchtower">Gözetleme kulesi</option>
+            <label class="build-choice"><span data-i18n="buildChoice.label">Yapı</span><select id="structure-select">
+              <option value="house" data-i18n="structures.house">Ev</option>
+              <option value="well" data-i18n="structures.well">Kuyu</option>
+              <option value="farm" data-i18n="structures.farm">Tarla</option>
+              <option value="warehouse" data-i18n="structures.warehouse">Depo</option>
+              <option value="market" data-i18n="structures.market">Pazar</option>
+              <option value="lumber_camp" data-i18n="structures.lumberCamp">Kereste kampı</option>
+              <option value="quarry" data-i18n="structures.quarry">Taş ocağı</option>
+              <option value="mine" data-i18n="structures.mine">Maden</option>
+              <option value="workshop" data-i18n="structures.workshop">Atölye</option>
+              <option value="clinic" data-i18n="structures.clinic">Klinik</option>
+              <option value="barracks" data-i18n="structures.barracks">Kışla</option>
+              <option value="watchtower" data-i18n="structures.watchtower">Gözetleme kulesi</option>
             </select></label>
           </section>
 
           <section data-operations-timeline></section>
-          <section data-operations-decisions aria-label="Decision feed"></section>
-          <section data-operations-metrics aria-label="Ham benchmark metrikleri">
-            <p class="operations-empty">Run report henüz hazır değil.</p>
-          </section>
+          <section data-operations-decisions data-i18n-aria-label="decisions.title" aria-label="Decision feed"></section>
+          <section data-operations-metrics data-i18n-aria-label="metrics.title" aria-label="Ham benchmark metrikleri"></section>
           <section class="event-section" aria-labelledby="local-events-title">
-            <div class="section-label"><span id="local-events-title">Yerel bildirimler</span><button id="clear-events" type="button">Temizle</button></div>
-            <ol id="event-log" class="event-log"><li class="muted">Karşılaşma başlamadı.</li></ol>
+            <div class="section-label"><span id="local-events-title" data-i18n="events.title">Yerel bildirimler</span><button id="clear-events" type="button" data-i18n="events.clear">Temizle</button></div>
+            <ol id="event-log" class="event-log"><li class="muted" data-i18n="events.empty">Karşılaşma başlamadı.</li></ol>
           </section>
         </aside>
       </main>
 
       <footer class="score-rail">
-        <p class="operations-live" data-operations-live aria-live="polite" aria-atomic="true">Sanitized operations snapshot bekleniyor.</p>
-        <p class="benchmark-note">Deterministik · tekrar oynatılabilir · seed kontrollü</p>
+        <p class="operations-live" data-operations-live aria-live="polite" aria-atomic="true" data-i18n="footer.waiting">Sanitized operations snapshot bekleniyor.</p>
+        <p class="benchmark-note" data-i18n="footer.note">Deterministik · tekrar oynatılabilir · seed kontrollü</p>
       </footer>
     </div>
     <script type="module" src="/src/main.ts"></script>

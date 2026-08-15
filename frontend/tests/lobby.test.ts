@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BenchmarkApi, type LobbySnapshot, type PairingGrant } from "../src/api";
 import {
@@ -10,6 +10,7 @@ import {
   setHumanActionControlsEnabled,
   type LobbyApi,
 } from "../src/lobby";
+import { setLanguage } from "../src/i18n";
 
 const externalSlot = {
   colony_id: "c1",
@@ -45,6 +46,10 @@ afterEach(() => {
   document.body.replaceChildren();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+beforeEach(() => {
+  setLanguage("en");
 });
 
 describe("lobby projections", () => {
