@@ -3873,7 +3873,7 @@
     "prop.bush": {
       "anchor": [
         16,
-        26
+        30
       ],
       "category": "prop",
       "path": "bush_s.png",
@@ -3886,7 +3886,7 @@
     "prop.monument": {
       "anchor": [
         20,
-        58
+        60
       ],
       "category": "prop",
       "path": "monument_s.png",
@@ -3899,7 +3899,7 @@
     "prop.pine.grass": {
       "anchor": [
         20,
-        58
+        60
       ],
       "category": "prop",
       "path": "pine_s.png",
@@ -3911,8 +3911,8 @@
     },
     "prop.pine.grass.small": {
       "anchor": [
-        16,
-        42
+        15,
+        44
       ],
       "category": "prop",
       "path": "pine_small.png",
@@ -3925,7 +3925,7 @@
     "prop.pine.snow": {
       "anchor": [
         20,
-        58
+        60
       ],
       "category": "prop",
       "path": "pine_snow.png",
@@ -3937,8 +3937,8 @@
     },
     "prop.pine.snow.small": {
       "anchor": [
-        16,
-        42
+        15,
+        44
       ],
       "category": "prop",
       "path": "pine_small_snow.png",
@@ -3951,7 +3951,7 @@
     "prop.rock": {
       "anchor": [
         24,
-        34
+        36
       ],
       "category": "prop",
       "path": "rock_s.png",
@@ -3964,7 +3964,7 @@
     "structure.barracks.operational": {
       "anchor": [
         32,
-        58
+        56
       ],
       "category": "structure",
       "job_id": "70aed882-12dc-4eb0-a344-c316c19288ff",
@@ -3979,7 +3979,7 @@
     "structure.clinic.operational": {
       "anchor": [
         32,
-        58
+        57
       ],
       "category": "structure",
       "job_id": "2c346f25-00b3-4c13-b3b0-364bb8d496d1",
@@ -3993,8 +3993,8 @@
     },
     "structure.farm.operational": {
       "anchor": [
-        32,
-        58
+        31,
+        54
       ],
       "category": "structure",
       "job_id": "1817f04c-9ebc-46ee-b898-fdf7b77c08de",
@@ -4009,7 +4009,7 @@
     "structure.gate.operational": {
       "anchor": [
         32,
-        58
+        59
       ],
       "category": "structure",
       "job_id": "e825a8f1-8985-4694-8f38-1bc6ec920fe0",
@@ -4024,7 +4024,7 @@
     "structure.generic.ruined": {
       "anchor": [
         32,
-        58
+        59
       ],
       "category": "structure",
       "job_id": "c204cb23-5f3a-42b1-bd67-b68e348fe8f1",
@@ -4038,8 +4038,8 @@
     },
     "structure.headquarters.operational": {
       "anchor": [
-        48,
-        90
+        49,
+        86
       ],
       "category": "structure",
       "path": "keep_s.png",
@@ -4052,7 +4052,7 @@
     "structure.house.desert.operational": {
       "anchor": [
         32,
-        58
+        50
       ],
       "category": "structure",
       "path": "house_desert.png",
@@ -4065,7 +4065,7 @@
     "structure.house.grass.operational": {
       "anchor": [
         32,
-        58
+        57
       ],
       "category": "structure",
       "path": "house_s.png",
@@ -4078,7 +4078,7 @@
     "structure.lumber_camp.operational": {
       "anchor": [
         32,
-        58
+        54
       ],
       "category": "structure",
       "job_id": "836a89a2-026e-41ef-985a-7b11959e9435",
@@ -4092,8 +4092,8 @@
     },
     "structure.market.operational": {
       "anchor": [
-        32,
-        58
+        30,
+        54
       ],
       "category": "structure",
       "job_id": "359172f2-faa8-4176-a638-a5873203ee8e",
@@ -4108,7 +4108,7 @@
     "structure.mine.operational": {
       "anchor": [
         32,
-        58
+        60
       ],
       "category": "structure",
       "job_id": "c25b74e9-69ef-46d5-a93e-6d8041b1211b",
@@ -4123,7 +4123,7 @@
     "structure.quarry.operational": {
       "anchor": [
         32,
-        58
+        59
       ],
       "category": "structure",
       "job_id": "b9b09f95-14ab-4d6f-b161-995dcbcb53b7",
@@ -4137,8 +4137,8 @@
     },
     "structure.wall.operational": {
       "anchor": [
-        32,
-        58
+        31,
+        50
       ],
       "category": "structure",
       "job_id": "03529795-71db-453b-a673-86db0251f9aa",
@@ -4168,7 +4168,7 @@
     "structure.watchtower.operational": {
       "anchor": [
         32,
-        58
+        60
       ],
       "category": "structure",
       "job_id": "adc24de9-97ac-47ad-bd5f-fdeb7323184b",
@@ -4183,7 +4183,7 @@
     "structure.well.operational": {
       "anchor": [
         32,
-        58
+        55
       ],
       "category": "structure",
       "job_id": "87256ba1-2482-4a7f-82a8-a0cbd7a6500e",
@@ -4198,7 +4198,7 @@
     "structure.workshop.operational": {
       "anchor": [
         32,
-        58
+        57
       ],
       "category": "structure",
       "job_id": "ec425b4c-8783-465c-a8fb-65de4f27f483",

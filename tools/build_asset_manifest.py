@@ -70,6 +70,18 @@ def entry(path: Path, anchor: tuple[int, int], **metadata: object) -> dict[str, 
     }
 
 
+def anchor_for(image: Image.Image, category: str) -> tuple[int, int]:
+    """Anchor a standing sprite on its opaque bounds so its base sits on the tile
+    centre. A blanket height - 6 assumes six pixels of bottom padding that the art
+    does not always carry, which let taller buildings sink or float a few pixels and
+    made a row of buildings read as a pile. Terrain tiles and full-screen effects are
+    not standing sprites, so they keep the legacy centre-bottom convention."""
+    if category in ("structure", "prop"):
+        bbox = image.getbbox() or (0, 0, image.width, image.height)
+        return ((bbox[0] + bbox[2]) // 2, bbox[3])
+    return (image.width // 2, image.height - 6)
+
+
 def build_manifest() -> dict[str, object]:
     assets: dict[str, dict[str, object]] = {}
 
@@ -171,7 +183,7 @@ def build_manifest() -> dict[str, object]:
     for key, filename in named_assets.items():
         path = ROOT / filename
         with Image.open(path) as image:
-            anchor = (image.width // 2, image.height - 6)
+            anchor = anchor_for(image, key.split(".", 1)[0])
         assets[key] = entry(path, anchor, category=key.split(".", 1)[0])
 
     lineage_path = ROOT / "assets" / "generated" / "lineage.json"
@@ -189,7 +201,7 @@ def build_manifest() -> dict[str, object]:
         if not path.exists():
             continue
         with Image.open(path) as image:
-            anchor = (image.width // 2, image.height - 6)
+            anchor = anchor_for(image, generated["key"].split(".", 1)[0])
         assets[generated["key"]] = entry(
             path,
             anchor,
