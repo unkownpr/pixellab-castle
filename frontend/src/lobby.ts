@@ -8,6 +8,7 @@ import {
   type LobbySlot,
   type PairingGrant,
 } from "./api";
+import { translate, type TranslationKey } from "./i18n";
 
 export type PairingProvider = "codex" | "claude" | "opencode" | "generic";
 export type LobbyRowState =
@@ -139,11 +140,11 @@ export function pairingInstructions(
   return [
     providerConfig(provider, endpoint),
     "",
-    "1. Connect this agent runtime to the MCP endpoint above.",
-    `2. Call benchmark.claim_slot with: ${claim}`,
-    "3. Keep the returned capability only inside the agent runtime.",
-    "4. Call benchmark.heartbeat with status ready before the operator starts the match.",
-    "5. During the match, use benchmark.observe, benchmark.submit_actions, and benchmark.record_usage.",
+    `1. ${translate("pairing.step1")}`,
+    `2. ${translate("pairing.step2")} ${claim}`,
+    `3. ${translate("pairing.step3")}`,
+    `4. ${translate("pairing.step4")}`,
+    `5. ${translate("pairing.step5")}`,
   ].join("\n");
 }
 
@@ -153,14 +154,14 @@ export function lobbyRows(
 ): readonly LobbyRow[] {
   return snapshot.slots.map((slot) => {
     if (slot.controller_type === "human") {
-      return { slot, state: "ready", ready: true, statusText: "Human controller ready" };
+      return { slot, state: "ready", ready: true, statusText: translate("lobby.humanReady") };
     }
     if (slot.controller_type === "baseline") {
       return {
         slot,
         state: "ready",
         ready: true,
-        statusText: `Baseline ready — ${slot.baseline_kind ?? "random_valid"}`,
+        statusText: translate("lobby.baselineReady", { kind: slot.baseline_kind ?? "random_valid" }),
       };
     }
     if (slot.presence === "disconnected") {
@@ -168,27 +169,27 @@ export function lobbyRows(
         slot,
         state: "attention",
         ready: false,
-        statusText: "Disconnected — choose a fallback or pair again",
+        statusText: translate("lobby.disconnected"),
       };
     }
     if (slot.controller_id !== null && slot.last_heartbeat_at !== null) {
-      return { slot, state: "ready", ready: true, statusText: "External agent ready" };
+      return { slot, state: "ready", ready: true, statusText: translate("lobby.externalReady") };
     }
     if (slot.controller_id !== null) {
       return {
         slot,
         state: "waiting-heartbeat",
         ready: false,
-        statusText: "Claimed — waiting for ready heartbeat",
+        statusText: translate("lobby.claimed"),
       };
     }
     if (slot.pairing_expires_at !== null && slot.pairing_expires_at <= nowSeconds) {
-      return { slot, state: "expired", ready: false, statusText: "Pairing expired" };
+      return { slot, state: "expired", ready: false, statusText: translate("lobby.expired") };
     }
     if (slot.pairing_active) {
-      return { slot, state: "pairing", ready: false, statusText: "Pairing code active" };
+      return { slot, state: "pairing", ready: false, statusText: translate("lobby.pairingActive") };
     }
-    return { slot, state: "unassigned", ready: false, statusText: "External agent unassigned" };
+    return { slot, state: "unassigned", ready: false, statusText: translate("lobby.unassigned") };
   });
 }
 
@@ -201,9 +202,9 @@ function controllerSelect(
   select.id = `slot-controller-${index}`;
   select.dataset.controllerSelect = slot.colony_id;
   for (const [value, label] of [
-    ["human", "Human"],
-    ["baseline", "Deterministic baseline"],
-    ["external", "External MCP agent"],
+    ["human", translate("lobby.human")],
+    ["baseline", translate("lobby.deterministicBaseline")],
+    ["external", translate("lobby.externalMCP")],
   ] as const) {
     const option = element("option", label);
     option.value = value;
@@ -245,7 +246,7 @@ export function renderLobby(
   section.dataset.matchId = snapshot.match_id;
   section.setAttribute("aria-labelledby", "lobby-title");
 
-  const heading = element("h2", `Agent lobby · ${snapshot.scenario_id}`);
+  const heading = element("h2", translate("lobby.title", { scenario: snapshot.scenario_id }));
   heading.id = "lobby-title";
   section.append(heading);
 
@@ -258,7 +259,7 @@ export function renderLobby(
     item.dataset.colonyId = row.slot.colony_id;
     item.dataset.slotState = row.state;
 
-    item.append(element("h3", `Colony ${row.slot.colony_id}`));
+    item.append(element("h3", translate("lobby.colony", { id: row.slot.colony_id })));
     const status = element("p", row.statusText);
     status.dataset.slotStatus = row.slot.colony_id;
     item.append(status);
@@ -272,22 +273,22 @@ export function renderLobby(
     }
 
     const assignment = controllerSelect(row.slot, index, humanColonyId);
-    item.append(appendLabel(assignment, "Controller", assignment.id));
+    item.append(appendLabel(assignment, translate("lobby.controller"), assignment.id));
     const baseline = baselineSelect(row.slot, index);
-    item.append(appendLabel(baseline, "Baseline", baseline.id));
-    item.append(actionButton("configure", row.slot.colony_id, "Apply assignment"));
+    item.append(appendLabel(baseline, translate("lobby.baseline"), baseline.id));
+    item.append(actionButton("configure", row.slot.colony_id, translate("lobby.apply")));
 
-    const pairing = actionButton("pair", row.slot.colony_id, "Generate pairing code");
+    const pairing = actionButton("pair", row.slot.colony_id, translate("lobby.pair"));
     pairing.disabled = row.slot.controller_type !== "external";
     item.append(pairing);
 
     const fallback = element("div");
     fallback.className = "slot-fallbacks";
-    fallback.setAttribute("aria-label", `Fallback or replacement for ${row.slot.colony_id}`);
+    fallback.setAttribute("aria-label", translate("lobby.fallbackAria", { id: row.slot.colony_id }));
     fallback.append(
-      actionButton("replace-human", row.slot.colony_id, "Take over as human"),
-      actionButton("replace-baseline", row.slot.colony_id, "Use baseline fallback"),
-      actionButton("replace-external", row.slot.colony_id, "Rotate external pairing"),
+      actionButton("replace-human", row.slot.colony_id, translate("lobby.takeOver")),
+      actionButton("replace-baseline", row.slot.colony_id, translate("lobby.baselineFallback")),
+      actionButton("replace-external", row.slot.colony_id, translate("lobby.rotateExternal")),
     );
     item.append(fallback);
     list.append(item);
@@ -298,18 +299,18 @@ export function renderLobby(
   const readiness = element(
     "p",
     waiting === 0
-      ? "All slots ready — start explicitly when prepared"
-      : `${waiting} slot${waiting === 1 ? "" : "s"} waiting`,
+      ? translate("lobby.allReady")
+      : translate(waiting === 1 ? "lobby.oneWaiting" : "lobby.manyWaiting", { count: waiting }),
   );
   readiness.dataset.readiness = "";
   readiness.setAttribute("aria-live", "polite");
   section.append(readiness);
 
-  const start = element("button", snapshot.status === "running" ? "Match running" : "Start match");
+  const start = element("button", snapshot.status === "running" ? translate("lobby.running") : translate("lobby.start"));
   start.type = "button";
   start.dataset.action = "start";
   start.disabled = waiting > 0 || snapshot.status !== "draft";
-  const refresh = element("button", "Refresh lobby status");
+  const refresh = element("button", translate("lobby.refresh"));
   refresh.type = "button";
   refresh.dataset.action = "refresh";
   section.append(start, refresh);
@@ -332,14 +333,14 @@ export function renderPairingGrant(
   const panel = element("section");
   panel.className = "pairing-grant";
   panel.dataset.pairingColony = grant.colony_id;
-  panel.setAttribute("aria-label", `Pairing grant for ${grant.colony_id}`);
+  panel.setAttribute("aria-label", translate("pairing.aria", { colony: grant.colony_id }));
 
-  panel.append(element("h3", `Pair external agent · ${grant.colony_id}`));
+  panel.append(element("h3", translate("pairing.title", { colony: grant.colony_id })));
   const code = element("code", grant.pairing_code);
   code.dataset.pairingCode = "";
   panel.append(code);
 
-  const countdown = element("p", `Expires in ${duration(grant.expires_at - nowSeconds)}`);
+  const countdown = element("p", translate("pairing.expires", { duration: duration(grant.expires_at - nowSeconds) }));
   countdown.dataset.pairingCountdown = "";
   countdown.dataset.expiresAt = String(grant.expires_at);
   countdown.setAttribute("aria-live", "polite");
@@ -358,16 +359,16 @@ export function renderPairingGrant(
     option.selected = choice.value === provider;
     providerSelect.append(option);
   }
-  panel.append(appendLabel(providerSelect, "Agent provider", providerSelect.id));
+  panel.append(appendLabel(providerSelect, translate("pairing.provider"), providerSelect.id));
 
   const instructions = element("pre", pairingInstructions(grant, provider, endpoint));
   instructions.dataset.pairingInstructions = "";
   panel.append(instructions);
 
   for (const [target, label] of [
-    ["code", "Copy code"],
-    ["endpoint", "Copy endpoint"],
-    ["config", "Copy provider instructions"],
+    ["code", translate("pairing.copyCode")],
+    ["endpoint", translate("pairing.copyEndpoint")],
+    ["config", translate("pairing.copyConfig")],
   ] as const) {
     const copy = element("button", label);
     copy.type = "button";
@@ -472,7 +473,7 @@ export class LobbyController {
       throw this.policyError();
     }
     if (!this.snapshot || lobbyRows(this.snapshot, this.now()).some((row) => !row.ready)) {
-      throw new Error("All lobby slots must be ready before starting");
+      throw new Error(translate("lobby.startNotReady"));
     }
     await this.api.startSession(matchId, adminToken);
     const human = this.snapshot.slots.find((slot) => slot.controller_type === "human");
@@ -522,8 +523,12 @@ export class LobbyController {
     this.root.replaceChildren();
   }
 
+  rerender(): void {
+    this.render();
+  }
+
   private credentials(): { readonly matchId: string; readonly adminToken: string } {
-    if (!this.matchId || !this.adminToken) throw new Error("No active lobby session");
+    if (!this.matchId || !this.adminToken) throw new Error(translate("lobby.noSession"));
     return { matchId: this.matchId, adminToken: this.adminToken };
   }
 
@@ -641,7 +646,7 @@ export class LobbyController {
   }
 
   private policyError(): Error {
-    const error = new Error("This browser can manage only one human slot");
+    const error = new Error(translate("lobby.policyOneHuman"));
     this.errorMessage = error.message;
     if (this.snapshot) {
       this.render();
@@ -702,14 +707,14 @@ export class LobbyController {
 
   private async copy(colonyId: string, target: string): Promise<void> {
     const grant = this.grants.get(colonyId);
-    if (!grant || grant.expires_at <= this.now()) throw new Error("Pairing grant expired");
+    if (!grant || grant.expires_at <= this.now()) throw new Error(translate("lobby.expired"));
     const provider = this.providers.get(colonyId) ?? "codex";
     const text = target === "code"
       ? grant.pairing_code
       : target === "endpoint"
         ? this.endpoint
         : pairingInstructions(grant, provider, this.endpoint);
-    if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is unavailable");
+    if (!navigator.clipboard?.writeText) throw new Error(translate("lobby.clipboardUnavailable"));
     await navigator.clipboard.writeText(text);
   }
 }
