@@ -1,13 +1,37 @@
-.worktrees/
+# Python
 .venv/
 __pycache__/
+*.pyc
 .pytest_cache/
 .hypothesis/
 .mypy_cache/
 .ruff_cache/
-*.pyc
+
+# Node
 node_modules/
 frontend/dist/
+
+# Benchmark output
 runs/
-.DS_Store
+
+# Working trees and scratch space
+.worktrees/
+.scratch/
 .playwright-mcp/
+
+# Render experiments. iso.py and its callers are prototype compositors kept for
+# reference and smoke-tested by tests/test_assets.py, but their output belongs on
+# disk rather than in history. The three renders that test asserts about are the
+# exception and stay tracked.
+*_half.png
+*_sheet.png
+*_zoom.png
+crop_*.png
+castle_scene.png
+castle_2d_final.png
+test_room.png
+wang_smooth.png
+walk_8dir.gif
+
+# macOS
+.DS_Store
