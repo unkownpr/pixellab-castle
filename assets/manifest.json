@@ -2939,6 +2939,36 @@
       ],
       "source": "pixellab"
     },
+    "effect.damage": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "job_id": "2e04fa70-86a0-40fb-a9ad-47acdeaf6408",
+      "path": "assets/generated/effects/damage.png",
+      "seed": 8134,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "effect.extinguish": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "job_id": "8968b6ec-9681-40da-a46c-93c82ea262d1",
+      "path": "assets/generated/effects/extinguish.png",
+      "seed": 8133,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
     "effect.fire.base": {
       "anchor": [
         32,
@@ -3110,6 +3140,21 @@
       "job_id": "3ae81e16-ab23-4233-a066-ddd0a4c86fde",
       "path": "assets/generated/effects/fire/frame_8.png",
       "seed": 8123,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "effect.repair": {
+      "anchor": [
+        32,
+        58
+      ],
+      "category": "effect",
+      "job_id": "48a5bce5-69ca-4c8c-8450-2130b8525c70",
+      "path": "assets/generated/effects/repair.png",
+      "seed": 8132,
       "size": [
         64,
         64
@@ -4114,6 +4159,21 @@
       "job_id": "c25b74e9-69ef-46d5-a93e-6d8041b1211b",
       "path": "assets/generated/buildings/mine.png",
       "seed": 8106,
+      "size": [
+        64,
+        64
+      ],
+      "source": "pixellab"
+    },
+    "structure.monument.operational": {
+      "anchor": [
+        32,
+        62
+      ],
+      "category": "structure",
+      "job_id": "0d50ec61-452c-45db-b7d5-6d4e25a75ab7",
+      "path": "assets/generated/buildings/monument.png",
+      "seed": 8130,
       "size": [
         64,
         64
@@ -5266,6 +5326,42 @@
         "prompt": "flame flickering upward while dark smoke curls and embers rise, seamless loop",
         "seed": 8123,
         "selected_output": "assets/generated/effects/fire/frame_8.png"
+      },
+      {
+        "job_id": "0d50ec61-452c-45db-b7d5-6d4e25a75ab7",
+        "key": "structure.monument.operational",
+        "output_index": 0,
+        "path": "assets/generated/buildings/monument.png",
+        "prompt": "towering medieval stone victory monument with carved obelisk, banners and stepped plinth, readable isometric game building sprite",
+        "seed": 8130,
+        "selected_output": "assets/generated/buildings/monument.png"
+      },
+      {
+        "job_id": "48a5bce5-69ca-4c8c-8450-2130b8525c70",
+        "key": "effect.repair",
+        "output_index": 0,
+        "path": "assets/generated/effects/repair.png",
+        "prompt": "repair scaffold with hammer, fresh timber planks and bright spark flecks, isolated overlay on transparent background",
+        "seed": 8132,
+        "selected_output": "assets/generated/effects/repair.png"
+      },
+      {
+        "job_id": "8968b6ec-9681-40da-a46c-93c82ea262d1",
+        "key": "effect.extinguish",
+        "output_index": 0,
+        "path": "assets/generated/effects/extinguish.png",
+        "prompt": "bucket of water thrown as a splash arc with steam and droplets dousing embers, isolated effect on transparent background",
+        "seed": 8133,
+        "selected_output": "assets/generated/effects/extinguish.png"
+      },
+      {
+        "job_id": "2e04fa70-86a0-40fb-a9ad-47acdeaf6408",
+        "key": "effect.damage",
+        "output_index": 0,
+        "path": "assets/generated/effects/damage.png",
+        "prompt": "damage decal only: jagged black cracks, soot smudges and two thin smoke wisps, no building, floating on empty transparent space",
+        "seed": 8134,
+        "selected_output": "assets/generated/effects/damage.png"
       }
     ],
     "inventory_checked_at": "2026-08-13",

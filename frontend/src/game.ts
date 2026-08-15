@@ -715,6 +715,32 @@ export class CastleRenderer {
         }
       }
 
+      if (structure.status === "repairing") {
+        const repairEffect = await this.spriteFor("effect.repair", position);
+        if (version !== this.renderVersion) {
+          repairEffect?.destroy();
+          return;
+        }
+        if (repairEffect) {
+          repairEffect.alpha = 0.62;
+          repairEffect.zIndex = depth + 0.35;
+          structureLayer.addChild(repairEffect);
+        }
+      }
+
+      if (structure.status === "damaged") {
+        const damageEffect = await this.spriteFor("effect.damage", position);
+        if (version !== this.renderVersion) {
+          damageEffect?.destroy();
+          return;
+        }
+        if (damageEffect) {
+          damageEffect.alpha = 0.72;
+          damageEffect.zIndex = depth + 0.32;
+          structureLayer.addChild(damageEffect);
+        }
+      }
+
       if (structure.colony_id === this.focusedColonyId) {
         const focus = new Graphics()
           .circle(position.x, position.y - 8, 22)

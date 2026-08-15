@@ -181,6 +181,16 @@ def build_rules() -> dict[str, object]:
                 for resource, kind in engine.GATHER_EXTRACTION_STRUCTURES.items()
             },
             "penalty_divisor": engine.GATHER_PENALTY_DIVISOR,
+            "radius": engine.GATHER_RADIUS,
+        },
+        "repair": {
+            "cost_numerator": systems.REPAIR_COST_NUMERATOR,
+            "cost_denominator": systems.REPAIR_COST_DENOMINATOR,
+            "turns": systems.REPAIR_TURNS,
+        },
+        "extinguish": {
+            "water_cost": systems.EXTINGUISH_WATER_COST,
+            "water_cost_with_well": systems.EXTINGUISH_WATER_COST_WITH_WELL,
         },
         "labour": {
             "workers_per_producer": engine.WORKERS_PER_PRODUCER,

@@ -208,6 +208,9 @@ function describeAction(action: Readonly<Record<string, unknown>>): string {
     case "raid": return translate("action.raid", { target: String(action.target_colony_id) });
     case "set_policy": return translate("action.setPolicy", { policy: String(action.policy), value: String(action.value) });
     case "scout": return translate("action.scout", { x: String(action.x), y: String(action.y) });
+    case "repair": return translate("action.repair", { structure_id: String(action.structure_id) });
+    case "extinguish": return translate("action.extinguish", { structure_id: String(action.structure_id) });
+    case "demolish": return translate("action.demolish", { structure_id: String(action.structure_id) });
     default: return kind;
   }
 }

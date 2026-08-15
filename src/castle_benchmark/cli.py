@@ -7,7 +7,7 @@ import logging
 import os
 from pathlib import Path
 
-from .runner import RunConfig, run_match, verify_replay
+from .runner import RunConfig, SuiteConfig, run_match, run_suite, verify_replay
 from .scenarios import get_scenario
 
 
@@ -79,6 +79,18 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--seed", type=int, default=17)
     run.add_argument("--colonies", type=int, default=4)
     run.add_argument("--output", type=Path, default=Path("runs"))
+    suite = commands.add_parser("suite")
+    suite.add_argument("--scenario", default="basic-survival-v1")
+    suite.add_argument("--seeds", default="11,17,23,29,37", help="comma-separated seed list")
+    suite.add_argument("--rotations", default="all", help="'all' or number of rotations")
+    suite.add_argument("--colonies", type=int, default=4)
+    suite.add_argument(
+        "--controllers",
+        default="survivalist,trader,expansionist,militarist",
+        help="comma-separated controller kinds",
+    )
+    suite.add_argument("--output", type=Path, default=Path("runs"))
+    suite.add_argument("--baseline-reference", type=Path, help="baseline suite.json for z-score comparison")
     replay = commands.add_parser("replay")
     replay.add_argument("run_dir", type=Path)
     serve = commands.add_parser("serve")
@@ -116,6 +128,28 @@ def main() -> None:
             RunConfig(get_scenario(args.scenario), args.seed, args.colonies, args.output, kinds)
         )
         print(report.report_path)
+    elif args.command == "suite":
+        # Parse comma-separated seed list
+        seeds = tuple(int(s.strip()) for s in args.seeds.split(","))
+        # Parse comma-separated controllers
+        controllers = tuple(c.strip() for c in args.controllers.split(","))
+        # Get scenario or use procedural-v1
+        if args.scenario == "procedural-v1":
+            scenario_arg: str | object = "procedural-v1"
+        else:
+            scenario_arg = get_scenario(args.scenario)
+        suite_output = run_suite(
+            SuiteConfig(
+                scenario_arg,
+                seeds,
+                args.rotations,
+                args.colonies,
+                controllers,
+                args.output,
+                args.baseline_reference,
+            )
+        )
+        print(f"{args.output}/suite.json")
     elif args.command == "replay":
         verification = verify_replay(args.run_dir)
         print("ok" if verification.ok else f"mismatch:{verification.first_mismatch_turn}")

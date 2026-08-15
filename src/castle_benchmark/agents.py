@@ -8,8 +8,10 @@ from .actions import (
     ActionBatch,
     BuildAction,
     DiplomacyAction,
+    ExtinguishAction,
     GatherAction,
     RaidAction,
+    RepairAction,
     ScoutAction,
     TradeOfferAction,
     TradeRespondAction,
@@ -19,7 +21,13 @@ from .domain import Position, StructureKind
 from .engine import SCOUT_FOOD_COST
 from .observation import Observation
 from .scenarios import get_scenario
-from .systems import BUILD_COSTS
+from .systems import (
+    BUILD_COSTS,
+    EXTINGUISH_WATER_COST,
+    EXTINGUISH_WATER_COST_WITH_WELL,
+    GATHER_RADIUS,
+    repair_cost,
+)
 from .world import derive_seed
 
 
@@ -29,26 +37,117 @@ class Controller(Protocol):
     def decide(self, observation: Observation) -> ActionBatch: ...
 
 
+def _worked_positions(observation: Observation) -> list[Position]:
+    """Positions a colony can currently reach with a gather.
+
+    A gather only lands within ``GATHER_RADIUS`` of one of the colony's own
+    OPERATIONAL structures, so a baseline that picks the map's first visible
+    resource cell now spends its turns collecting ``out_of_range`` rejections and
+    starves. Reading the anchors out of the observation keeps the baselines honest:
+    they plan against the same rule an external agent has to.
+    """
+    return [
+        Position(int(structure["x"]), int(structure["y"]))
+        for structure in observation.visible_structures
+        if structure["colony_id"] == observation.colony_id
+        and structure["status"] == "operational"
+    ]
+
+
+def _reach(anchors: list[Position], x: int, y: int) -> int | None:
+    """Manhattan distance to the nearest anchor, or None when nothing reaches it."""
+    if not anchors:
+        return None
+    nearest = min(abs(x - anchor.x) + abs(y - anchor.y) for anchor in anchors)
+    return nearest if nearest <= GATHER_RADIUS else None
+
+
 def _resource_cell(observation: Observation, preferred: tuple[str, ...]) -> Position | None:
+    anchors = _worked_positions(observation)
     for resource in preferred:
-        cells = [cell for cell in observation.visible_cells if cell["resource"] == resource and cell["resource_amount"]]
+        cells = [
+            (reach, int(cell["y"]), int(cell["x"]))
+            for cell in observation.visible_cells
+            if cell["resource"] == resource
+            and cell["resource_amount"]
+            and (reach := _reach(anchors, int(cell["x"]), int(cell["y"]))) is not None
+        ]
         if cells:
-            selected = min(cells, key=lambda item: (int(item["y"]), int(item["x"])))
-            return Position(int(selected["x"]), int(selected["y"]))
+            _, y, x = min(cells)
+            return Position(x, y)
     return None
 
 
 def _buildable_cell(observation: Observation) -> Position | None:
+    """Pick a buildable cell, preferring one that stays inside the worked radius.
+
+    Building at the map's first free cell used to be harmless; with the gather
+    radius it decides what the colony can reach for the rest of the match, so an
+    outpost is placed as close to the existing anchors as the map allows.
+    """
     occupied = {(int(item["x"]), int(item["y"])) for item in observation.visible_structures}
+    anchors = _worked_positions(observation)
     candidates = [
-        cell
+        (
+            min((abs(int(cell["x"]) - anchor.x) + abs(int(cell["y"]) - anchor.y) for anchor in anchors), default=0),
+            int(cell["y"]),
+            int(cell["x"]),
+        )
         for cell in observation.visible_cells
         if cell["buildable"] and (int(cell["x"]), int(cell["y"])) not in occupied
     ]
     if not candidates:
         return None
-    selected = min(candidates, key=lambda item: (int(item["y"]), int(item["x"])))
-    return Position(int(selected["x"]), int(selected["y"]))
+    _, y, x = min(candidates)
+    return Position(x, y)
+
+
+def _recovery_batch(observation: Observation, resources: dict[str, int]) -> ActionBatch | None:
+    """Put out a fire, or repair what is broken, before doing anything else.
+
+    A baseline that never answers a hazard is not a baseline, it is a control for
+    "what happens if nobody reacts": fire ruins a structure in three ticks and a
+    damaged producer stays idle for the rest of the match, so the scripted colonies
+    would collapse for reasons that say nothing about the strategy they encode.
+    Fire comes first because it is the only damage that keeps compounding.
+    """
+    own = [
+        structure
+        for structure in observation.visible_structures
+        if structure["colony_id"] == observation.colony_id
+    ]
+    burning = sorted(
+        (structure for structure in own if structure["status"] == "burning"),
+        key=lambda structure: str(structure["id"]),
+    )
+    if burning:
+        has_well = any(
+            structure["kind"] == StructureKind.WELL.value and structure["status"] == "operational"
+            for structure in own
+        )
+        cost = EXTINGUISH_WATER_COST_WITH_WELL if has_well else EXTINGUISH_WATER_COST
+        if int(resources.get("water", 0)) >= cost:
+            return ActionBatch(
+                observation.turn,
+                observation.colony_id,
+                (ExtinguishAction(str(burning[0]["id"])),),
+            )
+    damaged = sorted(
+        (structure for structure in own if structure["status"] == "damaged"),
+        key=lambda structure: str(structure["id"]),
+    )
+    for structure in damaged:
+        build_cost = BUILD_COSTS.get(StructureKind(str(structure["kind"])))
+        if build_cost is None:
+            continue
+        cost = repair_cost(build_cost)
+        if all(int(resources.get(name, 0)) >= amount for name, amount in cost.items()):
+            return ActionBatch(
+                observation.turn,
+                observation.colony_id,
+                (RepairAction(str(structure["id"])),),
+            )
+    return None
 
 
 def _resources(observation: Observation) -> dict[str, int]:
@@ -176,6 +275,12 @@ SURVIVALIST_WANTED = frozenset({"food", "water", "wood", "stone"})
 EXPANSIONIST_WANTED = frozenset({"food", "water", "wood", "stone", "ore", "tools"})
 MILITARIST_WANTED = frozenset({"food", "water"})
 
+# Every baseline drinks before it does anything else once its water falls below this.
+# A colony consumes population // 4 water a turn and a well only makes two, so twenty
+# units is roughly five turns of slack for a mid-sized colony: enough warning to walk to
+# the river, not so much that the colony spends the match hauling water it does not need.
+THIRST_THRESHOLD = 20
+
 # The survivalist tops its larder up whenever food falls below this.
 SURVIVALIST_GATHER_BELOW = 25
 
@@ -213,8 +318,13 @@ class SurvivalistAgent:
 
     def decide(self, observation: Observation) -> ActionBatch:
         resources = _resources(observation)
+        recovery = _recovery_batch(observation, resources)
+        if recovery is not None:
+            return recovery
+        if int(resources["water"]) < SURVIVALIST_GATHER_BELOW:
+            return _gather_batch(observation, ("water", "food", "wood"))
         if int(resources["food"]) < SURVIVALIST_GATHER_BELOW:
-            return _gather_batch(observation, ("food", "wood", "stone"))
+            return _gather_batch(observation, ("food", "water", "wood", "stone"))
         population = int(observation.colony["population"])
         larder = population * FOOD_EATEN_PER_COLONIST * SURVIVALIST_FOOD_RESERVE_TURNS
         response = _consider_offers(observation, SURVIVALIST_WANTED, {"food": larder})
@@ -250,10 +360,15 @@ class TraderAgent:
     name: str = "trader"
 
     def decide(self, observation: Observation) -> ActionBatch:
+        resources = _resources(observation)
+        recovery = _recovery_batch(observation, resources)
+        if recovery is not None:
+            return recovery
+        if int(resources["water"]) < THIRST_THRESHOLD:
+            return _gather_batch(observation, ("water", "food"))
         response = _consider_offers(observation, TRADER_WANTED)
         if response is not None:
             return response
-        resources = _resources(observation)
         built = _build_toward(
             observation, resources, TRADER_ORDER, TRADER_TARGETS, ("wood", "stone", "food")
         )
@@ -314,10 +429,15 @@ class ExpansionistAgent:
     name: str = "expansionist"
 
     def decide(self, observation: Observation) -> ActionBatch:
+        resources = _resources(observation)
+        recovery = _recovery_batch(observation, resources)
+        if recovery is not None:
+            return recovery
+        if int(resources["water"]) < THIRST_THRESHOLD:
+            return _gather_batch(observation, ("water", "food"))
         response = _consider_offers(observation, EXPANSIONIST_WANTED, {"food": 15})
         if response is not None:
             return response
-        resources = _resources(observation)
         if (
             observation.turn == 1
             and not observation.scouts
@@ -362,6 +482,12 @@ class MilitaristAgent:
     name: str = "militarist"
 
     def decide(self, observation: Observation) -> ActionBatch:
+        resources = _resources(observation)
+        recovery = _recovery_batch(observation, resources)
+        if recovery is not None:
+            return recovery
+        if int(resources["water"]) < THIRST_THRESHOLD:
+            return _gather_batch(observation, ("water", "food"))
         response = _consider_offers(observation, MILITARIST_WANTED, {"food": 10})
         if response is not None:
             return response

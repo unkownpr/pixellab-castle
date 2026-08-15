@@ -6,6 +6,7 @@ from castle_benchmark.actions import ActionBatch, GatherAction
 from castle_benchmark.domain import Position, Structure, StructureKind, StructureStatus
 from castle_benchmark.engine import (
     GATHER_PENALTY_DIVISOR,
+    GATHER_RADIUS,
     GATHER_YIELD_PER_ACTION,
     SimCore,
 )
@@ -57,7 +58,15 @@ def set_scouting(sim: SimCore, colony_id: str, scouting: int) -> None:
 def set_cell_resource(sim: SimCore, colony_id: str, resource: str, amount: int = 100) -> Position:
     colony = sim.state.colonies[colony_id]
     world = sim.state.world
-    position = next(iter(sorted(colony.known_cells, key=lambda p: (p.y, p.x))))
+    spawn = colony.spawn
+    # Find the first known cell within GATHER_RADIUS of the spawn (HQ location)
+    position = next(
+        iter(sorted(
+            (p for p in colony.known_cells
+             if abs(p.x - spawn.x) + abs(p.y - spawn.y) <= GATHER_RADIUS),
+            key=lambda p: (p.y, p.x)
+        ))
+    )
     cells = dict(world.cells)
     cells[position] = replace(world.cells[position], resource=resource, resource_amount=amount)
     sim.state = replace(sim.state, world=replace(world, cells=cells))

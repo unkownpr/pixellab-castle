@@ -124,6 +124,9 @@ def project_observation(state: MatchState, colony_id: str) -> Observation:
             "raid",
             "set_policy",
             "scout",
+            "repair",
+            "extinguish",
+            "demolish",
         ),
     )
 

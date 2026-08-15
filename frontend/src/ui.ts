@@ -38,7 +38,7 @@ import {
 } from "./i18n";
 import { updateMatchStateIndicator, type MatchPhase } from "./matchState";
 
-type ActionKind = "wait" | "gather" | "build" | "policy" | "diplomacy" | "trade" | "raid";
+type ActionKind = "wait" | "gather" | "build" | "policy" | "diplomacy" | "trade" | "raid" | "repair" | "extinguish" | "demolish";
 
 function required<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -364,6 +364,25 @@ export class BenchmarkWorkbench {
         return { kind: "trade_offer", target_colony_id: targetId, give: [["wood", 2]], receive: [["food", 2]], message: translate("ui.tradeMessage") };
       }
       return { kind: "raid", target_colony_id: targetId };
+    }
+    if (["repair", "extinguish", "demolish"].includes(kind)) {
+      const ownStructures = this.observation?.visible_structures.filter(
+        (s) => s.colony_id === this.observation?.colony_id,
+      ) ?? [];
+      let target = null;
+      if (kind === "repair") {
+        target = ownStructures.find((s) => s.status === "damaged");
+      } else if (kind === "extinguish") {
+        target = ownStructures.find((s) => s.status === "burning");
+      } else {
+        // demolish: any non-HQ structure
+        target = ownStructures.find((s) => s.kind !== "headquarters");
+      }
+      if (!target) {
+        this.log(translate("ui.selectCellFirst"), "warning");
+        return null;
+      }
+      return { kind, structure_id: target.id };
     }
     if (!this.selectedCell) {
       this.log(translate("ui.selectCellFirst"), "warning");

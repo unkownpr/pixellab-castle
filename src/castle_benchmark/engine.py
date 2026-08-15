@@ -6,10 +6,15 @@ from typing import Iterable, Mapping
 from .actions import (
     ActionBatch,
     BuildAction,
+    DemolishAction,
     DiplomacyAction,
+    DiplomacyRespondAction,
+    ExtinguishAction,
     GameAction,
     GatherAction,
+    MessageAction,
     RaidAction,
+    RepairAction,
     ScoutAction,
     SetPolicyAction,
     TradeOfferAction,
@@ -18,7 +23,9 @@ from .actions import (
 )
 from .domain import (
     ColonyState,
+    DiplomacyProposal,
     MatchState,
+    Message,
     MilitaryPosture,
     Position,
     RelationStatus,
@@ -31,26 +38,44 @@ from .domain import (
 )
 from .scenarios import Scenario
 from .systems import (
+    ALLIANCE_UPKEEP_INFLUENCE,
     BARRACKS_RAID_LOOT_REDUCTION,
     BUILD_COSTS,
     BUILD_TURNS,
     CLINIC_HEALS_PER_TURN,
     EXPOSED_SICKENED_PER_TURN,
+    EXTINGUISH_WATER_COST,
+    EXTINGUISH_WATER_COST_WITH_WELL,
+    FIRE_IGNITION_CADENCE_BONUS,
+    GATHER_RADIUS,
     HOUSING_BY_STRUCTURE,
+    MIN_ABLE_COLONISTS,
     NATURAL_RECOVERY_PER_TURN,
     PERISHABLES,
     RAID_FOOD_LOOT,
-    RAID_INJURIES,
+    RAID_INFLUENCE_COST_SURPRISE,
+    RAID_INJURIES_FAILURE_ATTACKER,
+    RAID_INJURIES_FAILURE_DEFENDER,
+    RAID_INJURIES_SUCCESS_ATTACKER,
+    RAID_INJURIES_SUCCESS_DEFENDER,
+    RAID_PARTY_FOOD,
+    RAID_PARTY_SIZE,
     RAID_STRUCTURE_DAMAGE,
+    RAID_WOOD_LOOT,
+    REPAIR_COST_DENOMINATOR,
+    REPAIR_COST_NUMERATOR,
+    REPAIR_TURNS,
     SICKENED_PER_SHORTFALL_TURN,
     TRADE_RATIO_BASE,
     TRADE_RATIO_MARKET,
+    TREATY_BREAK_INFLUENCE,
     WALL_RAID_DAMAGE_REDUCTION,
     can_afford,
     cap_production_delta,
     has_operational,
     perishable_capacity,
     production_delta,
+    repair_cost,
     resource_delta,
     scaled_receipt,
     staffed_production,
@@ -58,7 +83,7 @@ from .systems import (
     trade_blocked,
     within_capacity,
 )
-from .world import WorldCell, WorldState, generate_world, rotated_spawns, visible_cells
+from .world import WorldCell, WorldState, derive_seed, generate_world, rotated_spawns, visible_cells
 
 
 # Exploration and sight constants. Kept as named module-level values so the
@@ -148,9 +173,9 @@ class SimCore:
         self._next_scout = len(state.scouts) + 1
 
     @classmethod
-    def create(cls, scenario: Scenario, seed: int, colony_count: int) -> SimCore:
+    def create(cls, scenario: Scenario, seed: int, colony_count: int, rotation: int = 0) -> SimCore:
         world = generate_world(scenario, seed)
-        spawns = rotated_spawns(scenario, rotation=0, colony_count=colony_count)
+        spawns = rotated_spawns(scenario, rotation=rotation, colony_count=colony_count)
         colonies: dict[str, ColonyState] = {}
         structures: dict[str, Structure] = {}
         ids = tuple(f"c{index + 1}" for index in range(colony_count))
@@ -164,7 +189,7 @@ class SimCore:
                     food=60, water=60, wood=50, stone=35, ore=10, tools=6, influence=20
                 ),
                 relations=relations,
-                policies={"military_posture": MilitaryPosture.PEACEFUL.value, "rationing": "normal"},
+                policies={"rationing": "normal"},
                 known_cells=initial_sight,
                 visible_now=initial_sight,
             )
@@ -208,7 +233,15 @@ class SimCore:
                 continue
             provided[batch.colony_id] = batch
 
-        for colony_id in sorted(self.state.colonies):
+        # Determine resolution order for this turn: sorted colony IDs, rotated by a
+        # per-turn pseudo-random rotation. This ensures fair initiative distribution
+        # across multiple turns while remaining deterministic.
+        sorted_ids = sorted(self.state.colonies.keys())
+        order_seed = derive_seed(self.state.seed, f"order:{self.state.turn}")
+        rotation = order_seed % len(sorted_ids) if sorted_ids else 0
+        resolution_order = sorted_ids[rotation:] + sorted_ids[:rotation]
+
+        for colony_id in resolution_order:
             batch = provided.get(colony_id)
             if batch is None:
                 events.append(DomainEvent(self.state.turn, "controller_wait", colony_id))
@@ -279,6 +312,12 @@ class SimCore:
             return self._set_policy(colony_id, action, events)
         if isinstance(action, ScoutAction):
             return self._scout(colony_id, action, events)
+        if isinstance(action, RepairAction):
+            return self._repair(colony_id, action, events)
+        if isinstance(action, ExtinguishAction):
+            return self._extinguish(colony_id, action, events)
+        if isinstance(action, DemolishAction):
+            return self._demolish(colony_id, action, events)
         return ActionResult(colony_id, "unknown", "rejected", "unknown_action")
 
     def _update_colony(self, colony_id: str, **changes: object) -> None:
@@ -290,6 +329,18 @@ class SimCore:
         colony = self.state.colonies[colony_id]
         if action.position not in colony.known_cells:
             return ActionResult(colony_id, action.kind, "rejected", "cell_not_visible")
+        # Check if target is within GATHER_RADIUS of an OPERATIONAL structure (Manhattan distance)
+        operational_structures = [
+            structure
+            for structure in self.state.structures.values()
+            if structure.colony_id == colony_id and structure.status == StructureStatus.OPERATIONAL
+        ]
+        within_radius = any(
+            abs(action.position.x - structure.position.x) + abs(action.position.y - structure.position.y) <= GATHER_RADIUS
+            for structure in operational_structures
+        )
+        if not within_radius:
+            return ActionResult(colony_id, action.kind, "rejected", "out_of_range")
         world = self.state.world
         assert isinstance(world, WorldState)
         cell = world.cells.get(action.position)
@@ -502,67 +553,183 @@ class SimCore:
         return ActionResult(colony_id, action.kind, "accepted", "ok")
 
     def _raid(self, colony_id: str, action: RaidAction, events: list[DomainEvent]) -> ActionResult:
+        """Execute a raid according to A8 combat mechanics (AM-5, AM-16).
+
+        Attacker and defender each have a power calculated from healthy colonists,
+        barracks, and posture bonuses. On success (attacker_power > defender_power),
+        the attacker loots resources and takes no casualties; the defender loses
+        resources and 2 injured. On failure, both take casualties and no resources
+        change. Structure damage targets non-HQ structures when other structures exist.
+        Injuries are clamped to available healthy population (AM-4). Peaceful posture
+        blocks raiding entirely. Surprise raids (non-WAR targets) cost influence.
+        """
         if action.target_colony_id not in self.state.colonies or action.target_colony_id == colony_id:
             return ActionResult(colony_id, action.kind, "rejected", "invalid_target")
         attacker = self.state.colonies[colony_id]
-        if attacker.relations[action.target_colony_id] == RelationStatus.UNKNOWN:
+        defender = self.state.colonies[action.target_colony_id]
+
+        # Check peaceful posture: only peaceful explicitly blocks raiding
+        attacker_posture = attacker.policies.get("military_posture")
+        if attacker_posture == MilitaryPosture.PEACEFUL.value:
+            return ActionResult(colony_id, action.kind, "rejected", "pacifist_posture")
+
+        # Check contact
+        if attacker.relations.get(action.target_colony_id) == RelationStatus.UNKNOWN:
             return ActionResult(colony_id, action.kind, "rejected", "target_not_contacted")
-        surprise = attacker.relations[action.target_colony_id] != RelationStatus.WAR
+
+        # Check alliance - cannot raid allies
+        if attacker.relations.get(action.target_colony_id) == RelationStatus.ALLIANCE:
+            return ActionResult(colony_id, action.kind, "rejected", "allied_target")
+
+        # Check attacker has healthy colonists
+        if attacker.available_population <= 0:
+            return ActionResult(colony_id, action.kind, "rejected", "no_healthy_colonists")
+
+        # Check food cost
+        if attacker.resources.food < RAID_PARTY_FOOD:
+            return ActionResult(colony_id, action.kind, "rejected", "insufficient_resources")
+
+        # Check for surprise raid and influence cost
+        surprise = attacker.relations.get(action.target_colony_id) != RelationStatus.WAR
         if surprise:
-            cost = min(5, attacker.resources.influence)
-            self._update_colony(colony_id, resources=attacker.resources.apply({"influence": -cost}))
+            if attacker.resources.influence < RAID_INFLUENCE_COST_SURPRISE:
+                return ActionResult(colony_id, action.kind, "rejected", "insufficient_resources")
+
+        # Pay food upfront
+        attacker = self.state.colonies[colony_id]
+        self._update_colony(colony_id, resources=attacker.resources.apply({"food": -RAID_PARTY_FOOD}))
+
+        # Pay surprise raid influence
+        if surprise:
+            attacker = self.state.colonies[colony_id]
+            self._update_colony(colony_id, resources=attacker.resources.apply({"influence": -RAID_INFLUENCE_COST_SURPRISE}))
+            # Refresh attacker after update
+            attacker = self.state.colonies[colony_id]
+
+        # Set both to war
         for source, target in ((colony_id, action.target_colony_id), (action.target_colony_id, colony_id)):
             relations = dict(self.state.colonies[source].relations)
             relations[target] = RelationStatus.WAR
             self._update_colony(source, relations=relations)
+
+        # Calculate combat power (AM-5)
+        attacker = self.state.colonies[colony_id]
         defender = self.state.colonies[action.target_colony_id]
-        barracks = has_operational(self.state.structures, action.target_colony_id, StructureKind.BARRACKS)
-        loot = max(0, RAID_FOOD_LOOT - (BARRACKS_RAID_LOOT_REDUCTION if barracks else 0))
-        stolen = min(loot, defender.resources.food)
-        injuries = min(RAID_INJURIES, defender.population - defender.injured)
-        self._update_colony(
-            action.target_colony_id,
-            resources=defender.resources.apply({"food": -stolen}),
-            injured=defender.injured + injuries,
-        )
-        current_attacker = self.state.colonies[colony_id]
-        self._update_colony(colony_id, resources=current_attacker.resources.apply({"food": stolen}))
-        targets = [
-            structure
-            for structure in sorted(self.state.structures.values(), key=lambda item: item.id)
-            if structure.colony_id == action.target_colony_id
-            and structure.status in {StructureStatus.OPERATIONAL, StructureStatus.DAMAGED}
-        ]
-        if targets:
-            target = targets[0]
-            walled = has_operational(self.state.structures, action.target_colony_id, StructureKind.WALL)
-            damage = RAID_STRUCTURE_DAMAGE - (WALL_RAID_DAMAGE_REDUCTION if walled else 0)
-            condition = max(0, target.condition - damage)
-            status = StructureStatus.RUINED if condition == 0 else StructureStatus.DAMAGED
-            structures = dict(self.state.structures)
-            structures[target.id] = replace(target, condition=condition, status=status)
-            self.state = replace(self.state, structures=structures)
-            events.append(
-                DomainEvent(
-                    self.state.turn,
-                    "combat_damage",
-                    colony_id,
-                    {
-                        "target_colony_id": action.target_colony_id,
-                        "structure_id": target.id,
-                        "condition": condition,
-                        "status": status.value,
-                        "x": target.position.x,
-                        "y": target.position.y,
-                    },
-                )
+
+        attacker_barracks = len([s for s in self.state.structures.values()
+                                 if s.colony_id == colony_id and s.kind == StructureKind.BARRACKS
+                                 and s.status == StructureStatus.OPERATIONAL])
+        defender_barracks = len([s for s in self.state.structures.values()
+                                 if s.colony_id == action.target_colony_id and s.kind == StructureKind.BARRACKS
+                                 and s.status == StructureStatus.OPERATIONAL])
+        defender_walls = len([s for s in self.state.structures.values()
+                             if s.colony_id == action.target_colony_id and s.kind == StructureKind.WALL
+                             and s.status == StructureStatus.OPERATIONAL])
+
+        attacker_posture = attacker.policies.get("military_posture")
+        defender_posture = defender.policies.get("military_posture")
+
+        attacker_power = min(attacker.available_population, RAID_PARTY_SIZE) \
+                        + min(3, 2 * attacker_barracks) \
+                        + (1 if attacker_posture == MilitaryPosture.EXPANSIONIST.value else 0)
+
+        defender_power = min(defender.available_population, 2) \
+                        + min(3, 2 * defender_walls + 2 * defender_barracks) \
+                        + (1 if defender_posture == MilitaryPosture.DEFENSIVE.value else 0)
+
+        success = attacker_power > defender_power
+
+        # Initialize loot to 0 for failed raids
+        food_loot = 0
+        wood_loot = 0
+
+        # Apply outcome
+        if success:
+            # Loot calculation
+            food_loot = min(RAID_FOOD_LOOT, defender.resources.food)
+            if defender_barracks:
+                food_loot = max(0, food_loot - BARRACKS_RAID_LOOT_REDUCTION)
+            wood_loot = min(RAID_WOOD_LOOT, defender.resources.wood)
+
+            # Cap by attacker's perishable capacity
+            attacker_capacity = perishable_capacity(self.state.structures, colony_id)
+            if attacker.resources.food + food_loot > attacker_capacity.get("food", float("inf")):
+                food_loot = max(0, attacker_capacity.get("food", 0) - attacker.resources.food)
+            if attacker.resources.water + 0 > attacker_capacity.get("water", float("inf")):
+                pass  # No water loot
+
+            # Update defender: lose resources, gain injuries
+            defender_injuries = min(
+                RAID_INJURIES_SUCCESS_DEFENDER,
+                max(0, defender.population - defender.injured - defender.sick)
             )
+            self._update_colony(
+                action.target_colony_id,
+                resources=defender.resources.apply({"food": -food_loot, "wood": -wood_loot}),
+                injured=defender.injured + defender_injuries,
+            )
+
+            # Update attacker: gain resources, 0 injuries
+            attacker = self.state.colonies[colony_id]
+            self._update_colony(
+                colony_id,
+                resources=attacker.resources.apply({"food": food_loot, "wood": wood_loot}),
+            )
+
+            # Structure damage (excludes HQ if other structures exist - AM-10)
+            targets = [
+                s for s in sorted(self.state.structures.values(), key=lambda item: item.id)
+                if s.colony_id == action.target_colony_id
+                and s.status in {StructureStatus.OPERATIONAL, StructureStatus.DAMAGED}
+            ]
+            # Exclude HQ if other structures exist
+            if len(targets) > 1:
+                targets = [s for s in targets if s.kind != StructureKind.HEADQUARTERS]
+
+            if targets:
+                target = targets[0]
+                # Walls reduce raid damage, but the reduction only applies once regardless of wall count
+                walled = has_operational(self.state.structures, action.target_colony_id, StructureKind.WALL)
+                damage = RAID_STRUCTURE_DAMAGE - (WALL_RAID_DAMAGE_REDUCTION if walled else 0)
+                condition = max(0, target.condition - damage)
+                status = StructureStatus.RUINED if condition == 0 else StructureStatus.DAMAGED
+                structures = dict(self.state.structures)
+                structures[target.id] = replace(target, condition=condition, status=status)
+                self.state = replace(self.state, structures=structures)
+                events.append(
+                    DomainEvent(
+                        self.state.turn,
+                        "combat_damage",
+                        colony_id,
+                        {
+                            "target_colony_id": action.target_colony_id,
+                            "structure_id": target.id,
+                            "condition": condition,
+                            "status": status.value,
+                            "x": target.position.x,
+                            "y": target.position.y,
+                        },
+                    )
+                )
+        else:
+            # Failed raid: both sides take casualties, no loot, no structure damage
+            attacker_injuries = min(
+                RAID_INJURIES_FAILURE_ATTACKER,
+                max(0, attacker.population - attacker.injured - attacker.sick)
+            )
+            defender_injuries = min(
+                RAID_INJURIES_FAILURE_DEFENDER,
+                max(0, defender.population - defender.injured - defender.sick)
+            )
+            self._update_colony(colony_id, injured=attacker.injured + attacker_injuries)
+            self._update_colony(action.target_colony_id, injured=defender.injured + defender_injuries)
+
         events.append(
             DomainEvent(
                 self.state.turn,
                 "surprise_raid" if surprise else "raid",
                 colony_id,
-                {"target": action.target_colony_id, "stolen_food": stolen},
+                {"target": action.target_colony_id, "stolen_food": food_loot if success else 0},
             )
         )
         return ActionResult(colony_id, action.kind, "accepted", "ok")
@@ -613,6 +780,99 @@ class SimCore:
                 "scout_dispatched",
                 colony_id,
                 {"scout_id": scout_id, "x": action.target.x, "y": action.target.y, "food_cost": SCOUT_FOOD_COST},
+            )
+        )
+        return ActionResult(colony_id, action.kind, "accepted", "ok")
+
+    def _repair(self, colony_id: str, action: RepairAction, events: list[DomainEvent]) -> ActionResult:
+        structure = self.state.structures.get(action.structure_id)
+        if structure is None:
+            return ActionResult(colony_id, action.kind, "rejected", "unknown_structure")
+        if structure.colony_id != colony_id:
+            return ActionResult(colony_id, action.kind, "rejected", "not_owned")
+        if structure.status == StructureStatus.BURNING:
+            return ActionResult(colony_id, action.kind, "rejected", "structure_burning")
+        if structure.status == StructureStatus.RUINED:
+            return ActionResult(colony_id, action.kind, "rejected", "structure_ruined")
+        if structure.status != StructureStatus.DAMAGED:
+            return ActionResult(colony_id, action.kind, "rejected", "structure_not_damaged")
+        # Calculate repair cost from the structure's build cost
+        colony = self.state.colonies[colony_id]
+        build_cost = BUILD_COSTS.get(structure.kind)
+        if build_cost is None:
+            return ActionResult(colony_id, action.kind, "rejected", "unknown_structure")
+        cost = repair_cost(build_cost)
+        if not can_afford(colony.resources, cost):
+            return ActionResult(colony_id, action.kind, "rejected", "insufficient_resources")
+        # Deduct cost and start repair
+        stock = colony.resources.apply({name: -amount for name, amount in cost.items()})
+        self._update_colony(colony_id, resources=stock)
+        structures = dict(self.state.structures)
+        structures[action.structure_id] = replace(
+            structure,
+            status=StructureStatus.REPAIRING,
+            progress=0,
+            required_progress=REPAIR_TURNS,
+        )
+        self.state = replace(self.state, structures=structures)
+        events.append(
+            DomainEvent(
+                self.state.turn,
+                "repair_started",
+                colony_id,
+                {"structure_id": action.structure_id, "x": structure.position.x, "y": structure.position.y},
+            )
+        )
+        return ActionResult(colony_id, action.kind, "accepted", "ok")
+
+    def _extinguish(self, colony_id: str, action: ExtinguishAction, events: list[DomainEvent]) -> ActionResult:
+        structure = self.state.structures.get(action.structure_id)
+        if structure is None:
+            return ActionResult(colony_id, action.kind, "rejected", "unknown_structure")
+        if structure.colony_id != colony_id:
+            return ActionResult(colony_id, action.kind, "rejected", "not_owned")
+        if structure.status != StructureStatus.BURNING:
+            return ActionResult(colony_id, action.kind, "rejected", "structure_not_burning")
+        colony = self.state.colonies[colony_id]
+        # Determine water cost based on whether colony has a well
+        has_well = has_operational(self.state.structures, colony_id, StructureKind.WELL)
+        water_cost = EXTINGUISH_WATER_COST_WITH_WELL if has_well else EXTINGUISH_WATER_COST
+        if colony.resources.water < water_cost:
+            return ActionResult(colony_id, action.kind, "rejected", "insufficient_resources")
+        # Deduct water cost and extinguish the structure
+        stock = colony.resources.apply({"water": -water_cost})
+        self._update_colony(colony_id, resources=stock)
+        structures = dict(self.state.structures)
+        structures[action.structure_id] = replace(structure, status=StructureStatus.DAMAGED)
+        self.state = replace(self.state, structures=structures)
+        events.append(
+            DomainEvent(
+                self.state.turn,
+                "fire_extinguished",
+                colony_id,
+                {"structure_id": action.structure_id, "x": structure.position.x, "y": structure.position.y},
+            )
+        )
+        return ActionResult(colony_id, action.kind, "accepted", "ok")
+
+    def _demolish(self, colony_id: str, action: DemolishAction, events: list[DomainEvent]) -> ActionResult:
+        structure = self.state.structures.get(action.structure_id)
+        if structure is None:
+            return ActionResult(colony_id, action.kind, "rejected", "unknown_structure")
+        if structure.colony_id != colony_id:
+            return ActionResult(colony_id, action.kind, "rejected", "not_owned")
+        if structure.kind == StructureKind.HEADQUARTERS:
+            return ActionResult(colony_id, action.kind, "rejected", "cannot_demolish_headquarters")
+        # Demolish the structure (move it to RUINED status without refunding)
+        structures = dict(self.state.structures)
+        structures[action.structure_id] = replace(structure, status=StructureStatus.RUINED)
+        self.state = replace(self.state, structures=structures)
+        events.append(
+            DomainEvent(
+                self.state.turn,
+                "structure_demolished",
+                colony_id,
+                {"structure_id": action.structure_id, "x": structure.position.x, "y": structure.position.y},
             )
         )
         return ActionResult(colony_id, action.kind, "accepted", "ok")
@@ -695,29 +955,49 @@ class SimCore:
         changed = False
         for structure_id in sorted(structures):
             structure = structures[structure_id]
-            if structure.status not in {StructureStatus.FOUNDATION, StructureStatus.BUILDING}:
+            if structure.status not in {StructureStatus.FOUNDATION, StructureStatus.BUILDING, StructureStatus.REPAIRING}:
                 continue
             progress = structure.progress + 1
-            status = StructureStatus.OPERATIONAL if progress >= structure.required_progress else (
-                StructureStatus.BUILDING if progress > 1 else StructureStatus.FOUNDATION
-            )
+            if structure.status == StructureStatus.REPAIRING:
+                # Repair targets OPERATIONAL status and keeps the condition
+                status = StructureStatus.OPERATIONAL if progress >= structure.required_progress else StructureStatus.REPAIRING
+            else:
+                # Building progresses from FOUNDATION → BUILDING → OPERATIONAL
+                status = StructureStatus.OPERATIONAL if progress >= structure.required_progress else (
+                    StructureStatus.BUILDING if progress > 1 else StructureStatus.FOUNDATION
+                )
             structures[structure_id] = replace(structure, progress=progress, status=status)
             changed = True
             events.append(DomainEvent(self.state.turn, "construction_progress", structure.colony_id, {"structure_id": structure_id, "progress": progress, "status": status.value}))
             if status == StructureStatus.OPERATIONAL:
-                events.append(
-                    DomainEvent(
-                        self.state.turn,
-                        "construction_completed",
-                        structure.colony_id,
-                        {
-                            "structure_id": structure_id,
-                            "kind": structure.kind.value,
-                            "x": structure.position.x,
-                            "y": structure.position.y,
-                        },
+                if structure.status == StructureStatus.REPAIRING:
+                    events.append(
+                        DomainEvent(
+                            self.state.turn,
+                            "repair_completed",
+                            structure.colony_id,
+                            {
+                                "structure_id": structure_id,
+                                "kind": structure.kind.value,
+                                "x": structure.position.x,
+                                "y": structure.position.y,
+                            },
+                        )
                     )
-                )
+                else:
+                    events.append(
+                        DomainEvent(
+                            self.state.turn,
+                            "construction_completed",
+                            structure.colony_id,
+                            {
+                                "structure_id": structure_id,
+                                "kind": structure.kind.value,
+                                "x": structure.position.x,
+                                "y": structure.position.y,
+                            },
+                        )
+                    )
         if changed:
             self.state = replace(self.state, structures=structures)
 
@@ -815,9 +1095,16 @@ class SimCore:
             # water shortfall sickens colonists, but only up to the number actually
             # exposed — housed colonists are never touched by exposure.
             exposed = max(0, population - self._housing_for(colony_id))
+            # Sickness may never take the last able colonist. A colony with nobody able
+            # cannot gather, cannot staff its clinic and cannot carry an action, so it can
+            # never climb out again: the match stops measuring recovery and starts
+            # measuring how long an absorbing state takes to finish. MIN_ABLE_COLONISTS
+            # keeps one pair of hands so the way back is hard rather than closed.
+            able = max(0, population - colony.scouting - colony.injured - sick)
+            sickening_room = max(0, able - MIN_ABLE_COLONISTS) if population > 0 else 0
             if shortfall:
                 healthy_available = max(0, population - colony.injured - sick)
-                sickened = min(SICKENED_PER_SHORTFALL_TURN, healthy_available)
+                sickened = min(SICKENED_PER_SHORTFALL_TURN, healthy_available, sickening_room)
                 if sickened:
                     sick += sickened
                     events.append(
@@ -834,6 +1121,7 @@ class SimCore:
                     EXPOSED_SICKENED_PER_TURN,
                     max(0, exposed - sick),
                     healthy_available,
+                    sickening_room,
                 )
                 if sickened:
                     sick += sickened
@@ -862,59 +1150,43 @@ class SimCore:
             )
 
     def _apply_hazards(self, events: list[DomainEvent]) -> None:
-        cadence = {"grassland": 11, "desert": 9, "snow": 7}.get(self.scenario.biome, 13)
-        if (self.state.turn + (self.state.seed % cadence)) % cadence != 0:
-            return
-        events.append(DomainEvent(self.state.turn, "weather_hazard", data={"biome": self.scenario.biome}))
-        for colony_id, colony in tuple(self.state.colonies.items()):
-            if self.scenario.biome == "snow":
-                loss = min(2, colony.resources.wood)
-                self._update_colony(colony_id, resources=colony.resources.apply({"wood": -loss}))
-            elif self.scenario.biome == "desert":
-                loss = min(3, colony.resources.water)
-                self._update_colony(colony_id, resources=colony.resources.apply({"water": -loss}))
+        # Use the scenario's hazard cadence (set per-biome, see AM-2)
+        cadence = self.scenario.hazard_cadence
+        # Weather hazards follow the global schedule
+        if (self.state.turn + (self.state.seed % cadence)) % cadence == 0:
+            events.append(DomainEvent(self.state.turn, "weather_hazard", data={"biome": self.scenario.biome}))
+            for colony_id, colony in tuple(self.state.colonies.items()):
+                if self.scenario.biome == "snow":
+                    loss = min(2, colony.resources.wood)
+                    self._update_colony(colony_id, resources=colony.resources.apply({"wood": -loss}))
+                elif self.scenario.biome == "desert":
+                    loss = min(3, colony.resources.water)
+                    self._update_colony(colony_id, resources=colony.resources.apply({"water": -loss}))
+        # Fire happens every turn per-colony (not tied to global hazard schedule)
         self._apply_fire(events)
 
     def _apply_fire(self, events: list[DomainEvent]) -> None:
+        # Use the scenario's hazard cadence (set per-biome, see AM-2)
+        # Weather loss uses hazard_cadence; fire ignition uses hazard_cadence + bonus
+        # so fire is slower and rarer than weather (AM-15).
+        weather_cadence = self.scenario.hazard_cadence
+        fire_cadence = self.scenario.hazard_cadence + FIRE_IGNITION_CADENCE_BONUS
         structures = dict(self.state.structures)
+
+        # Process existing burning structures: damage them and spread fire
+        spread_targets: set[str] = set()
         burning = [
             structure
             for structure in sorted(structures.values(), key=lambda item: item.id)
             if structure.status == StructureStatus.BURNING
         ]
-        if not burning:
-            candidates = [
-                structure
-                for structure in sorted(structures.values(), key=lambda item: item.id)
-                if structure.status in {StructureStatus.OPERATIONAL, StructureStatus.DAMAGED}
-            ]
-            if not candidates:
-                return
-            target_index = (self.state.seed + self.state.turn) % len(candidates)
-            target = candidates[target_index]
-            structures[target.id] = replace(target, status=StructureStatus.BURNING)
-            self.state = replace(self.state, structures=structures)
-            events.append(
-                DomainEvent(
-                    self.state.turn,
-                    "fire_started",
-                    target.colony_id,
-                    {
-                        "structure_id": target.id,
-                        "x": target.position.x,
-                        "y": target.position.y,
-                    },
-                )
-            )
-            return
-
-        spread_targets: set[str] = set()
         for source in burning:
             neighbours = [
                 target
                 for target in sorted(structures.values(), key=lambda item: item.id)
                 if target.status == StructureStatus.OPERATIONAL
                 and target.colony_id == source.colony_id
+                and target.kind != StructureKind.HEADQUARTERS
                 and abs(target.position.x - source.position.x)
                 + abs(target.position.y - source.position.y)
                 == 1
@@ -954,6 +1226,52 @@ class SimCore:
                     },
                 )
             )
+
+        # Try to ignite a new fire for each colony in sorted order, if that colony
+        # has no burning structures and the fire schedule says so
+        for colony_id in sorted(self.state.colonies):
+            colony_burning = [
+                s for s in structures.values()
+                if s.colony_id == colony_id and s.status == StructureStatus.BURNING
+            ]
+            if colony_burning:
+                # This colony already has a fire, skip it
+                continue
+
+            # Check if this colony gets a fire this turn (using fire_cadence, not weather_cadence)
+            fire_seed = derive_seed(self.state.seed, f"fire:{colony_id}")
+            if (self.state.turn + fire_seed % fire_cadence) % fire_cadence != 0:
+                continue
+
+            # This colony gets a fire. Pick a target from its OPERATIONAL/DAMAGED structures
+            # (but not the HQ, which is unrecoverable if burned to ruins)
+            candidates = [
+                structure
+                for structure in sorted(structures.values(), key=lambda item: item.id)
+                if structure.colony_id == colony_id
+                and structure.kind != StructureKind.HEADQUARTERS
+                and structure.status in {StructureStatus.OPERATIONAL, StructureStatus.DAMAGED}
+            ]
+            if not candidates:
+                continue
+
+            target_seed = derive_seed(self.state.seed, f"fire-target:{colony_id}:{self.state.turn}")
+            target_index = target_seed % len(candidates)
+            target = candidates[target_index]
+            structures[target.id] = replace(target, status=StructureStatus.BURNING)
+            events.append(
+                DomainEvent(
+                    self.state.turn,
+                    "fire_started",
+                    colony_id,
+                    {
+                        "structure_id": target.id,
+                        "x": target.position.x,
+                        "y": target.position.y,
+                    },
+                )
+            )
+
         self.state = replace(self.state, structures=structures)
 
     def _expire_offers(self, events: list[DomainEvent]) -> None:

@@ -71,6 +71,15 @@ describe("structure rendering", () => {
     expect(structureOpacity("damaged")).toBe(1);
     expect(structureOpacity("foundation")).toBe(0.62);
   });
+
+  it("renders repairing structures at reduced opacity like building", () => {
+    expect(structureOpacity("repairing")).toBe(0.62);
+  });
+
+  it("renders burned and damaged structures at full opacity (tinted)", () => {
+    expect(structureOpacity("burning")).toBe(1);
+    expect(structureOpacity("damaged")).toBe(1);
+  });
 });
 
 describe("replay adapter", () => {

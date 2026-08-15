@@ -169,8 +169,12 @@ def test_seeded_snow_scenario_emits_weather_hazard() -> None:
 
 def test_seeded_hazard_starts_a_visible_structure_fire() -> None:
     sim = SimCore.create(BASIC_SURVIVAL, seed=37, colony_count=1)
-    hazard_turn = (-sim.state.seed) % 11
-    sim.state = replace(sim.state, turn=hazard_turn)
+    # Add a house so fire has something to burn (HQ is exempt from fire per AM-1)
+    add_structure(sim, "c1", StructureKind.HOUSE)
+    # With per-colony fire using derive_seed, fire cadence is hazard_cadence + 4 (AM-15).
+    # Grassland: 11 + 4 = 15. Fire for c1 triggers at turns 11, 26, 41, ...
+    # (fire_seed % 15 = 4, so turn = (15 - 4) % 15 = 11 + 15*k)
+    sim.state = replace(sim.state, turn=11)
 
     result = sim.resolve(all_wait(sim))
 
@@ -198,7 +202,8 @@ def test_burning_structure_damages_and_spreads_on_next_hazard() -> None:
         progress=3,
         required_progress=3,
     )
-    sim.state = replace(sim.state, structures=structures, turn=(-sim.state.seed) % 11)
+    # Fire hazard every turn for burning (damage/spread); using turn 0 to test damage immediately
+    sim.state = replace(sim.state, structures=structures, turn=0)
 
     result = sim.resolve(all_wait(sim))
 
@@ -210,16 +215,17 @@ def test_burning_structure_damages_and_spreads_on_next_hazard() -> None:
 
 
 def test_burning_structure_keeps_burning_until_ruined() -> None:
-    """A fire persists across consecutive hazards instead of going out after one turn."""
+    """A fire persists across consecutive turns until condition reaches zero."""
     sim = SimCore.create(BASIC_SURVIVAL, seed=37, colony_count=1)
     structures = dict(sim.state.structures)
     headquarters = structures["s1"]
     structures["s1"] = replace(headquarters, status=StructureStatus.BURNING)
-    sim.state = replace(sim.state, structures=structures)
+    sim.state = replace(sim.state, structures=structures, turn=0)
 
     conditions = []
-    for _ in range(3):
-        sim.state = replace(sim.state, turn=(-sim.state.seed) % 11)
+    for i in range(3):
+        # Fire damage (40 per turn) reduces condition every turn: 100 -> 60 -> 20 -> 0/ruined
+        sim.state = replace(sim.state, turn=i)
         result = sim.resolve(all_wait(sim))
         structure = result.state.structures["s1"]
         conditions.append((structure.status, structure.condition))
@@ -237,11 +243,11 @@ def test_fire_ruining_emits_events_and_stops() -> None:
     structures = dict(sim.state.structures)
     headquarters = structures["s1"]
     structures["s1"] = replace(headquarters, status=StructureStatus.BURNING)
-    sim.state = replace(sim.state, structures=structures)
+    sim.state = replace(sim.state, structures=structures, turn=0)
 
     damage_events = []
-    for _ in range(3):
-        sim.state = replace(sim.state, turn=(-sim.state.seed) % 11)
+    for i in range(3):
+        sim.state = replace(sim.state, turn=i)
         result = sim.resolve(all_wait(sim))
         damage_events.extend(event for event in result.events if event.kind == "fire_damage")
 
@@ -253,8 +259,8 @@ def test_fire_ruining_emits_events_and_stops() -> None:
     assert damage_events[-1].data["condition"] == 0
     assert result.state.structures["s1"].status == StructureStatus.RUINED
 
-    # Once ruined the fire is out: the next hazard ignites nothing new.
-    sim.state = replace(sim.state, turn=(-sim.state.seed) % 11)
+    # Once ruined the fire is out: the next turn ignites nothing new.
+    sim.state = replace(sim.state, turn=3)
     final = sim.resolve(all_wait(sim))
     assert not any(event.kind == "fire_started" for event in final.events)
     assert final.state.structures["s1"].status == StructureStatus.RUINED
@@ -450,26 +456,50 @@ def test_barracks_reduces_food_lost_to_raid() -> None:
         result = sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c2")),))
         return next(event.data["stolen_food"] for event in result.events if event.kind in ("raid", "surprise_raid"))
 
-    assert stolen_food(False) == 3
-    assert stolen_food(True) == 1
+    # AM-5 rebalanced power: defender gets 2 base + 2 per barracks, attacker gets 3 base.
+    # Without barracks: attacker 3 > defender 2, raid succeeds, loot 14.
+    # With barracks: attacker 3 < defender 4, raid fails, loot 0.
+    # (Note: barracks still reduces successful loot, but the raid itself fails here.)
+    assert stolen_food(False) == 14
+    assert stolen_food(True) == 0
 
 
 def test_wall_reduces_structure_damage_from_raid() -> None:
-    def hq_condition(walled: bool) -> int:
+    def raid_target_condition(walled: bool) -> int:
+        """AM-5 rebalanced raid power, making defense strong but not absolute.
+
+        Without wall: attacker 3 > defender 2, raid succeeds, HQ takes 20 damage → 80 condition.
+        With wall: attacker 3 = defender (2+2 from wall), fails (strict >), no damage → 100 condition.
+
+        The test name is historical; with the new power balance, a wall fully defends
+        a bare colony against a default attacker. A committed aggressor needs barracks
+        or expansionist posture to overcome the wall.
+        """
         sim = SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2)
         sim.resolve((batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),))
         if walled:
             add_structure(sim, "c2", StructureKind.WALL)
         sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c2")),))
-        hq = next(
-            structure
-            for structure in sim.state.structures.values()
-            if structure.colony_id == "c2" and structure.kind == StructureKind.HEADQUARTERS
-        )
-        return hq.condition
 
-    assert hq_condition(False) == 80
-    assert hq_condition(True) == 90
+        if walled:
+            # With a wall, raid fails, wall takes no damage
+            wall = next(
+                structure
+                for structure in sim.state.structures.values()
+                if structure.colony_id == "c2" and structure.kind == StructureKind.WALL
+            )
+            return wall.condition
+        else:
+            # Without a wall, raid succeeds, HQ is the target (only structure)
+            hq = next(
+                structure
+                for structure in sim.state.structures.values()
+                if structure.colony_id == "c2" and structure.kind == StructureKind.HEADQUARTERS
+            )
+            return hq.condition
+
+    assert raid_target_condition(False) == 80
+    assert raid_target_condition(True) == 100
 
 
 def test_gate_permits_trade_while_walled() -> None:
@@ -518,25 +548,38 @@ def test_damaged_raid_mitigations_do_not_apply() -> None:
         result = sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c2")),))
         return next(event.data["stolen_food"] for event in result.events if event.kind in ("raid", "surprise_raid"))
 
-    assert stolen_food(StructureStatus.OPERATIONAL) == 1
-    assert stolen_food(StructureStatus.DAMAGED) == 3
+    # AM-5: Operational barracks add +2 to defender power (cap 3 total). With one operational
+    # barracks, defender_power = 2 + 2 = 4, attacker_power = 3, raid fails (0 loot).
+    # Damaged barracks don't provide defense (not operational), so defender_power = 2,
+    # raid succeeds, loot = 14 (base RAID_FOOD_LOOT, no barracks reduction applies).
+    assert stolen_food(StructureStatus.OPERATIONAL) == 0
+    assert stolen_food(StructureStatus.DAMAGED) == 14
 
 
 def test_damaged_wall_does_not_reduce_raid_damage() -> None:
-    def hq_condition(status: StructureStatus) -> int:
+    def target_condition(status: StructureStatus) -> int:
         sim = SimCore.create(BASIC_SURVIVAL, seed=29, colony_count=2)
         sim.resolve((batch(sim, "c1", DiplomacyAction(target_colony_id="c2", operation="contact")),))
         add_structure(sim, "c2", StructureKind.WALL, status=status)
         sim.resolve((batch(sim, "c1", RaidAction(target_colony_id="c2")),))
-        hq = next(
-            structure
-            for structure in sim.state.structures.values()
-            if structure.colony_id == "c2" and structure.kind == StructureKind.HEADQUARTERS
-        )
-        return hq.condition
 
-    assert hq_condition(StructureStatus.OPERATIONAL) == 90
-    assert hq_condition(StructureStatus.DAMAGED) == 80
+        if status == StructureStatus.OPERATIONAL:
+            # Raid fails, no damage occurs
+            hq = next(s for s in sim.state.structures.values()
+                     if s.colony_id == "c2" and s.kind == StructureKind.HEADQUARTERS)
+            return hq.condition
+        else:
+            # Raid succeeds, AM-10 excludes HQ when other structures exist,
+            # so wall (a damaged structure) is targeted instead
+            wall = next(s for s in sim.state.structures.values()
+                       if s.colony_id == "c2" and s.kind == StructureKind.WALL)
+            return wall.condition
+
+    # Operational wall makes raid fail, so HQ takes no damage = 100.
+    # Damaged wall is not operational, so raid succeeds, and by AM-10 the wall
+    # (another structure) is targeted, taking full 20 damage = 80.
+    assert target_condition(StructureStatus.OPERATIONAL) == 100
+    assert target_condition(StructureStatus.DAMAGED) == 80
 
 
 @pytest.mark.parametrize(

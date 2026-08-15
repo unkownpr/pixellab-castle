@@ -71,6 +71,9 @@ const en = {
   "actions.diplomacy": "Make contact",
   "actions.trade": "Propose trade",
   "actions.raid": "Raid",
+  "actions.repair": "Repair",
+  "actions.extinguish": "Extinguish",
+  "actions.demolish": "Demolish",
 
   "buildChoice.label": "Structure",
 
@@ -89,6 +92,7 @@ const en = {
   "structures.watchtower": "Watchtower",
   "structures.wall": "Wall",
   "structures.gate": "Gate",
+  "structures.monument": "Monument",
 
   "metrics.title": "Benchmark metrics",
   "metrics.aria": "Benchmark metric comparison",
@@ -301,6 +305,9 @@ const en = {
   "action.setPolicy": "policy {policy} = {value}",
   "action.scout": "scout ({x}, {y})",
   "action.contact": "contact",
+  "action.repair": "repair {structure_id}",
+  "action.extinguish": "extinguish {structure_id}",
+  "action.demolish": "demolish {structure_id}",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -376,6 +383,9 @@ const tr: Record<TranslationKey, string> = {
   "actions.diplomacy": "Temas kur",
   "actions.trade": "Ticaret öner",
   "actions.raid": "Baskın yap",
+  "actions.repair": "Tamir et",
+  "actions.extinguish": "Söndür",
+  "actions.demolish": "Yık",
 
   "buildChoice.label": "Yapı",
 
@@ -394,6 +404,7 @@ const tr: Record<TranslationKey, string> = {
   "structures.watchtower": "Gözetleme kulesi",
   "structures.wall": "Duvar",
   "structures.gate": "Kapı",
+  "structures.monument": "Anıt",
 
   "metrics.title": "Benchmark metrikleri",
   "metrics.aria": "Benchmark metrik karşılaştırması",
@@ -606,6 +617,9 @@ const tr: Record<TranslationKey, string> = {
   "action.setPolicy": "politika {policy} = {value}",
   "action.scout": "keşif ({x}, {y})",
   "action.contact": "temas",
+  "action.repair": "{structure_id} onarımı",
+  "action.extinguish": "{structure_id} söndürme",
+  "action.demolish": "{structure_id} yıkılması",
 };
 
 export const messages: Record<Lang, Record<TranslationKey, string>> = { en, tr };
@@ -713,6 +727,7 @@ const STRUCTURE_KEYS: Readonly<Record<string, TranslationKey>> = {
   watchtower: "structures.watchtower",
   wall: "structures.wall",
   gate: "structures.gate",
+  monument: "structures.monument",
 };
 
 export function structureName(kind: string): string {

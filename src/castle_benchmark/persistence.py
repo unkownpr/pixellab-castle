@@ -10,9 +10,12 @@ from typing import Iterable
 from .actions import (
     ActionBatch,
     BuildAction,
+    DemolishAction,
     DiplomacyAction,
+    ExtinguishAction,
     GatherAction,
     RaidAction,
+    RepairAction,
     ScoutAction,
     SetPolicyAction,
     TradeOfferAction,
@@ -100,6 +103,12 @@ def action_to_dict(action: object) -> dict[str, object]:
         return {"kind": "set_policy", "policy": action.policy, "value": action.value}
     if isinstance(action, ScoutAction):
         return {"kind": "scout", "x": action.target.x, "y": action.target.y}
+    if isinstance(action, RepairAction):
+        return {"kind": "repair", "structure_id": action.structure_id}
+    if isinstance(action, ExtinguishAction):
+        return {"kind": "extinguish", "structure_id": action.structure_id}
+    if isinstance(action, DemolishAction):
+        return {"kind": "demolish", "structure_id": action.structure_id}
     raise TypeError(f"unsupported action: {type(action).__name__}")
 
 
@@ -134,6 +143,12 @@ def action_from_dict(data: dict[str, object]) -> object:
         return SetPolicyAction(str(data["policy"]), str(data["value"]))
     if kind == "scout":
         return ScoutAction(Position(int(data["x"]), int(data["y"])))
+    if kind == "repair":
+        return RepairAction(str(data["structure_id"]))
+    if kind == "extinguish":
+        return ExtinguishAction(str(data["structure_id"]))
+    if kind == "demolish":
+        return DemolishAction(str(data["structure_id"]))
     raise ValueError(f"unknown action kind: {kind}")
 
 
@@ -172,6 +187,7 @@ class ArtifactWriter:
         colony_count: int,
         controller_names: dict[str, str],
         controller_tenures: list[dict[str, object]] | None = None,
+        seat_rotation: int = 0,
     ) -> ArtifactWriter:
         run_dir.mkdir(parents=True, exist_ok=False)
         writer = cls(
@@ -190,7 +206,7 @@ class ArtifactWriter:
             "controllers": controller_names,
             "controller_tenures": controller_tenures or [],
             "dependency_lock_hashes": _dependency_lock_hashes(),
-            "seat_rotation": 0,
+            "seat_rotation": seat_rotation,
         }
         writer.metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
         return writer
