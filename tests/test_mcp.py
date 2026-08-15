@@ -830,6 +830,11 @@ async def test_rules_publish_every_structure_kind_from_live_constants() -> None:
         },
         "walled_without_gate_blocks_trade": True,
     }
+    assert rules["storage"] == {
+        "perishables": list(systems.PERISHABLES),
+        "base_capacity": systems.PERISHABLE_BASE_CAPACITY,
+        "warehouse_bonus": systems.WAREHOUSE_CAPACITY_BONUS,
+    }
     assert rules["actions"] == {
         "budget_per_turn": engine.SimCore.ACTION_BUDGET,
         "bounded_by_available_population": True,
@@ -851,6 +856,7 @@ async def test_rules_publish_every_structure_kind_from_live_constants() -> None:
     assert rules["structures"]["headquarters"]["build_turns"] is None
     assert rules["structures"]["headquarters"]["housing"] == 8
     assert rules["structures"]["house"]["effects"] == ["housing"]
+    assert rules["structures"]["warehouse"]["effects"] == ["raises_storage_capacity"]
     assert "production" in rules["structures"]["farm"]["effects"]
     assert "blocks_trade_without_gate" in rules["structures"]["wall"]["effects"]
 
@@ -890,6 +896,7 @@ async def test_rules_are_match_independent_and_leak_no_state() -> None:
         "clinic",
         "raid",
         "trade",
+        "storage",
         "actions",
         "gather",
         "labour",

@@ -28,7 +28,7 @@ Her koşu `metadata.json`, tur bazlı `turns.jsonl`, `snapshots.jsonl`, `report.
 
 ## Yapı ekonomisi
 
-Üretim yapıları (farm, well, lumber camp, quarry, mine, workshop, clinic, market) ile savunma yapıları (barracks, wall, gate) yalnızca `operational` durumdayken işlev görür. `warehouse` şimdilik dekoratiftir: anlamlı olması kaynak başına depolama sınırı gerektirir ve bu ayrı bir çalışmadır; o güne dek inşa edilebilir ancak hiçbir etkisi yoktur.
+Üretim yapıları (farm, well, lumber camp, quarry, mine, workshop, clinic, market) ile savunma yapıları (barracks, wall, gate) yalnızca `operational` durumdayken işlev görür. `warehouse` çalışır durumdayken bozulabilir kaynakların (yiyecek ve su) depolama kapasitesini artırır; hasarlı, yanan, yıkılmış veya inşaat hâlindeki depolar hiçbir kapasite sağlamaz. Ahşap, taş, maden, alet ve nüfuz sınırsız stoklanabilir; yiyecek ve su ise temel kapasiteyi aşan depolama için çalışan bir `warehouse` gerektirir. Kapasiteye ulaşınca toplama eylemi reddedilir (`store_full`), yapı üretimi tavanda durur ve kapasiteyi aşacak ticaret reddedilir.
 
 ## MCP bağlantısı
 

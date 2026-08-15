@@ -109,6 +109,7 @@ _SPECIAL_EFFECTS: dict[StructureKind, tuple[str, ...]] = {
     StructureKind.WALL: ("reduces_raid_damage", "blocks_trade_without_gate"),
     StructureKind.GATE: ("enables_trade_when_walled",),
     StructureKind.WATCHTOWER: ("extends_sight_radius",),
+    StructureKind.WAREHOUSE: ("raises_storage_capacity",),
 }
 
 
@@ -159,6 +160,11 @@ def build_rules() -> dict[str, object]:
                 "paid": systems.TRADE_RATIO_MARKET[1],
             },
             "walled_without_gate_blocks_trade": True,
+        },
+        "storage": {
+            "perishables": list(systems.PERISHABLES),
+            "base_capacity": systems.PERISHABLE_BASE_CAPACITY,
+            "warehouse_bonus": systems.WAREHOUSE_CAPACITY_BONUS,
         },
         "actions": {
             "budget_per_turn": engine.SimCore.ACTION_BUDGET,
