@@ -61,6 +61,15 @@ CLINIC_HEALS_PER_TURN = 1
 SICKENED_PER_SHORTFALL_TURN = 1
 NATURAL_RECOVERY_PER_TURN = 1
 
+# Exposure is the consequence of losing shelter. A colony whose population exceeds
+# its housing has that many colonists without a roof, and each turn it stays that way
+# EXPOSED_SICKENED_PER_TURN of them fall sick. The sickening is capped at the exposed
+# headcount, so only the colonists actually without a roof suffer — a colony of
+# fourteen in housing for twelve has two exposed, not fourteen. Rebuilding housing
+# reverses it exactly as restoring supply does: NATURAL_RECOVERY_PER_TURN above, and a
+# clinic, bring them back once there are roofs enough.
+EXPOSED_SICKENED_PER_TURN = 1
+
 # Raid effects and their mitigations. BARRACKS cuts the food a raid can carry away;
 # WALL absorbs part of the condition damage raids deal to structures.
 RAID_FOOD_LOOT = 3
