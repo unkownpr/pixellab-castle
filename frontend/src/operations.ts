@@ -178,6 +178,64 @@ export function timelineItems(events: readonly OperationalEvent[]): readonly Tim
     });
 }
 
+export interface DecisionFeedItem {
+  readonly sequence: number;
+  readonly turn: number;
+  readonly colonyId: string;
+  readonly displayName: string;
+  readonly actions: readonly string[];
+  readonly results: readonly { readonly status: "accepted" | "rejected"; readonly detail: string }[];
+}
+
+function colonyDisplayName(snapshot: OperationsSnapshot, colonyId: string): string {
+  const slot = snapshot.slots.find((candidate) => candidate.colony_id === colonyId);
+  return slot?.identity?.display_name ?? colonyId;
+}
+
+function describeAction(action: Readonly<Record<string, unknown>>): string {
+  const kind = String(action.kind ?? "unknown");
+  switch (kind) {
+    case "wait": return "wait";
+    case "gather": return `gather (${String(action.x)}, ${String(action.y)})`;
+    case "build": return `build ${String(action.structure)} (${String(action.x)}, ${String(action.y)})`;
+    case "diplomacy": return `${String(action.operation)} ${String(action.target_colony_id)}`;
+    case "trade_offer": return `trade offer to ${String(action.target_colony_id)}`;
+    case "trade_respond": return `${action.accept ? "accept" : "decline"} offer ${String(action.offer_id)}`;
+    case "raid": return `raid ${String(action.target_colony_id)}`;
+    case "set_policy": return `policy ${String(action.policy)} = ${String(action.value)}`;
+    case "scout": return `scout (${String(action.x)}, ${String(action.y)})`;
+    default: return kind;
+  }
+}
+
+export function decisionFeedItems(snapshot: OperationsSnapshot): readonly DecisionFeedItem[] {
+  const items: DecisionFeedItem[] = [];
+  for (const event of snapshot.events) {
+    if (event.kind !== "turn_resolved") continue;
+    const decisions = event.data.decisions;
+    if (!Array.isArray(decisions)) continue;
+    for (const raw of decisions) {
+      const decision = record(raw);
+      const colonyId = String(decision.colony_id ?? "?");
+      const rawActions = Array.isArray(decision.actions) ? decision.actions : [];
+      const rawResults = Array.isArray(decision.results) ? decision.results : [];
+      items.push({
+        sequence: event.sequence,
+        turn: event.turn,
+        colonyId,
+        displayName: colonyDisplayName(snapshot, colonyId),
+        actions: rawActions.map(describeAction),
+        results: rawResults.map((entry) => {
+          const result = record(entry);
+          const status = result.status === "accepted" ? "accepted" : "rejected";
+          return { status, detail: String(result.code ?? result.status ?? "ok") };
+        }),
+      });
+    }
+  }
+  return items;
+}
+
 export type MetricAxis =
   | "survival"
   | "growth"
@@ -436,6 +494,10 @@ export class OperationsController {
     return this.snapshot ? timelineItems(this.snapshot.events) : [];
   }
 
+  get decisions(): readonly DecisionFeedItem[] {
+    return this.snapshot ? decisionFeedItems(this.snapshot) : [];
+  }
+
   get metrics(): readonly MetricSeries[] {
     return this.report ? metricSeries(this.report) : [];
   }
@@ -603,7 +665,7 @@ export class OperationsController {
   }
 }
 
-type OperationsHostName = "live" | "roster" | "tabs" | "inspector" | "timeline" | "metrics";
+type OperationsHostName = "live" | "roster" | "tabs" | "inspector" | "timeline" | "decisions" | "metrics";
 
 const TAB_LABELS: Readonly<Record<InspectorTab, string>> = {
   decision: "Decision",
@@ -638,6 +700,7 @@ function ensureOperationsHosts(root: HTMLElement): void {
     ["tabs", "div"],
     ["inspector", "section"],
     ["timeline", "section"],
+    ["decisions", "section"],
     ["metrics", "section"],
   ] as const) {
     const host = element(tag);
@@ -773,6 +836,38 @@ function renderTimeline(host: HTMLElement, controller: OperationsController): vo
   host.replaceChildren(title, list);
 }
 
+function renderDecisionFeed(host: HTMLElement, controller: OperationsController): void {
+  const title = element("h2", "section-title", "Decision feed");
+  const list = element("ol", "decision-feed");
+  list.setAttribute("aria-label", "Submitted actions as they resolve");
+  for (const item of controller.decisions) {
+    const row = element("li", "decision-item");
+    row.dataset.colonyId = item.colonyId;
+    const header = element("span", "decision-header");
+    header.append(
+      element("strong", undefined, item.displayName),
+      element("span", undefined, `Turn ${item.turn}`),
+    );
+    const body = element("span", "decision-body", item.actions.join(" · ") || "—");
+    const outcomes = element("span", "decision-outcomes");
+    for (const result of item.results) {
+      outcomes.append(
+        element(
+          "span",
+          `decision-result decision-${result.status}`,
+          result.status === "accepted" ? "accepted" : `rejected · ${result.detail}`,
+        ),
+      );
+    }
+    row.append(header, body, outcomes);
+    list.append(row);
+  }
+  if (!controller.decisions.length) {
+    list.append(element("li", "operations-empty", "No resolved decisions yet."));
+  }
+  host.replaceChildren(title, list);
+}
+
 function metricValueLabel(value: MetricValue, controller: OperationsController): string {
   const agent = controller.roster.find(({ colonyId }) => colonyId === value.colonyId);
   const provider = value.provider ?? agent?.provider;
@@ -840,11 +935,13 @@ export function renderOperationsRoom(root: HTMLElement, controller: OperationsCo
   const tabs = operationsHost(root, "tabs");
   const inspector = operationsHost(root, "inspector");
   const timeline = operationsHost(root, "timeline");
+  const decisions = operationsHost(root, "decisions");
   const metrics = operationsHost(root, "metrics");
   if (roster) renderRoster(roster, controller);
   if (tabs) renderTabs(tabs, controller);
   if (inspector) renderInspector(inspector, controller);
   if (timeline) renderTimeline(timeline, controller);
+  if (decisions) renderDecisionFeed(decisions, controller);
   if (metrics) renderMetrics(metrics, controller);
   if (restoreSelector) {
     root.querySelector<HTMLElement>(restoreSelector)?.focus({ preventScroll: true });

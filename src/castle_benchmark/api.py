@@ -519,6 +519,16 @@ def create_app(
         assert_scoped(token, match_id)
         return _versioned(asdict(game.observe(token, colony_id)))
 
+    @app.get("/api/matches/{match_id}/spectator")
+    def spectator(
+        match_id: str, authorization: str | None = Header(default=None)
+    ) -> dict[str, object]:
+        token = _bearer(authorization)
+        assert_scoped(token, match_id)
+        payload = game.spectator_view(token)
+        _assert_secret_free(payload)
+        return _versioned(payload)
+
     @app.post("/api/matches/{match_id}/actions", response_model=SubmissionResponse)
     def submit(
         match_id: str,

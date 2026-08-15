@@ -13,6 +13,7 @@ import {
   agentRosterRows,
   bindOperationsRoom,
   currentSourceMessageHandler,
+  decisionFeedItems,
   metricSeries,
   nextWorldView,
   renderOperationsRoom,
@@ -609,5 +610,59 @@ describe("world view projection", () => {
       x: 0,
       y: 0,
     });
+  });
+});
+
+describe("decision feed", () => {
+  const decisions = [
+    { colony_id: "c1", actions: [{ kind: "wait" }], results: [{ kind: "wait", status: "accepted", code: "ok" }] },
+    { colony_id: "c2", actions: [{ kind: "gather", x: 0, y: 0 }], results: [{ kind: "gather", status: "rejected", code: "cell_not_visible" }] },
+  ];
+
+  it("reports each colony's actions in order with rejection reasons", () => {
+    const items = decisionFeedItems(snapshot(
+      [
+        slot("c1", "connected", { identity: { ...identity, display_name: "Claude" } }),
+        slot("c2", "connected", { identity: { ...identity, display_name: "codex-agent" } }),
+      ],
+      [event(9, "turn_resolved", null, { decisions })],
+    ));
+
+    expect(items.map(({ colonyId, displayName, actions }) => [colonyId, displayName, actions])).toEqual([
+      ["c1", "Claude", ["wait"]],
+      ["c2", "codex-agent", ["gather (0, 0)"]],
+    ]);
+    expect(items[0]!.results).toEqual([{ status: "accepted", detail: "ok" }]);
+    expect(items[1]!.results).toEqual([{ status: "rejected", detail: "cell_not_visible" }]);
+  });
+
+  it("falls back to the colony id when no display name is known", () => {
+    const items = decisionFeedItems(snapshot(
+      [slot("c1", "connected", { identity: null })],
+      [event(1, "turn_resolved", null, { decisions: [decisions[0]] })],
+    ));
+
+    expect(items[0]!.displayName).toBe("c1");
+  });
+
+  it("renders the feed as inert text without leaking capability-shaped keys", () => {
+    const root = document.createElement("section");
+    const controller = new OperationsController();
+    controller.applySnapshot(snapshot(
+      [slot("c1", "connected", { identity: { ...identity, display_name: "Claude" } })],
+      [event(1, "turn_resolved", null, {
+        decisions: [{
+          ...decisions[0],
+          actions: [{ kind: "gather", x: 0, y: 0, controller_token: "secret", admin_token: "secret" }],
+        }],
+      })],
+    ));
+
+    renderOperationsRoom(root, controller);
+
+    expect(root.querySelector(".decision-feed")).not.toBeNull();
+    expect(root.textContent).toContain("Claude");
+    expect(root.textContent).toContain("accepted");
+    expect(root.textContent).not.toContain("secret");
   });
 });
