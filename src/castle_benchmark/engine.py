@@ -37,6 +37,7 @@ from .systems import (
     CLINIC_HEALS_PER_TURN,
     HOUSING_BY_STRUCTURE,
     NATURAL_RECOVERY_PER_TURN,
+    PERISHABLES,
     RAID_FOOD_LOOT,
     RAID_INJURIES,
     RAID_STRUCTURE_DAMAGE,
@@ -45,12 +46,16 @@ from .systems import (
     TRADE_RATIO_MARKET,
     WALL_RAID_DAMAGE_REDUCTION,
     can_afford,
+    cap_production_delta,
     has_operational,
+    perishable_capacity,
     production_delta,
     resource_delta,
     scaled_receipt,
     staffed_production,
+    store_overflow,
     trade_blocked,
+    within_capacity,
 )
 from .world import WorldCell, WorldState, generate_world, rotated_spawns, visible_cells
 
@@ -287,6 +292,10 @@ class SimCore:
         amount = min(staffed_yield, cell.resource_amount)
         if amount <= 0:
             return ActionResult(colony_id, action.kind, "rejected", "no_available_population")
+        if cell.resource in PERISHABLES:
+            capacity = perishable_capacity(self.state.structures, colony_id)
+            if store_overflow(colony.resources, {cell.resource: amount}, capacity):
+                return ActionResult(colony_id, action.kind, "rejected", "store_full")
         try:
             stock = colony.resources.apply({cell.resource: amount})
         except KeyError:
@@ -447,6 +456,14 @@ class SimCore:
             target_after_trade = target_after_payment.apply(scaled_receipt(offer.give, target_ratio))
         except (ValueError, KeyError):
             return ActionResult(colony_id, action.kind, "rejected", "insufficient_resources")
+        if not within_capacity(
+            source_after_receipt,
+            perishable_capacity(self.state.structures, offer.source_colony_id),
+        ) or not within_capacity(
+            target_after_trade,
+            perishable_capacity(self.state.structures, colony_id),
+        ):
+            return ActionResult(colony_id, action.kind, "rejected", "store_full")
         self._update_colony(offer.source_colony_id, resources=source_after_receipt)
         self._update_colony(colony_id, resources=target_after_trade)
         offers = dict(self.state.offers)
@@ -683,6 +700,9 @@ class SimCore:
                 self.state.structures, colony_id, workers
             )
             delta = production_delta(colony.resources, counts)
+            delta = cap_production_delta(
+                colony.resources, delta, perishable_capacity(self.state.structures, colony_id)
+            )
             heal_capacity = counts.get(StructureKind.CLINIC, 0) * CLINIC_HEALS_PER_TURN
             healed_sick = min(heal_capacity, colony.sick)
             healed_injured = min(heal_capacity - healed_sick, colony.injured)

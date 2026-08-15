@@ -25,6 +25,20 @@ BUILD_COSTS: dict[StructureKind, dict[str, int]] = {
 BUILD_TURNS: dict[StructureKind, int] = {kind: 3 for kind in BUILD_COSTS}
 BUILD_TURNS[StructureKind.WALL] = 2
 
+# Perishable storage capacity. Only food and water spoil: wood, stone, ore, tools
+# and influence can be stockpiled without bound. A colony's base ceiling for each
+# perishable is PERISHABLE_BASE_CAPACITY; every OPERATIONAL warehouse raises it by
+# WAREHOUSE_CAPACITY_BONUS (damaged, burning, ruined and under-construction
+# warehouses raise nothing, matching every other structure effect). The base sits
+# above the 60 food / 60 water a colony starts with, so nothing begins the scenario
+# already capped, and below the ~200 food an unmanaged colony actually hoards, so
+# accumulation stops being free. The bonus makes one warehouse hold ten extra turns
+# of consumption for a 21-population colony, repaying its 18-unit build cost well
+# inside the eighty-turn horizon.
+PERISHABLES = ("food", "water")
+PERISHABLE_BASE_CAPACITY = 100
+WAREHOUSE_CAPACITY_BONUS = 50
+
 HOUSING_BY_STRUCTURE = {
     StructureKind.HEADQUARTERS: 8,
     StructureKind.HOUSE: 6,
@@ -83,6 +97,58 @@ def can_afford(stock: ResourceStock, cost: dict[str, int]) -> bool:
     return all(values[name] >= amount for name, amount in cost.items())
 
 
+def store_overflow(
+    stock: ResourceStock, delta: Mapping[str, int], capacity: Mapping[str, int]
+) -> set[str]:
+    """Perishables whose positive ``delta`` would push ``stock`` past ``capacity``.
+
+    Non-perishable names in ``delta`` never overflow: only food and water are
+    capped. Returns the set of perishable names that would exceed the ceiling, so a
+    caller can reject the whole action rather than silently truncate it.
+    """
+    values = stock.as_dict()
+    return {
+        name
+        for name in PERISHABLES
+        if name in delta
+        and delta[name] > 0
+        and capacity.get(name) is not None
+        and values[name] + delta[name] > capacity[name]
+    }
+
+
+def within_capacity(stock: ResourceStock, capacity: Mapping[str, int]) -> bool:
+    """Whether a colony's perishable stock is at or below its storage ceiling."""
+    values = stock.as_dict()
+    return all(
+        values[name] <= capacity[name] for name in PERISHABLES if name in capacity
+    )
+
+
+def cap_production_delta(
+    stock: ResourceStock, delta: Mapping[str, int], capacity: Mapping[str, int]
+) -> dict[str, int]:
+    """Truncate a production delta so perishable yields stop at the storage ceiling.
+
+    Structure production is allowed to stop at the cap rather than be rejected: a
+    perishable with no room left is dropped from the delta and a partially-filling
+    one is reduced to the remaining space, so the caller reports what was actually
+    produced rather than the nominal yield.
+    """
+    capped = dict(delta)
+    values = stock.as_dict()
+    for name in PERISHABLES:
+        produced = capped.get(name, 0)
+        if produced <= 0:
+            continue
+        room = max(0, capacity[name] - values[name])
+        if room <= 0:
+            del capped[name]
+        elif room < produced:
+            capped[name] = room
+    return capped
+
+
 def resource_delta(items: tuple[tuple[str, int], ...], sign: int = 1) -> dict[str, int]:
     delta: dict[str, int] = {}
     for name, amount in items:
@@ -101,6 +167,22 @@ def operational_structure_counts(
         if structure.colony_id == colony_id and structure.status == StructureStatus.OPERATIONAL:
             counts[structure.kind] = counts.get(structure.kind, 0) + 1
     return counts
+
+
+def perishable_capacity(
+    structures: Mapping[str, Structure], colony_id: str
+) -> dict[str, int]:
+    """Perishable storage ceilings for a colony, from OPERATIONAL warehouses only.
+
+    Every non-operational warehouse — damaged, burning, ruined or still under
+    construction — raises nothing, matching how every other structure effect only
+    applies while operational.
+    """
+    warehouses = operational_structure_counts(structures, colony_id).get(
+        StructureKind.WAREHOUSE, 0
+    )
+    ceiling = PERISHABLE_BASE_CAPACITY + warehouses * WAREHOUSE_CAPACITY_BONUS
+    return {name: ceiling for name in PERISHABLES}
 
 
 # Kinds whose OPERATIONAL structures need a worker each turn to produce. Passive
