@@ -469,17 +469,48 @@ export class CastleRenderer {
         return;
       }
       const depth = (structure.x + structure.y) * 1000 + structure.x;
+      const ownerIndex = Math.max(0, Number(structure.colony_id.replace(/\D/g, "")) - 1);
+      const ownerColor = visualTokens.colonies[ownerIndex % visualTokens.colonies.length]
+        ?? visualTokens.colonies[0];
+
+      // A footing in the owner's colour, drawn under the building. Ownership used to
+      // be a five-pixel pennant beside a forty-eight-pixel sprite, which is invisible
+      // at map zoom — watching several colonies at once, there was no telling whose
+      // keep was whose.
+      const footing = new Graphics()
+        .ellipse(position.x, position.y + 2, 19, 9)
+        .fill({ color: ownerColor, alpha: 0.55 })
+        .ellipse(position.x, position.y + 2, 19, 9)
+        .stroke({ color: ownerColor, width: 1.5, alpha: 0.95 });
+      footing.zIndex = depth - 0.1;
+      structureLayer.addChild(footing);
+
       sprite.zIndex = depth;
       structureLayer.addChild(sprite);
-      const ownerIndex = Math.max(0, Number(structure.colony_id.replace(/\D/g, "")) - 1);
+
       const flag = new Graphics()
-        .rect(position.x - 14, position.y - 35, 5, 12)
-        .fill({
-          color: visualTokens.colonies[ownerIndex % visualTokens.colonies.length]
-            ?? visualTokens.colonies[0],
-        });
+        .rect(position.x - 15, position.y - 38, 4, 14)
+        .fill({ color: ownerColor })
+        .rect(position.x - 15, position.y - 38, 13, 8)
+        .fill({ color: ownerColor, alpha: 0.9 });
       flag.zIndex = depth + 0.1;
       structureLayer.addChild(flag);
+
+      if (structure.kind === "headquarters") {
+        const label = new Text({
+          text: structure.colony_id.toUpperCase(),
+          style: {
+            fill: ownerColor,
+            fontFamily: visualTokens.fontBody,
+            fontSize: visualTokens.labelSize,
+            letterSpacing: visualTokens.labelTracking,
+          },
+        });
+        label.anchor.set(0.5, 1);
+        label.position.set(position.x, position.y - 40);
+        label.zIndex = depth + 0.2;
+        structureLayer.addChild(label);
+      }
 
       if (["foundation", "building", "repairing"].includes(structure.status)) {
         const ratio = Math.min(1, structure.progress / Math.max(1, structure.required_progress));
