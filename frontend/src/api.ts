@@ -26,6 +26,161 @@ export interface MatchCreated {
   readonly admin_token: string;
 }
 
+export type SchemaVersion = "1.1";
+export type ControllerType = "human" | "baseline" | "external";
+export type BaselineKind =
+  | "random_valid"
+  | "survivalist"
+  | "trader"
+  | "expansionist"
+  | "militarist";
+export type HeartbeatStatus =
+  | "ready"
+  | "connected"
+  | "thinking"
+  | "submitted"
+  | "disconnected";
+
+export interface SessionSlotConfiguration {
+  readonly colony_id: string;
+  readonly controller_type: ControllerType;
+  readonly baseline_kind?: BaselineKind | null;
+}
+
+export interface CreateSessionInput {
+  readonly scenario_id: string;
+  readonly seed: number;
+  readonly colony_count: number;
+  readonly deadline_seconds: number;
+  readonly slots: readonly SessionSlotConfiguration[];
+}
+
+export interface SessionCreated {
+  readonly schema_version: SchemaVersion;
+  readonly match_id: string;
+  readonly scenario_id: string;
+  readonly status: "draft";
+  readonly admin_token: string;
+}
+
+export interface ControllerIdentity {
+  readonly display_name: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly model_version?: string | null;
+  readonly adapter_name?: string | null;
+  readonly adapter_version?: string | null;
+  readonly connection_mode?: string | null;
+  readonly run_label?: string | null;
+}
+
+export interface LobbySlot {
+  readonly colony_id: string;
+  readonly controller_type: ControllerType;
+  readonly controller_id: string | null;
+  readonly identity: ControllerIdentity | null;
+  readonly presence: string;
+  readonly baseline_kind: string | null;
+  readonly generation: number;
+  readonly pairing_active: boolean;
+  readonly pairing_expires_at: number | null;
+  readonly pairing_consumed: boolean;
+  readonly pairing_attempts: number;
+  readonly last_heartbeat_at: number | null;
+  readonly last_heartbeat_turn: number | null;
+}
+
+export interface LobbySnapshot {
+  readonly schema_version: SchemaVersion;
+  readonly match_id: string;
+  readonly scenario_id: string;
+  readonly seed: number;
+  readonly colony_count: number;
+  readonly deadline_seconds: number;
+  readonly status: string;
+  readonly slots: readonly LobbySlot[];
+}
+
+export interface PairingGrant {
+  readonly schema_version: SchemaVersion;
+  readonly match_id: string;
+  readonly colony_id: string;
+  readonly pairing_code: string;
+  readonly expires_at: number;
+}
+
+export interface MutationResult {
+  readonly schema_version: SchemaVersion;
+  readonly match_id: string;
+  readonly status: string;
+}
+
+export interface SlotMutationResult extends MutationResult {
+  readonly colony_id: string;
+}
+
+export interface SlotConfigurationResult {
+  readonly schema_version: SchemaVersion;
+  readonly match_id: string;
+  readonly colony_id: string;
+  readonly controller_type: ControllerType;
+  readonly presence: string;
+}
+
+export interface HumanControllerCapability {
+  readonly schema_version: SchemaVersion;
+  readonly match_id: string;
+  readonly colony_id: string;
+  readonly controller_token: string;
+}
+
+export interface OperationalEvent {
+  readonly sequence: number;
+  readonly turn: number;
+  readonly kind: string;
+  readonly colony_id: string | null;
+  readonly data: Readonly<Record<string, unknown>>;
+}
+
+export interface ControllerTenure {
+  readonly colony_id: string;
+  readonly controller_id: string;
+  readonly controller_type: ControllerType;
+  readonly identity: ControllerIdentity | null;
+  readonly generation: number;
+  readonly started_at: number;
+  readonly ended_at: number | null;
+}
+
+export interface OperationsSnapshot extends LobbySnapshot {
+  readonly turn: number;
+  readonly deadline_at: number | null;
+  readonly pending_colonies: readonly string[];
+  readonly events: readonly OperationalEvent[];
+  readonly tenures: Readonly<Record<string, readonly ControllerTenure[]>>;
+}
+
+export interface RunReport {
+  readonly schema_version: SchemaVersion;
+  readonly status: Readonly<Record<string, unknown>>;
+  readonly metrics: Readonly<Record<string, unknown>>;
+  readonly latest_events: readonly Readonly<Record<string, unknown>>[];
+}
+
+export interface OperationsWebSocketTicket {
+  readonly schema_version: SchemaVersion;
+  readonly match_id: string;
+  readonly websocket_ticket: string;
+  readonly expires_at: number;
+}
+
+export type AdminWebSocketMessage =
+  | { readonly schema_version: SchemaVersion; readonly type: "lobby.snapshot"; readonly payload: OperationsSnapshot }
+  | { readonly schema_version: SchemaVersion; readonly type: "controller.presence_changed" | "turn.opened" | "controller.submitted" | "turn.resolved" | "match.completed" | "controller.claimed" | "pairing.rejected" | "controller.heartbeat_rejected" | "controller.timed_out" | "controller.replaced"; readonly payload: OperationalEvent }
+  | { readonly schema_version: SchemaVersion; readonly type: "metric.updated"; readonly payload: { readonly event: OperationalEvent; readonly metrics: Readonly<Record<string, unknown>> } };
+
+export type WebSocketConstructor = new (url: string, protocols?: string | string[]) => WebSocket;
+
 export interface VisibleCell {
   readonly x: number;
   readonly y: number;
@@ -49,6 +204,15 @@ export interface VisibleStructure {
   readonly y: number;
 }
 
+export interface VisibleScout {
+  readonly id: string;
+  readonly colony_id: string;
+  readonly x: number;
+  readonly y: number;
+  readonly target_x: number;
+  readonly target_y: number;
+}
+
 export interface ColonyView {
   readonly id: string;
   readonly population: number;
@@ -59,13 +223,14 @@ export interface ColonyView {
 }
 
 export interface Observation {
-  readonly schema_version: "1.0";
+  readonly schema_version: "1.0" | "1.1";
   readonly scenario_id: string;
   readonly turn: number;
   readonly colony_id: string;
   readonly colony: ColonyView;
   readonly visible_cells: readonly VisibleCell[];
   readonly visible_structures: readonly VisibleStructure[];
+  readonly scouts?: readonly VisibleScout[];
   readonly known_colonies: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   readonly active_offers: readonly Readonly<Record<string, unknown>>[];
   readonly valid_action_kinds: readonly string[];
@@ -110,7 +275,125 @@ export class BenchmarkApi {
     readonly seed: number;
     readonly colony_count: number;
   }): Promise<MatchCreated> {
+    if (input.colony_count !== 1) {
+      throw new Error("Legacy development quick play supports one colony only");
+    }
     return this.request("/api/matches", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  async createDevelopmentMatch(input: {
+    readonly scenario_id: string;
+    readonly seed: number;
+  }): Promise<MatchCreated> {
+    return this.createMatch({ ...input, colony_count: 1 });
+  }
+
+  async createSession(input: CreateSessionInput, orchestratorToken?: string): Promise<SessionCreated> {
+    return this.request(
+      "/api/sessions",
+      { method: "POST", body: JSON.stringify(input) },
+      orchestratorToken,
+    );
+  }
+
+  async lobby(matchId: string, adminToken: string): Promise<LobbySnapshot> {
+    return this.request(`/api/sessions/${encodeURIComponent(matchId)}/lobby`, {}, adminToken);
+  }
+
+  async configureSlot(
+    matchId: string,
+    colonyId: string,
+    adminToken: string,
+    input: { readonly controller_type: ControllerType; readonly baseline_kind?: BaselineKind | null },
+  ): Promise<SlotConfigurationResult> {
+    return this.request(
+      `/api/sessions/${encodeURIComponent(matchId)}/slots/${encodeURIComponent(colonyId)}`,
+      { method: "POST", body: JSON.stringify(input) },
+      adminToken,
+    );
+  }
+
+  async createPairing(matchId: string, colonyId: string, adminToken: string): Promise<PairingGrant> {
+    return this.request(
+      `/api/sessions/${encodeURIComponent(matchId)}/slots/${encodeURIComponent(colonyId)}/pairing`,
+      { method: "POST" },
+      adminToken,
+    );
+  }
+
+  async heartbeat(
+    matchId: string,
+    controllerToken: string,
+    input: { readonly turn: number; readonly status: HeartbeatStatus },
+  ): Promise<MutationResult> {
+    return this.request(
+      `/api/sessions/${encodeURIComponent(matchId)}/heartbeat`,
+      { method: "POST", body: JSON.stringify(input) },
+      controllerToken,
+    );
+  }
+
+  async startSession(matchId: string, adminToken: string): Promise<MutationResult> {
+    return this.request(
+      `/api/sessions/${encodeURIComponent(matchId)}/start`,
+      { method: "POST" },
+      adminToken,
+    );
+  }
+
+  async humanCapability(
+    matchId: string,
+    colonyId: string,
+    adminToken: string,
+  ): Promise<HumanControllerCapability> {
+    return this.request(
+      `/api/sessions/${encodeURIComponent(matchId)}/slots/${encodeURIComponent(colonyId)}/human-capability`,
+      { method: "POST" },
+      adminToken,
+    );
+  }
+
+  async replaceSlot(
+    matchId: string,
+    colonyId: string,
+    adminToken: string,
+    input: { readonly replacement: ControllerType; readonly baseline_kind?: BaselineKind | null },
+  ): Promise<SlotMutationResult> {
+    return this.request(
+      `/api/sessions/${encodeURIComponent(matchId)}/slots/${encodeURIComponent(colonyId)}/replace`,
+      { method: "POST", body: JSON.stringify(input) },
+      adminToken,
+    );
+  }
+
+  async operations(matchId: string, adminToken: string): Promise<OperationsSnapshot> {
+    return this.request(`/api/matches/${encodeURIComponent(matchId)}/operations`, {}, adminToken);
+  }
+
+  async report(matchId: string, adminToken: string): Promise<RunReport> {
+    return this.request(`/api/matches/${encodeURIComponent(matchId)}/report`, {}, adminToken);
+  }
+
+  async operationsTicket(matchId: string, adminToken: string): Promise<OperationsWebSocketTicket> {
+    return this.request(
+      `/api/matches/${encodeURIComponent(matchId)}/operations/ticket`,
+      { method: "POST" },
+      adminToken,
+    );
+  }
+
+  openOperationsSocket(
+    matchId: string,
+    ticket: string,
+    Socket: WebSocketConstructor = WebSocket,
+  ): WebSocket {
+    const pageBase = typeof window === "undefined" ? "http://localhost" : window.location.href;
+    const url = new URL(
+      `${this.baseUrl}/api/matches/${encodeURIComponent(matchId)}/operations/ws`,
+      pageBase,
+    );
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    return new Socket(url.toString(), ["castle.operations", ticket]);
   }
 
   async observe(matchId: string, colonyId: string, token: string): Promise<Observation> {

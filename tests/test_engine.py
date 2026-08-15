@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from castle_benchmark.actions import ActionBatch, BuildAction, GatherAction, WaitAction
 from castle_benchmark.domain import Position, StructureKind, StructureStatus
 from castle_benchmark.engine import SimCore
@@ -142,4 +144,15 @@ def test_action_batch_cannot_exceed_per_turn_work_budget() -> None:
     )
 
     assert [item.code for item in result.action_results] == ["ok", "ok", "action_budget_exceeded"]
-from dataclasses import replace
+
+
+def test_scouting_colonists_shrink_the_work_budget() -> None:
+    """Catches the work budget ignoring colonists who are away scouting."""
+    sim = make_sim()
+    colony = sim.state.colonies["c1"]
+    sim._update_colony("c1", scouting=colony.population - 1)
+
+    result = sim.resolve((batch(sim, "c1", WaitAction(), WaitAction()),))
+
+    codes = [item.code for item in result.action_results if item.colony_id == "c1"]
+    assert codes == ["ok", "action_budget_exceeded"]

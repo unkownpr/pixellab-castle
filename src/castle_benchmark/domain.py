@@ -112,6 +112,27 @@ class ColonyState:
     policies: dict[str, str] = field(default_factory=dict)
     policy_cooldowns: dict[str, int] = field(default_factory=dict)
     known_cells: frozenset[Position] = field(default_factory=frozenset)
+    visible_now: frozenset[Position] = field(default_factory=frozenset)
+    scouting: int = 0
+
+    @property
+    def available_population(self) -> int:
+        """Members currently at home, well, and able to gather or produce.
+
+        Colonists away scouting and colonists laid up sick are both unavailable.
+        Counting the sick here is what gives sickness — and therefore the clinic
+        that cures it — a mechanical consequence: without it the sick tally is a
+        number that rises and falls while the colony keeps working at full strength.
+        """
+        return max(0, self.population - self.scouting - self.sick)
+
+
+@dataclass(frozen=True, slots=True)
+class Scout:
+    id: str
+    colony_id: str
+    position: Position
+    target: Position
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,5 +155,6 @@ class MatchState:
     colonies: dict[str, ColonyState]
     structures: dict[str, Structure]
     offers: dict[str, TradeOffer] = field(default_factory=dict)
+    scouts: dict[str, Scout] = field(default_factory=dict)
     terminal: bool = False
     termination_reason: str | None = None

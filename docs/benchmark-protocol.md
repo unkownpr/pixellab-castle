@@ -81,3 +81,26 @@ Her tur kaydı `completed: true` sınırıdır. Replay aynı başlangıçtan ayn
 ## Capability güvenliği
 
 Koloni tokenı yalnız kendi gözlemini okuyabilir ve kendi eylemini gönderebilir. Admin tokenı durum/rapor okuyabilir fakat koloni eylemi gönderemez. Tokenlar URL’ye değil HTTP `Authorization: Bearer` başlığına konur; WebSocket istisnasında bağlantı query parametresi protokol sözleşmesidir.
+
+## Oturum, eşleştirme ve devir
+
+Birden çok bağımsız model ajanı aynı maça bağlamak için oturum akışı kullanılır:
+
+- `benchmark.create_session` taslak oturumu kurar ve yalnız `admin_token` döndürür.
+- Her dış slot için `benchmark.create_pairing` tek kullanımlık, maç/koloni kapsamlı,
+  yalnız hash olarak tutulan ve tam 10 dakikada süresi dolan bir `pairing_code` üretir.
+- `benchmark.claim_slot` kodu tüketir, koloni kapsamlı `controller_token` döndürür ve
+  kimlik doğrulaması reddedilirse `pairing_rejected` olayını kaydeder.
+- `benchmark.heartbeat` varlık durumunu taşır; hızlı tekrar `heartbeat_rejected` olarak
+  ölçülür. Eksik girdi deadline’da ölçülen bir `wait` olur; zamanlama SimCore sırasını
+  veya RNG’yi değiştirmez.
+- `benchmark.replace_controller` bir controller’ın tenure’ını kapatır, capability’sini
+  iptal eder ve yeni bir devir (baseline/human) kurar. Önceki ve yeni controller’ın
+  metrikleri raporda farklı `tenure_metrics` satırlarında, farklı `controller_id` ile kalır.
+
+Admin operations WebSocket’i sıhhi bir akış yayınlar: `lobby.snapshot`,
+`controller.presence_changed`, `controller.claimed`, `pairing.rejected`,
+`controller.heartbeat_rejected`, `turn.opened`, `controller.submitted`,
+`turn.resolved`, `metric.updated`, `controller.timed_out`, `controller.replaced`,
+`match.completed`. Hiçbir capability/digest bu akışa girmez; yalnız izin verilen olay
+alanları taşınır.

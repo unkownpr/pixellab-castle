@@ -80,3 +80,36 @@ def test_replay_fails_closed_when_turn_log_is_truncated(tmp_path) -> None:
     writer.events_path.write_text(writer.events_path.read_text().splitlines()[0] + "\n")
 
     assert not verify_replay(writer.run_dir).ok
+
+
+def test_tenure_and_action_attribution_are_artifact_metadata_not_replay_inputs(tmp_path) -> None:
+    """Catches controller telemetry either leaking into replay input or being omitted from artifacts."""
+    sim = SimCore.create(BASIC_SURVIVAL, seed=61, colony_count=1)
+    writer = ArtifactWriter.create(
+        tmp_path / "run",
+        BASIC_SURVIVAL,
+        61,
+        1,
+        {"c1": "external"},
+        controller_tenures=[
+            {
+                "colony_id": "c1",
+                "controller_id": "controller-a",
+                "controller_type": "external",
+                "started_at": 1_000.0,
+                "ended_at": None,
+            }
+        ],
+    )
+    while not sim.state.terminal:
+        batch = ActionBatch(sim.state.turn, "c1", (WaitAction(),))
+        result = sim.resolve((batch,))
+        writer.write_turn((batch,), result, action_controller_ids={"c1": "controller-a"})
+    writer.finish(sim.state, metrics={})
+
+    metadata = json.loads(writer.metadata_path.read_text())
+    turn_record = json.loads(writer.events_path.read_text().splitlines()[0])
+
+    assert metadata["controller_tenures"][0]["controller_id"] == "controller-a"
+    assert turn_record["action_controller_ids"] == {"c1": "controller-a"}
+    assert verify_replay(writer.run_dir).ok

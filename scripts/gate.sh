@@ -7,10 +7,12 @@ cd "$repo_dir"
 uv sync --extra dev --locked
 uv run python tools/build_asset_manifest.py
 uv run pytest -q
+uv run pytest tests/e2e -q
 
 npm --prefix frontend ci
 npm --prefix frontend test
 npm --prefix frontend run build
+npm --prefix frontend audit --audit-level=low
 
 gate_output="$(mktemp -d "${TMPDIR:-/tmp}/castle-benchmark-gate.XXXXXX")"
 cleanup() {

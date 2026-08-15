@@ -10,6 +10,7 @@ from .actions import (
     GameAction,
     GatherAction,
     RaidAction,
+    ScoutAction,
     SetPolicyAction,
     TradeOfferAction,
     TradeRespondAction,
@@ -19,16 +20,60 @@ from .domain import (
     ColonyState,
     MatchState,
     MilitaryPosture,
+    Position,
     RelationStatus,
     ResourceStock,
+    Scout,
     Structure,
     StructureKind,
     StructureStatus,
     TradeOffer,
 )
 from .scenarios import Scenario
-from .systems import BUILD_COSTS, BUILD_TURNS, HOUSING_BY_STRUCTURE, can_afford, resource_delta
+from .systems import (
+    BARRACKS_RAID_LOOT_REDUCTION,
+    BUILD_COSTS,
+    BUILD_TURNS,
+    CLINIC_HEALS_PER_TURN,
+    HOUSING_BY_STRUCTURE,
+    NATURAL_RECOVERY_PER_TURN,
+    RAID_FOOD_LOOT,
+    RAID_INJURIES,
+    RAID_STRUCTURE_DAMAGE,
+    SICKENED_PER_SHORTFALL_TURN,
+    TRADE_RATIO_BASE,
+    TRADE_RATIO_MARKET,
+    WALL_RAID_DAMAGE_REDUCTION,
+    can_afford,
+    has_operational,
+    production_delta,
+    resource_delta,
+    scaled_receipt,
+    staffed_production,
+    trade_blocked,
+)
 from .world import WorldCell, WorldState, generate_world, rotated_spawns, visible_cells
+
+
+# Exploration and sight constants. Kept as named module-level values so the
+# scouting trade-off and watchtower benefit stay tunable without touching the
+# resolution logic.
+SCOUT_SPEED = 3  # cells a scout advances toward its target each turn
+SCOUT_REVEAL_RADIUS = 2  # radius around the scout revealed as it travels
+SCOUT_FOOD_COST = 12  # provisioning charged when a scout is dispatched
+WATCHTOWER_SIGHT_BONUS = 2  # added to active sight radius per operational watchtower
+
+# Labour economy constants. A scout occupies one colonist for its whole journey, so
+# available_population (population minus colonists out scouting) is the real cost of
+# exploration: every hand sent scouting is a hand that cannot gather, cannot work a
+# producing structure, and cannot carry an action that turn. These encode how scarce
+# that labour is.
+GATHER_YIELD_PER_ACTION = 4  # units one gather action collects at full strength
+WORKERS_PER_PRODUCER = 1  # colonists needed to staff one producing structure a turn
+
+# Hazard constants. Fire consumes a fixed amount of structure condition each turn a
+# structure keeps burning; a structure reduced to zero condition becomes a ruin.
+FIRE_DAMAGE_PER_TURN = 40
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +126,7 @@ class SimCore:
         self.state = state
         self._next_structure = len(state.structures) + 1
         self._next_offer = 1
+        self._next_scout = len(state.scouts) + 1
 
     @classmethod
     def create(cls, scenario: Scenario, seed: int, colony_count: int) -> SimCore:
@@ -91,6 +137,7 @@ class SimCore:
         ids = tuple(f"c{index + 1}" for index in range(colony_count))
         for index, (colony_id, spawn) in enumerate(zip(ids, spawns, strict=True), start=1):
             relations = {other: RelationStatus.UNKNOWN for other in ids if other != colony_id}
+            initial_sight = visible_cells(world, (spawn,), scenario.sight_radius)
             colonies[colony_id] = ColonyState(
                 id=colony_id,
                 spawn=spawn,
@@ -99,7 +146,8 @@ class SimCore:
                 ),
                 relations=relations,
                 policies={"military_posture": MilitaryPosture.PEACEFUL.value, "rationing": "normal"},
-                known_cells=visible_cells(world, (spawn,), scenario.sight_radius),
+                known_cells=initial_sight,
+                visible_now=initial_sight,
             )
             structure_id = f"s{index}"
             structures[structure_id] = Structure(
@@ -146,8 +194,14 @@ class SimCore:
             if batch is None:
                 events.append(DomainEvent(self.state.turn, "controller_wait", colony_id))
                 continue
+            # Scouting eats into the turn's work budget: colonists away travelling
+            # cannot carry an action. The ceiling itself is unchanged.
+            budget = min(
+                self.ACTION_BUDGET,
+                self.state.colonies[colony_id].available_population,
+            )
             for index, action in enumerate(batch.actions):
-                if index >= self.ACTION_BUDGET:
+                if index >= budget:
                     results.append(
                         ActionResult(
                             colony_id,
@@ -161,7 +215,9 @@ class SimCore:
                 results.append(result)
 
         self._progress_construction(events)
+        self._apply_production(events)
         self._expire_offers(events)
+        self._advance_scouts(events)
         self._apply_needs(events)
         self._apply_hazards(events)
         self._refresh_colonies()
@@ -202,6 +258,8 @@ class SimCore:
             return self._raid(colony_id, action, events)
         if isinstance(action, SetPolicyAction):
             return self._set_policy(colony_id, action, events)
+        if isinstance(action, ScoutAction):
+            return self._scout(colony_id, action, events)
         return ActionResult(colony_id, "unknown", "rejected", "unknown_action")
 
     def _update_colony(self, colony_id: str, **changes: object) -> None:
@@ -218,7 +276,17 @@ class SimCore:
         cell = world.cells.get(action.position)
         if cell is None or cell.resource is None or cell.resource_amount <= 0:
             return ActionResult(colony_id, action.kind, "rejected", "no_resource")
-        amount = min(4, cell.resource_amount)
+        # Yield scales with the share of the colony still at home, so sending people
+        # scouting costs production from the first colonist onward rather than only
+        # once the colony is nearly wiped out.
+        if colony.population <= 0:
+            return ActionResult(colony_id, action.kind, "rejected", "no_population")
+        staffed_yield = (
+            GATHER_YIELD_PER_ACTION * colony.available_population // colony.population
+        )
+        amount = min(staffed_yield, cell.resource_amount)
+        if amount <= 0:
+            return ActionResult(colony_id, action.kind, "rejected", "no_available_population")
         try:
             stock = colony.resources.apply({cell.resource: amount})
         except KeyError:
@@ -316,6 +384,8 @@ class SimCore:
     def _offer(self, colony_id: str, action: TradeOfferAction, events: list[DomainEvent]) -> ActionResult:
         if action.target_colony_id not in self.state.colonies or action.target_colony_id == colony_id:
             return ActionResult(colony_id, action.kind, "rejected", "invalid_target")
+        if trade_blocked(self.state.structures, colony_id):
+            return ActionResult(colony_id, action.kind, "rejected", "walled")
         try:
             give_delta = resource_delta(action.give, sign=-1)
             resource_delta(action.receive)
@@ -349,6 +419,8 @@ class SimCore:
             return ActionResult(colony_id, action.kind, "rejected", "offer_unavailable")
         source = self.state.colonies[offer.source_colony_id]
         target = self.state.colonies[colony_id]
+        if action.accept and trade_blocked(self.state.structures, colony_id):
+            return ActionResult(colony_id, action.kind, "rejected", "walled")
         offers = dict(self.state.offers)
         if not action.accept:
             self._update_colony(
@@ -360,9 +432,19 @@ class SimCore:
             events.append(DomainEvent(self.state.turn, "trade_rejected", colony_id, {"offer_id": offer.id}))
             return ActionResult(colony_id, action.kind, "accepted", "ok")
         try:
+            source_ratio = (
+                TRADE_RATIO_MARKET
+                if has_operational(self.state.structures, offer.source_colony_id, StructureKind.MARKET)
+                else TRADE_RATIO_BASE
+            )
+            target_ratio = (
+                TRADE_RATIO_MARKET
+                if has_operational(self.state.structures, colony_id, StructureKind.MARKET)
+                else TRADE_RATIO_BASE
+            )
             target_after_payment = target.resources.apply(resource_delta(offer.receive, sign=-1))
-            source_after_receipt = source.resources.apply(resource_delta(offer.receive))
-            target_after_trade = target_after_payment.apply(resource_delta(offer.give))
+            source_after_receipt = source.resources.apply(scaled_receipt(offer.receive, source_ratio))
+            target_after_trade = target_after_payment.apply(scaled_receipt(offer.give, target_ratio))
         except (ValueError, KeyError):
             return ActionResult(colony_id, action.kind, "rejected", "insufficient_resources")
         self._update_colony(offer.source_colony_id, resources=source_after_receipt)
@@ -388,9 +470,14 @@ class SimCore:
             relations[target] = RelationStatus.WAR
             self._update_colony(source, relations=relations)
         defender = self.state.colonies[action.target_colony_id]
-        stolen = min(3, defender.resources.food)
+        barracks = has_operational(self.state.structures, action.target_colony_id, StructureKind.BARRACKS)
+        loot = max(0, RAID_FOOD_LOOT - (BARRACKS_RAID_LOOT_REDUCTION if barracks else 0))
+        stolen = min(loot, defender.resources.food)
+        injuries = min(RAID_INJURIES, defender.population - defender.injured)
         self._update_colony(
-            action.target_colony_id, resources=defender.resources.apply({"food": -stolen})
+            action.target_colony_id,
+            resources=defender.resources.apply({"food": -stolen}),
+            injured=defender.injured + injuries,
         )
         current_attacker = self.state.colonies[colony_id]
         self._update_colony(colony_id, resources=current_attacker.resources.apply({"food": stolen}))
@@ -402,7 +489,9 @@ class SimCore:
         ]
         if targets:
             target = targets[0]
-            condition = max(0, target.condition - 20)
+            walled = has_operational(self.state.structures, action.target_colony_id, StructureKind.WALL)
+            damage = RAID_STRUCTURE_DAMAGE - (WALL_RAID_DAMAGE_REDUCTION if walled else 0)
+            condition = max(0, target.condition - damage)
             status = StructureStatus.RUINED if condition == 0 else StructureStatus.DAMAGED
             structures = dict(self.state.structures)
             structures[target.id] = replace(target, condition=condition, status=status)
@@ -448,6 +537,113 @@ class SimCore:
         events.append(DomainEvent(self.state.turn, "policy_changed", colony_id, {"policy": action.policy, "value": action.value}))
         return ActionResult(colony_id, action.kind, "accepted", "ok")
 
+    def _scout(
+        self, colony_id: str, action: ScoutAction, events: list[DomainEvent]
+    ) -> ActionResult:
+        colony = self.state.colonies[colony_id]
+        world = self.state.world
+        assert isinstance(world, WorldState)
+        if action.target not in world.cells:
+            return ActionResult(colony_id, action.kind, "rejected", "invalid_target")
+        if colony.available_population < 1:
+            return ActionResult(colony_id, action.kind, "rejected", "insufficient_population")
+        if colony.resources.food < SCOUT_FOOD_COST:
+            return ActionResult(colony_id, action.kind, "rejected", "insufficient_resources")
+        stock = colony.resources.apply({"food": -SCOUT_FOOD_COST})
+        scout_id = f"sc{self._next_scout}"
+        self._next_scout += 1
+        scouts = dict(self.state.scouts)
+        scouts[scout_id] = Scout(
+            id=scout_id,
+            colony_id=colony_id,
+            position=colony.spawn,
+            target=action.target,
+        )
+        self.state = replace(self.state, scouts=scouts)
+        self._update_colony(colony_id, resources=stock, scouting=colony.scouting + 1)
+        events.append(
+            DomainEvent(
+                self.state.turn,
+                "scout_dispatched",
+                colony_id,
+                {"scout_id": scout_id, "x": action.target.x, "y": action.target.y, "food_cost": SCOUT_FOOD_COST},
+            )
+        )
+        return ActionResult(colony_id, action.kind, "accepted", "ok")
+
+    def _advance_scouts(self, events: list[DomainEvent]) -> None:
+        if not self.state.scouts:
+            return
+        world = self.state.world
+        assert isinstance(world, WorldState)
+        scouts = dict(self.state.scouts)
+        for scout_id in sorted(scouts):
+            scout = scouts[scout_id]
+            position = self._step_toward(scout.position, scout.target, SCOUT_SPEED)
+            reached = position == scout.target
+            revealed = visible_cells(world, (position,), SCOUT_REVEAL_RADIUS)
+            colony = self.state.colonies[scout.colony_id]
+            newly_seen = revealed - colony.known_cells
+            if newly_seen:
+                self._update_colony(
+                    scout.colony_id,
+                    known_cells=colony.known_cells | revealed,
+                )
+                events.append(
+                    DomainEvent(
+                        self.state.turn,
+                        "scout_revealed",
+                        scout.colony_id,
+                        {"scout_id": scout.id, "x": position.x, "y": position.y, "revealed": len(newly_seen)},
+                    )
+                )
+            if reached:
+                del scouts[scout_id]
+                current = self.state.colonies[scout.colony_id]
+                self._update_colony(
+                    scout.colony_id, scouting=max(0, current.scouting - 1)
+                )
+                events.append(
+                    DomainEvent(
+                        self.state.turn,
+                        "scout_arrived",
+                        scout.colony_id,
+                        {"scout_id": scout.id, "x": position.x, "y": position.y},
+                    )
+                )
+            else:
+                scouts[scout_id] = replace(scout, position=position)
+        self.state = replace(self.state, scouts=scouts)
+
+    def _step_toward(self, position: Position, target: Position, steps: int) -> Position:
+        x, y = position.x, position.y
+        for _ in range(steps):
+            if x == target.x and y == target.y:
+                break
+            dx = target.x - x
+            dy = target.y - y
+            if abs(dx) >= abs(dy):
+                x += 1 if dx > 0 else -1
+            else:
+                y += 1 if dy > 0 else -1
+        return Position(x, y)
+
+    def _active_sight(
+        self, colony: ColonyState
+    ) -> frozenset[Position]:
+        world = self.state.world
+        assert isinstance(world, WorldState)
+        towers = [
+            structure
+            for structure in self.state.structures.values()
+            if structure.colony_id == colony.id
+            and structure.kind == StructureKind.WATCHTOWER
+            and structure.status == StructureStatus.OPERATIONAL
+        ]
+        radius = self.scenario.sight_radius + WATCHTOWER_SIGHT_BONUS * len(towers)
+        origins = (colony.spawn, *(tower.position for tower in towers))
+        return visible_cells(world, origins, radius)
+
     def _progress_construction(self, events: list[DomainEvent]) -> None:
         structures = dict(self.state.structures)
         changed = False
@@ -479,6 +675,39 @@ class SimCore:
         if changed:
             self.state = replace(self.state, structures=structures)
 
+    def _apply_production(self, events: list[DomainEvent]) -> None:
+        for colony_id in sorted(self.state.colonies):
+            colony = self.state.colonies[colony_id]
+            workers = colony.available_population // WORKERS_PER_PRODUCER
+            counts, idle_producers = staffed_production(
+                self.state.structures, colony_id, workers
+            )
+            delta = production_delta(colony.resources, counts)
+            heal_capacity = counts.get(StructureKind.CLINIC, 0) * CLINIC_HEALS_PER_TURN
+            healed_sick = min(heal_capacity, colony.sick)
+            healed_injured = min(heal_capacity - healed_sick, colony.injured)
+            if not delta and not healed_sick and not healed_injured:
+                continue
+            self._update_colony(
+                colony_id,
+                resources=colony.resources.apply(delta),
+                sick=colony.sick - healed_sick,
+                injured=colony.injured - healed_injured,
+            )
+            events.append(
+                DomainEvent(
+                    self.state.turn,
+                    "production",
+                    colony_id,
+                    {
+                        "resources": delta,
+                        "healed_sick": healed_sick,
+                        "healed_injured": healed_injured,
+                        "idle_producers": idle_producers,
+                    },
+                )
+            )
+
     def _refresh_colonies(self) -> None:
         for colony_id, colony in tuple(self.state.colonies.items()):
             housing = sum(
@@ -493,7 +722,8 @@ class SimCore:
                     StructureStatus.REPAIRING,
                 }
             )
-            known = visible_cells(self.state.world, (colony.spawn,), self.scenario.sight_radius)  # type: ignore[arg-type]
+            visible_now = self._active_sight(colony)
+            known = colony.known_cells | visible_now
             population = colony.population
             if (
                 self.state.turn > 0
@@ -503,7 +733,7 @@ class SimCore:
                 and colony.resources.water >= population * 2
             ):
                 population += 1
-            self._update_colony(colony_id, housing=housing, population=population, healthy=max(0, population - colony.injured - colony.sick), known_cells=known)
+            self._update_colony(colony_id, housing=housing, population=population, healthy=max(0, population - colony.injured - colony.sick), known_cells=known, visible_now=visible_now)
 
     def _apply_needs(self, events: list[DomainEvent]) -> None:
         for colony_id, colony in tuple(self.state.colonies.items()):
@@ -512,13 +742,44 @@ class SimCore:
             food = min(food_need, colony.resources.food)
             water = min(water_need, colony.resources.water)
             stock = colony.resources.apply({"food": -food, "water": -water})
-            hungry = colony.hungry + int(food < food_need or water < water_need)
+            shortfall = food < food_need or water < water_need
+            hungry = colony.hungry + int(shortfall)
             population = colony.population
+            sick = colony.sick
             if hungry >= 3 and population > 0:
                 population -= 1
                 hungry = 0
+                if sick > 0:
+                    sick -= 1
                 events.append(DomainEvent(self.state.turn, "population_died", colony_id, {"cause": "needs"}))
-            self._update_colony(colony_id, resources=stock, hungry=hungry, population=population)
+            if shortfall:
+                healthy_available = max(0, population - colony.injured - sick)
+                sickened = min(SICKENED_PER_SHORTFALL_TURN, healthy_available)
+                if sickened:
+                    sick += sickened
+                    events.append(
+                        DomainEvent(
+                            self.state.turn,
+                            "colonist_sickened",
+                            colony_id,
+                            {"count": sickened, "cause": "needs"},
+                        )
+                    )
+            elif sick > 0:
+                recovered = min(NATURAL_RECOVERY_PER_TURN, sick)
+                if recovered:
+                    sick -= recovered
+                    events.append(
+                        DomainEvent(
+                            self.state.turn,
+                            "colonist_recovered",
+                            colony_id,
+                            {"count": recovered, "cause": "supply"},
+                        )
+                    )
+            self._update_colony(
+                colony_id, resources=stock, hungry=hungry, population=population, sick=sick
+            )
 
     def _apply_hazards(self, events: list[DomainEvent]) -> None:
         cadence = {"grassland": 11, "desert": 9, "snow": 7}.get(self.scenario.biome, 13)
@@ -580,8 +841,8 @@ class SimCore:
             ]
             if neighbours:
                 spread_targets.add(neighbours[0].id)
-            condition = max(0, source.condition - 40)
-            status = StructureStatus.RUINED if condition == 0 else StructureStatus.DAMAGED
+            condition = max(0, source.condition - FIRE_DAMAGE_PER_TURN)
+            status = StructureStatus.RUINED if condition == 0 else StructureStatus.BURNING
             structures[source.id] = replace(source, condition=condition, status=status)
             events.append(
                 DomainEvent(

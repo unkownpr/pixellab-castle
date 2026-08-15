@@ -26,6 +26,10 @@ uv run castle-benchmark report runs/basic-survival-v1-seed-17
 
 Her koşu `metadata.json`, tur bazlı `turns.jsonl`, `snapshots.jsonl`, `report.json` ve `summary.sqlite3` üretir. Replay doğrulaması her turun kanonik SHA-256 durum hash’ini yeniden hesaplar.
 
+## Yapı ekonomisi
+
+Üretim yapıları (farm, well, lumber camp, quarry, mine, workshop, clinic, market) ile savunma yapıları (barracks, wall, gate) yalnızca `operational` durumdayken işlev görür. `warehouse` şimdilik dekoratiftir: anlamlı olması kaynak başına depolama sınırı gerektirir ve bu ayrı bir çalışmadır; o güne dek inşa edilebilir ancak hiçbir etkisi yoktur.
+
 ## MCP bağlantısı
 
 Codex/OpenCode gibi stdio MCP istemcileri için proje yolunu kendi makinenize göre ayarlayın:
@@ -53,6 +57,51 @@ Temel araçlar:
 - `benchmark.run_report`: admin tokenıyla canlı skor/ölçüm raporu verir.
 
 Ayrıntılı sözleşme ve adalet kuralları için [benchmark protokolüne](docs/benchmark-protocol.md) bakın.
+
+## Çok ajanlı uzak oturum (lobby + pairing)
+
+Tek kişilik `create_match` akışının yanında, birden çok bağımsız model ajanını aynı
+maça güvenli biçimde bağlayan oturum tabanlı akış vardır. Ajanlar yalnız kendi
+kolonilerini kontrol eder; admin/orchestrator kabiliyetleri asla onlara gitmez.
+
+Orchestrator sırrı (yerel stdio):
+
+```bash
+export CASTLE_BENCHMARK_ORCHESTRATOR_TOKEN="uzun-rastgele-bir-kabiliyet"
+uv run castle-benchmark-mcp --transport stdio
+```
+
+Uzak Streamable HTTP (yalnız açık bir allowlist ve TLS sonlandırma ile servis edin;
+MCP proxy’si TLS’i kendisi sonlandırmaz, `X-Forwarded-For` yalnız `--trusted-proxy`
+CIDR’lerinden güvenilir):
+
+```bash
+export CASTLE_BENCHMARK_ORCHESTRATOR_TOKEN="uzun-rastgele-bir-kabiliyet"
+uv run castle-benchmark-mcp --transport streamable-http --trusted-proxy 10.0.0.0/8
+```
+
+Oturum akışı (her ajan kendi döngüsünde):
+
+1. `benchmark.create_session { orchestrator_token, scenario_id, seed, colony_count }`
+   → `admin_token` (yalnız orchestrator’da kalır).
+2. Her `cN` slotu için `benchmark.create_pairing { admin_token, colony_id }`
+   → 10 dakikada süresi dolan tek kullanımlık `pairing_code`.
+3. Ajan kendi makinesinde `benchmark.claim_slot { pairing_code, identity }`
+   → yalnızca kendi kolonisine ait `controller_token`.
+4. `benchmark.heartbeat { controller_token, turn, status }` ile `connected`/`ready`.
+5. Orchestrator `benchmark.start_match { admin_token }`.
+6. Ajan döngüsü: `benchmark.observe` → karar ver → `benchmark.submit_actions` →
+   `benchmark.record_usage`; terminal olana dek `benchmark.match_status` ile turu izle.
+7. `benchmark.replace_controller { admin_token, colony_id, replacement, baseline_kind }`
+   ile kopan bir ajanı baseline’a devret. Önceki ve yeni controller’ın metrikleri
+   `run_report` içinde farklı `tenure_metrics` satırlarında kalır.
+8. `benchmark.run_report { admin_token }` → terminal durum + ham ölçümler.
+
+Tam uçtan uca dört ajanlı referans (`tests/e2e/test_remote_agents.py`) üç resmî
+biyomda bağlanma, oynama, rapor alma ve replay doğrulamasını kanıtlar. Serviste
+`service.write_resolved_turns(admin_token, writer)` bir `ArtifactWriter` üzerinden
+tur akışını dışa aktarır; `uv run castle-benchmark replay <run-dir>` bu artefaktları
+yeniden doğrular.
 
 ## Doğrulama
 

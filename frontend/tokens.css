@@ -1,0 +1,106 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;700&family=IBM+Plex+Sans:wght@400;600&display=swap");
+
+:root {
+  --color-canvas: oklch(15% 0.014 65);
+  --color-surface: oklch(19% 0.017 65);
+  --color-surface-raised: oklch(23% 0.020 67);
+  --color-surface-map: oklch(11% 0.012 66);
+  --color-ink: oklch(93% 0.015 77);
+  --color-muted: oklch(74% 0.022 72);
+  --color-faint: oklch(68% 0.022 68);
+  --color-rule: oklch(52% 0.030 65);
+  --color-rule-strong: oklch(60% 0.040 65);
+  --color-accent: oklch(74% 0.135 63);
+  --color-accent-ink: oklch(18% 0.025 58);
+  --color-focus: oklch(86% 0.145 88);
+  --color-success: oklch(76% 0.115 146);
+  --color-danger: oklch(70% 0.170 30);
+  --color-water: oklch(68% 0.075 233);
+  --color-structure-damaged: oklch(67% 0.060 45);
+  --color-structure-burning: oklch(69% 0.125 42);
+  --color-colony-1: oklch(74% 0.135 63);
+  --color-colony-2: oklch(70% 0.080 233);
+  --color-colony-3: oklch(74% 0.095 126);
+  --color-colony-4: oklch(68% 0.105 18);
+  --color-colony-5: oklch(69% 0.090 310);
+  --color-colony-6: oklch(70% 0.085 180);
+  --color-shadow: oklch(5% 0.010 65 / 0.42);
+  --color-transparent: oklch(0% 0 0 / 0);
+
+  --font-display: "Geist", "Avenir Next", sans-serif;
+  --font-body: "IBM Plex Sans", "Avenir Next", sans-serif;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --space-none: 0;
+  --space-3xs: 0.125rem;
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+  --space-2xl: 4rem;
+  --space-3xl: 6rem;
+
+  --text-2xs: 0.625rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-md: 1.25rem;
+  --text-lg: 1.5625rem;
+  --text-xl: 1.9531rem;
+  --text-pixi-label: 11px;
+  --tracking-tight: -0.02em;
+  --tracking-label: 0.06em;
+  --tracking-pixi-label: 1;
+  --line-display: 1.15;
+  --line-body: 1.55;
+  --line-compact: 1.4;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 100ms;
+  --dur-short: 180ms;
+  --dur-medium: 250ms;
+  --dur-reduced: 1ms;
+
+  --rule-hairline: 1px;
+  --rule-focus: 2px;
+  --rule-none: 0;
+  --offset-focus-inset: -2px;
+  --radius-control: 0.25rem;
+  --radius-panel: 0.375rem;
+  --radius-round: 50%;
+  --radius-none: 0;
+
+  --size-control: 2.75rem;
+  --size-header: 4.5rem;
+  --size-status: 0.625rem;
+  --size-stage-mobile: 28rem;
+  --size-stage-desktop: 42rem;
+  --size-viewport-floor: 20rem;
+  --size-latency-column: 4.75rem;
+  --size-world-control-grid: 8.75rem;
+  --size-helper-line: 1lh;
+  --size-state-column: 4.5rem;
+  --size-inspector-panel: 9rem;
+  --size-inspector-term: 6rem;
+  --size-timeline-max: 24rem;
+  --size-timeline-marker: 3.75rem;
+  --size-metric-label: 6rem;
+  --size-metric-meter: 4rem;
+  --size-setup-desktop: 17rem;
+  --size-inspector-desktop: 18rem;
+  --size-setup-wide: 19rem;
+  --size-inspector-wide: 21rem;
+  --page-gutter: clamp(1rem, 2.4vw, 2.5rem);
+
+  --shadow-dock: 0 -0.75rem 2.5rem var(--color-shadow);
+  --opacity-disabled: 0.5;
+  --opacity-muted: 0.72;
+  --z-base: 1;
+  --z-raised: 10;
+  --z-sticky: 200;
+}

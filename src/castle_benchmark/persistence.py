@@ -13,6 +13,7 @@ from .actions import (
     DiplomacyAction,
     GatherAction,
     RaidAction,
+    ScoutAction,
     SetPolicyAction,
     TradeOfferAction,
     TradeRespondAction,
@@ -97,6 +98,8 @@ def action_to_dict(action: object) -> dict[str, object]:
         return {"kind": "raid", "target_colony_id": action.target_colony_id}
     if isinstance(action, SetPolicyAction):
         return {"kind": "set_policy", "policy": action.policy, "value": action.value}
+    if isinstance(action, ScoutAction):
+        return {"kind": "scout", "x": action.target.x, "y": action.target.y}
     raise TypeError(f"unsupported action: {type(action).__name__}")
 
 
@@ -129,6 +132,8 @@ def action_from_dict(data: dict[str, object]) -> object:
         return RaidAction(str(data["target_colony_id"]))
     if kind == "set_policy":
         return SetPolicyAction(str(data["policy"]), str(data["value"]))
+    if kind == "scout":
+        return ScoutAction(Position(int(data["x"]), int(data["y"])))
     raise ValueError(f"unknown action kind: {kind}")
 
 
@@ -166,6 +171,7 @@ class ArtifactWriter:
         seed: int,
         colony_count: int,
         controller_names: dict[str, str],
+        controller_tenures: list[dict[str, object]] | None = None,
     ) -> ArtifactWriter:
         run_dir.mkdir(parents=True, exist_ok=False)
         writer = cls(
@@ -182,16 +188,23 @@ class ArtifactWriter:
             "seed": seed,
             "colony_count": colony_count,
             "controllers": controller_names,
+            "controller_tenures": controller_tenures or [],
             "dependency_lock_hashes": _dependency_lock_hashes(),
             "seat_rotation": 0,
         }
         writer.metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
         return writer
 
-    def write_turn(self, batches: Iterable[ActionBatch], result: TurnResult) -> None:
+    def write_turn(
+        self,
+        batches: Iterable[ActionBatch],
+        result: TurnResult,
+        action_controller_ids: dict[str, str | None] | None = None,
+    ) -> None:
         record = {
             "turn": result.state.turn - 1,
             "batches": [batch_to_dict(batch) for batch in batches],
+            "action_controller_ids": action_controller_ids or {},
             "events": [
                 {
                     "turn": event.turn,
@@ -217,6 +230,12 @@ class ArtifactWriter:
             handle.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
         with self.snapshots_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(canonical_snapshot(result.state), sort_keys=True) + "\n")
+
+    def set_controller_tenures(self, controller_tenures: list[dict[str, object]]) -> None:
+        """Update exported controller history without affecting replay action batches."""
+        metadata = json.loads(self.metadata_path.read_text())
+        metadata["controller_tenures"] = controller_tenures
+        self.metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
 
     def finish(self, state: MatchState, metrics: dict[str, object]) -> None:
         report = {
