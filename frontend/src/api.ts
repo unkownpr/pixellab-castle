@@ -236,6 +236,29 @@ export interface Observation {
   readonly valid_action_kinds: readonly string[];
 }
 
+export interface SpectatorColony {
+  readonly id: string;
+  readonly population: number;
+  readonly housing: number;
+  readonly healthy: number;
+  readonly injured: number;
+  readonly sick: number;
+  readonly hungry: number;
+  readonly resources: Readonly<Record<string, number>>;
+}
+
+export interface SpectatorView {
+  readonly schema_version: SchemaVersion;
+  readonly scenario_id: string;
+  readonly turn: number;
+  readonly colony_id: string;
+  readonly colonies: Readonly<Record<string, SpectatorColony>>;
+  readonly visible_cells: readonly VisibleCell[];
+  readonly visible_structures: readonly VisibleStructure[];
+  readonly scouts: readonly VisibleScout[];
+  readonly active_offers: readonly Readonly<Record<string, unknown>>[];
+}
+
 export interface ActionRequest {
   readonly turn: number;
   readonly actions: readonly ControllerAction[];
@@ -399,6 +422,10 @@ export class BenchmarkApi {
   async observe(matchId: string, colonyId: string, token: string): Promise<Observation> {
     const path = `/api/matches/${encodeURIComponent(matchId)}/observation?colony_id=${encodeURIComponent(colonyId)}`;
     return this.request(path, {}, token);
+  }
+
+  async spectator(matchId: string, adminToken: string): Promise<SpectatorView> {
+    return this.request(`/api/matches/${encodeURIComponent(matchId)}/spectator`, {}, adminToken);
   }
 
   async submitActions(

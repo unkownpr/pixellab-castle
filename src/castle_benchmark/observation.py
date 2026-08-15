@@ -6,6 +6,9 @@ from .domain import MatchState
 from .world import WorldState
 
 
+SPECTATOR_COLONY_ID = "spectator"
+
+
 @dataclass(frozen=True, slots=True)
 class Observation:
     schema_version: str
@@ -123,3 +126,89 @@ def project_observation(state: MatchState, colony_id: str) -> Observation:
             "scout",
         ),
     )
+
+
+def project_spectator_view(state: MatchState) -> dict[str, object]:
+    """Project the whole authoritative world with no fog of war.
+
+    This is deliberately separate from ``project_observation``: the fog of war is
+    the benchmark's central fairness property, so a fog-free projection must never
+    be reachable from the controller-facing observation path. It exists only for
+    the operator (admin) view and is gated by ``GameService.spectator_view``.
+    """
+    world = state.world
+    assert isinstance(world, WorldState)
+    cells = tuple(
+        {
+            "x": position.x,
+            "y": position.y,
+            "biome": cell.biome,
+            "water": cell.water,
+            "buildable": cell.buildable,
+            "movement_cost": cell.movement_cost,
+            "resource": cell.resource,
+            "resource_amount": cell.resource_amount,
+        }
+        for position in sorted(world.cells, key=lambda item: (item.y, item.x))
+        if (cell := world.cells.get(position)) is not None
+    )
+    structures = tuple(
+        {
+            "id": structure.id,
+            "colony_id": structure.colony_id,
+            "kind": structure.kind.value,
+            "status": structure.status.value,
+            "progress": structure.progress,
+            "required_progress": structure.required_progress,
+            "condition": structure.condition,
+            "x": structure.position.x,
+            "y": structure.position.y,
+        }
+        for structure in sorted(state.structures.values(), key=lambda item: item.id)
+    )
+    scouts = tuple(
+        {
+            "id": scout.id,
+            "colony_id": scout.colony_id,
+            "x": scout.position.x,
+            "y": scout.position.y,
+            "target_x": scout.target.x,
+            "target_y": scout.target.y,
+        }
+        for scout in sorted(state.scouts.values(), key=lambda item: item.id)
+    )
+    colonies = {
+        colony_id: {
+            "id": colony.id,
+            "population": colony.population,
+            "housing": colony.housing,
+            "healthy": colony.healthy,
+            "injured": colony.injured,
+            "sick": colony.sick,
+            "hungry": colony.hungry,
+            "resources": colony.resources.as_dict(),
+        }
+        for colony_id, colony in sorted(state.colonies.items())
+    }
+    offers = tuple(
+        {
+            "id": offer.id,
+            "source_colony_id": offer.source_colony_id,
+            "target_colony_id": offer.target_colony_id,
+            "give": dict(offer.give),
+            "receive": dict(offer.receive),
+            "expires_turn": offer.expires_turn,
+        }
+        for offer in sorted(state.offers.values(), key=lambda item: item.id)
+    )
+    return {
+        "scenario_id": state.scenario_id,
+        "turn": state.turn,
+        "colony_id": SPECTATOR_COLONY_ID,
+        "colonies": colonies,
+        "visible_cells": cells,
+        "visible_structures": structures,
+        "scouts": scouts,
+        "active_offers": offers,
+        "valid_action_kinds": (),
+    }

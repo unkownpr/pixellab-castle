@@ -6,6 +6,7 @@ import {
   type Observation,
   type ScenarioSummary,
   type SessionCreated,
+  type SpectatorView,
   type VisibleCell,
 } from "./api";
 import {
@@ -25,6 +26,7 @@ import {
   currentSourceMessageHandler,
   renderOperationsRoom,
 } from "./operations";
+import { selectWorldObservation } from "./spectator";
 
 type ActionKind = "wait" | "gather" | "build" | "policy" | "diplomacy" | "trade" | "raid";
 
@@ -198,16 +200,14 @@ export class BenchmarkWorkbench {
     this.resetRunState();
     this.replaceLog("Match started. Baselines and turn deadlines are server-owned.");
     void this.refreshOperations();
-    if (this.humanController) {
-      try {
-        await this.refreshObservation();
-        this.enableActions(true);
-      } catch (error) {
-        this.logError(error);
-      }
-    } else {
-      this.enableActions(false);
-      this.log("No human slot was handed off; monitor the connected agents in the lobby.", "muted");
+    this.enableActions(Boolean(this.humanController));
+    try {
+      await this.refreshObservation();
+    } catch (error) {
+      this.logError(error);
+    }
+    if (!this.humanController) {
+      this.log("No human slot was handed off; monitoring the connected agents as a spectator.", "muted");
     }
   }
 
@@ -278,14 +278,54 @@ export class BenchmarkWorkbench {
   }
 
   private async refreshObservation(): Promise<void> {
-    if (!this.activeMatchId || !this.humanController) return;
-    this.observation = await this.api.observe(
-      this.activeMatchId,
-      this.humanController.colonyId,
-      this.humanController.token,
+    if (!this.activeMatchId) return;
+    let humanObservation: Observation | null = null;
+    let spectatorView: SpectatorView | null = null;
+    if (this.humanController) {
+      humanObservation = await this.api.observe(
+        this.activeMatchId,
+        this.humanController.colonyId,
+        this.humanController.token,
+      );
+    } else if (this.operationsCapability) {
+      spectatorView = await this.api.spectator(
+        this.operationsCapability.matchId,
+        this.operationsCapability.token,
+      );
+    }
+    const selection = selectWorldObservation(
+      Boolean(this.humanController),
+      humanObservation,
+      spectatorView,
     );
+    if (!selection) return;
+    this.observation = selection.observation;
     await this.renderer.render(this.observation);
-    this.renderStats(this.observation);
+    if (selection.spectator) {
+      this.renderSpectatorStats(spectatorView!);
+      required("#fog-label").textContent = "SPECTATOR · TÜM DÜNYA";
+    } else {
+      this.renderStats(this.observation);
+      required("#fog-label").textContent = "SİS: AKTİF";
+    }
+  }
+
+  private renderSpectatorStats(view: SpectatorView): void {
+    required<HTMLOutputElement>("#turn-output").value = `T${view.turn}`;
+    required("#scenario-label").textContent = view.scenario_id.toUpperCase();
+    const container = document.createElement("div");
+    container.className = "spectator-colonies";
+    for (const [colonyId, colony] of Object.entries(view.colonies)) {
+      const row = document.createElement("div");
+      row.className = "spectator-colony";
+      const label = document.createElement("strong");
+      label.textContent = colonyId;
+      const detail = document.createElement("span");
+      detail.textContent = `Nüfus ${colony.population}/${colony.housing}`;
+      row.append(label, detail);
+      container.append(row);
+    }
+    required("#colony-stats").replaceChildren(container);
   }
 
   private async loadReplay(file: File | undefined): Promise<void> {
@@ -500,6 +540,12 @@ export class BenchmarkWorkbench {
     if (result === "resync") void this.refreshOperations().catch((error) => this.logError(error));
     if (parsed.type === "match.completed") {
       void this.refreshOperations().catch((error) => this.logError(error));
+    }
+    if (
+      (parsed.type === "turn.resolved" || parsed.type === "match.completed") &&
+      !this.humanController
+    ) {
+      void this.refreshObservation().catch((error) => this.logError(error));
     }
   }
 

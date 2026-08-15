@@ -12,8 +12,8 @@ from .actions import ActionBatch, GameAction, WaitAction
 from .agents import AGENT_TYPES
 from .engine import DomainEvent, SimCore, TurnResult
 from .metrics import MetricCollector
-from .observation import Observation, project_observation
-from .persistence import ArtifactWriter, action_from_dict
+from .observation import Observation, project_observation, project_spectator_view
+from .persistence import ArtifactWriter, action_from_dict, action_to_dict
 from .scenarios import OFFICIAL_SCENARIOS, get_scenario
 from .lobby import (
     PAIRING_MAX_ATTEMPTS,
@@ -370,6 +370,43 @@ class GameService:
             match.pending[slot.colony_id] = batch
             match.pending_controller_ids[slot.colony_id] = slot.controller_id
 
+    @staticmethod
+    def _json_safe(value: object) -> object:
+        if isinstance(value, dict):
+            return {key: GameService._json_safe(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [GameService._json_safe(item) for item in value]
+        return value
+
+    @classmethod
+    def _decision_entries(
+        cls,
+        batches: tuple[ActionBatch, ...],
+        action_controller_ids: dict[str, str | None],
+        result: TurnResult,
+    ) -> list[dict[str, object]]:
+        """Serialize each colony's submitted actions and per-action verdicts in colony order."""
+        batch_by_colony = {batch.colony_id: batch for batch in batches}
+        entries: list[dict[str, object]] = []
+        for colony_id in sorted(action_controller_ids):
+            batch = batch_by_colony.get(colony_id)
+            entries.append(
+                {
+                    "colony_id": colony_id,
+                    "actions": (
+                        [action_to_dict(action) for action in batch.actions]
+                        if batch is not None
+                        else []
+                    ),
+                    "results": [
+                        {"kind": item.action_kind, "status": item.status, "code": item.code}
+                        for item in result.action_results
+                        if item.colony_id == colony_id
+                    ],
+                }
+            )
+        return cls._json_safe(entries)  # type: ignore[return-value]
+
     def _resolve_pending(
         self,
         match: LiveMatch,
@@ -393,8 +430,12 @@ class GameService:
         match.resolved_turns.append(ResolvedTurn(batches, action_controller_ids, result))
         match.pending_controller_ids.clear()
         if session is not None:
+            decisions = self._decision_entries(batches, action_controller_ids, result)
             self._record_operational_event(
-                match, "turn_resolved", event_turn=resolved_turn
+                match,
+                "turn_resolved",
+                event_turn=resolved_turn,
+                decisions=decisions,
             )
             self._record_operational_event(match, "metric_updated")
             if match.sim.state.terminal:
@@ -1080,6 +1121,19 @@ class GameService:
                 raise ForbiddenError("controller cannot observe another colony")
         assert colony_id is not None
         return project_observation(match.sim.state, colony_id)
+
+    def spectator_view(self, token: str) -> dict[str, object]:
+        """Return the whole fog-free world, reachable only by the session admin.
+
+        A controller capability must never reach this: it would defeat exploration,
+        which is one of the axes the benchmark scores. The asymmetry is deliberate —
+        the operator runs the match and is not a competitor — and lives here in the
+        authorization check, not in a comment.
+        """
+        access, match = self._authorize(token)
+        if not access.admin:
+            raise ForbiddenError("spectator view requires an admin capability")
+        return project_spectator_view(match.sim.state)
 
     def submit_actions(
         self, token: str, turn: int, actions: Iterable[dict[str, object]]
