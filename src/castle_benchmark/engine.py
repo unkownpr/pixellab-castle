@@ -395,6 +395,7 @@ class SimCore:
         # after scaling keeps a colony short-handed AND without a camp strictly worse
         # off than one with only one of those problems, and flooring at one stops a
         # positive gather from rounding away to nothing.
+        halved = False
         if (
             staffed_yield > 0
             and cell.resource in GATHER_EXTRACTION_STRUCTURES
@@ -405,6 +406,7 @@ class SimCore:
             )
         ):
             staffed_yield = max(1, staffed_yield // GATHER_PENALTY_DIVISOR)
+            halved = True
         amount = min(staffed_yield, cell.resource_amount)
         if amount <= 0:
             return ActionResult(colony_id, action.kind, "rejected", "no_available_population")
@@ -425,7 +427,17 @@ class SimCore:
                 self.state.turn,
                 "resource_gathered",
                 colony_id,
-                {"resource": cell.resource, "amount": amount, "x": action.position.x, "y": action.position.y},
+                {
+                    "resource": cell.resource,
+                    "amount": amount,
+                    "x": action.position.x,
+                    "y": action.position.y,
+                    # Whether the colony dug without the camp, quarry or mine that would
+                    # have doubled this. The choice between digging today and building to
+                    # dig faster is one of the pressures the benchmark advertises, and it
+                    # was the only one with no counter behind it.
+                    "half_yield": halved,
+                },
             )
         )
         return ActionResult(colony_id, action.kind, "accepted", "ok")

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from .actions import VALID_ACTION_KINDS
 from .domain import MatchState, StructureKind, StructureStatus
 from .engine import TurnResult, MESSAGE_ANSWER_WINDOW
+from .systems import GATHER_RADIUS
 
 # Composite score weights (economic reasoning in comments)
 # Design target (AM-19): no single term should exceed others by more than roughly 2x in realistic terminal state.
@@ -111,6 +112,13 @@ class MetricCollector:
     wait_turns: dict[str, int] = field(default_factory=dict)
     opportunity_waits: dict[str, int] = field(default_factory=dict)
     malformed_submissions: dict[str, int] = field(default_factory=dict)
+    # Gathers taken without the camp, quarry or mine that would have doubled them, and
+    # gathers taken with it. The opening choice the benchmark advertises — dig today or
+    # build to dig faster tomorrow — had no counter until now, so an agent that never
+    # built an extraction structure looked identical to one that built them first.
+    half_yield_gathers: dict[str, int] = field(default_factory=dict)
+    full_yield_gathers: dict[str, int] = field(default_factory=dict)
+    policy_changes: dict[str, int] = field(default_factory=dict)
     # The state each colony actually decided against: this turn's observation is last
     # turn's result, so judging a wait against the post-resolution state would credit or
     # blame a colony for hands it did not have when it chose.
@@ -199,6 +207,13 @@ class MetricCollector:
             elif event.kind == "colonist_recovered":
                 # We don't double-count; sickened tracks the turns
                 pass
+            elif event.kind == "resource_gathered":
+                if (event.data or {}).get("half_yield"):
+                    self.half_yield_gathers[colony_id] = self.half_yield_gathers.get(colony_id, 0) + 1
+                else:
+                    self.full_yield_gathers[colony_id] = self.full_yield_gathers.get(colony_id, 0) + 1
+            elif event.kind == "policy_changed":
+                self.policy_changes[colony_id] = self.policy_changes.get(colony_id, 0) + 1
             elif event.kind == "starvation":
                 self.starvation_turns[colony_id] = self.starvation_turns.get(colony_id, 0) + 1
             elif event.kind == "message_sent":
@@ -355,6 +370,29 @@ class MetricCollector:
                 self.messages_answered[sender] = self.messages_answered.get(sender, 0) + 1
 
     @staticmethod
+    def _cells_in_reach(state: MatchState, colony_id: str) -> tuple[int, int]:
+        """Cells a colony could gather from, and how many of them still hold something."""
+        anchors = [
+            structure.position
+            for structure in state.structures.values()
+            if structure.colony_id == colony_id and structure.status == StructureStatus.OPERATIONAL
+        ]
+        if not anchors:
+            return (0, 0)
+        world = state.world
+        reachable = 0
+        with_resource = 0
+        for position, cell in getattr(world, "cells", {}).items():
+            if any(
+                abs(position.x - anchor.x) + abs(position.y - anchor.y) <= GATHER_RADIUS
+                for anchor in anchors
+            ):
+                reachable += 1
+                if cell.resource and cell.resource_amount > 0:
+                    with_resource += 1
+        return (reachable, with_resource)
+
+    @staticmethod
     def _scoring_structures(state: MatchState, colony_id: str) -> int:
         """Operational structures that count toward the composite (see SCORING_STRUCTURE_KINDS)."""
         return sum(
@@ -462,6 +500,15 @@ class MetricCollector:
                     "colonist_turns_sick": self.colonist_turns_sick.get(colony_id, 0),
                     "colonist_turns_injured": self.colonist_turns_injured.get(colony_id, 0),
                     "colonist_turns_scouting": self.colonist_turns_scouting.get(colony_id, 0),
+                    "half_yield_gathers": self.half_yield_gathers.get(colony_id, 0),
+                    "full_yield_gathers": self.full_yield_gathers.get(colony_id, 0),
+                    "policy_changes": self.policy_changes.get(colony_id, 0),
+                    # How much ground the colony could actually work at the end: cells
+                    # within GATHER_RADIUS of one of its operational buildings, and the
+                    # resource cells among them. Exploration says what a colony knows;
+                    # this says what it can reach, which is the pressure the map applies.
+                    "cells_in_reach": self._cells_in_reach(state, colony_id)[0],
+                    "resource_cells_in_reach": self._cells_in_reach(state, colony_id)[1],
                 }
                 for colony_id in colony_ids
             },

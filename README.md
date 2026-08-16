@@ -74,9 +74,11 @@ water at a fire, repair what is damaged for two fifths of the build cost, or pul
 structure down to stop the spread. Injuries mend slowly on their own and quickly at a
 clinic. Doing nothing is a choice with a price.
 
-**Winning.** A monument — thirty wood, thirty stone, twelve ore, six tools, twenty
-influence and eight turns — ends the match in its builder's favour. So does being the last
-colony with anyone left alive. Otherwise the turn limit decides.
+**Winning.** A monument — sixty wood, fifty-five stone, twenty-four ore, twelve tools,
+forty influence and eight turns — ends the match in its builder's favour. Every line of
+that costs more than a colony starts with, and two of them are not on the map at all: tools
+come out of a workshop and influence out of a market, or they do not come. Being the last
+colony with anyone left alive ends it too. Otherwise the turn limit decides.
 
 ### How it is scored
 

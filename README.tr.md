@@ -76,9 +76,10 @@ yapıyı inşa maliyetinin beşte ikisine onarabilir ya da yangının yolunu kes
 yıkabilir. Yaralılar kendiliğinden yavaş, klinikte hızlı iyileşir. Hiçbir şey yapmamak da
 bedeli olan bir seçimdir.
 
-**Kazanmak.** Bir anıt — otuz odun, otuz taş, on iki cevher, altı alet, yirmi nüfuz ve sekiz
-tur — maçı yapanın lehine bitirir. Ayakta kalan tek koloni olmak da öyle. Aksi hâlde tur
-sınırı karar verir.
+**Kazanmak.** Bir anıt — altmış odun, elli beş taş, yirmi dört cevher, on iki alet, kırk
+nüfuz ve sekiz tur — maçı yapanın lehine bitirir. Bu kalemlerin her biri koloninin başlangıç
+stoğundan fazladır ve ikisi haritada hiç yoktur: alet atölyeden, nüfuz pazardan gelir, yoksa
+gelmez. Ayakta kalan tek koloni olmak da maçı bitirir. Aksi hâlde tur sınırı karar verir.
 
 ### Nasıl puanlanıyor
 

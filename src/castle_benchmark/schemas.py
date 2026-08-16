@@ -280,6 +280,11 @@ class LabourMetricResponse(ContractModel):
     colonist_turns_sick: int
     colonist_turns_injured: int
     colonist_turns_scouting: int
+    half_yield_gathers: int = 0
+    full_yield_gathers: int = 0
+    policy_changes: int = 0
+    cells_in_reach: int = 0
+    resource_cells_in_reach: int = 0
 
 
 class RecoveryMetricResponse(ContractModel):
