@@ -658,6 +658,26 @@ class SimCore:
         offers = dict(self.state.offers)
         offers[offer_id] = offer
         self.state = replace(self.state, offers=offers)
+        if action.message:
+            self._deliver_message(
+                action.target_colony_id,
+                Message(
+                    self.state.turn,
+                    colony_id,
+                    "trade",
+                    self._clean_text(action.message[:MAX_MESSAGE_LENGTH]),
+                ),
+            )
+            # Counted like any other message: a colony that only ever talks in the note
+            # attached to its offers is still talking, and the axis should say so.
+            events.append(
+                DomainEvent(
+                    self.state.turn,
+                    "message_sent",
+                    colony_id,
+                    {"target": action.target_colony_id, "channel": "trade"},
+                )
+            )
         events.append(
             DomainEvent(self.state.turn, "trade_offered", colony_id, {"offer_id": offer_id, "target": action.target_colony_id, "message": action.message})
         )
@@ -1070,10 +1090,10 @@ class SimCore:
             return ActionResult(colony_id, action.kind, "rejected", "target_not_contacted")
         if len(action.text) > MAX_MESSAGE_LENGTH:
             return ActionResult(colony_id, action.kind, "rejected", "message_too_long")
-        text = "".join(c for c in action.text if ord(c) >= 32)
+        text = self._clean_text(action.text)
         self._deliver_message(
             action.target_colony_id,
-            Message(self.state.turn, colony_id, "direct", text)
+            Message(self.state.turn, colony_id, "direct", text),
         )
         events.append(
             DomainEvent(
@@ -1108,7 +1128,11 @@ class SimCore:
                     self.state.turn,
                     "proposal_accepted",
                     colony_id,
-                    {"proposal_id": action.proposal_id, "operation": proposal.operation},
+                    {
+                        "proposal_id": action.proposal_id,
+                        "operation": proposal.operation,
+                        "source_colony_id": proposal.source_colony_id,
+                    },
                 )
             )
             self._deliver_message(
@@ -1122,7 +1146,11 @@ class SimCore:
                     self.state.turn,
                     "proposal_rejected",
                     colony_id,
-                    {"proposal_id": action.proposal_id, "operation": proposal.operation},
+                    {
+                        "proposal_id": action.proposal_id,
+                        "operation": proposal.operation,
+                        "source_colony_id": proposal.source_colony_id,
+                    },
                 )
             )
             self._deliver_message(
@@ -1131,6 +1159,15 @@ class SimCore:
             )
         self.state = replace(self.state, proposals=proposals)
         return ActionResult(colony_id, action.kind, "accepted", "ok")
+
+    @staticmethod
+    def _clean_text(text: str) -> str:
+        """Strip control characters from text an agent wrote.
+
+        The content is deliberately not otherwise touched: what one colony tells another
+        is behaviour the benchmark is trying to measure, including when it is false.
+        """
+        return "".join(character for character in text if ord(character) >= 32)
 
     def _deliver_message(self, target_colony_id: str, message: Message) -> None:
         """Add a message to the target colony's inbox, respecting capacity."""
@@ -1379,6 +1416,22 @@ class SimCore:
             water = min(water_need, colony.resources.water)
             stock = colony.resources.apply({"food": -food, "water": -water})
             shortfall = food < food_need or water < water_need
+            if shortfall:
+                # A turn the colony could not feed or water itself. The sickness that
+                # follows is already reported, but the shortfall itself is the thing the
+                # supply axis is about — a colony that ate badly for thirty turns and
+                # survived played a different match from one that never went short.
+                events.append(
+                    DomainEvent(
+                        self.state.turn,
+                        "starvation",
+                        colony_id,
+                        {
+                            "food_short": max(0, food_need - food),
+                            "water_short": max(0, water_need - water),
+                        },
+                    )
+                )
             hungry = colony.hungry + int(shortfall)
             population = colony.population
             sick = colony.sick

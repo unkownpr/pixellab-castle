@@ -355,7 +355,7 @@ class BenchmarkMetricsResponse(ContractModel):
     # The composite is the published ranking number and the Pareto front says whether
     # the match distinguished anything at all; both are admin-side projections of the
     # same terminal state, so they travel with the axes rather than beside them.
-    composites: dict[str, float] = Field(default_factory=dict)
+    composites: dict[str, int] = Field(default_factory=dict)
     pareto_front: tuple[str, ...] = ()
     presence: PresenceMetricResponse | None = None
     server_measured: AggregateServerMeasuredResponse | None = None

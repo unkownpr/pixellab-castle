@@ -130,6 +130,25 @@ class MetricCollector:
                 pass
             elif event.kind == "starvation":
                 self.starvation_turns[colony_id] = self.starvation_turns.get(colony_id, 0) + 1
+            elif event.kind == "message_sent":
+                self.messages_sent[colony_id] = self.messages_sent.get(colony_id, 0) + 1
+            elif event.kind == "proposal_made":
+                self.proposals_made[colony_id] = self.proposals_made.get(colony_id, 0) + 1
+            elif event.kind == "proposal_accepted":
+                # The event carries the answering colony, but a treaty is a thing two
+                # colonies did: crediting only the accepter would make a colony that
+                # negotiates well look like it never negotiated at all.
+                self.proposals_accepted[colony_id] = self.proposals_accepted.get(colony_id, 0) + 1
+                source = str((event.data or {}).get("source_colony_id", ""))
+                if source:
+                    self.proposals_accepted[source] = self.proposals_accepted.get(source, 0) + 1
+            elif event.kind == "proposal_rejected":
+                self.proposals_rejected[colony_id] = self.proposals_rejected.get(colony_id, 0) + 1
+                source = str((event.data or {}).get("source_colony_id", ""))
+                if source:
+                    self.proposals_rejected[source] = self.proposals_rejected.get(source, 0) + 1
+            elif event.kind == "proposal_expired":
+                self.proposals_expired[colony_id] = self.proposals_expired.get(colony_id, 0) + 1
 
         # Track population extrema and health state
         for colony_id, colony in result.state.colonies.items():

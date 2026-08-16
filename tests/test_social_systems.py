@@ -189,6 +189,30 @@ def test_a_message_reaches_its_recipient_and_nobody_else() -> None:
     assert not project_observation(sim.state, "c3").inbox
 
 
+def test_a_note_attached_to_a_trade_offer_is_delivered_like_any_other_message() -> None:
+    """The note on an offer is how a colony explains it; it used to go nowhere."""
+    sim = contacted_pair()
+
+    sim.resolve(
+        (
+            batch(
+                sim,
+                "c1",
+                TradeOfferAction(
+                    target_colony_id="c2",
+                    give=(("wood", 2),),
+                    receive=(("food", 2),),
+                    message="Timber for provisions.",
+                ),
+            ),
+        )
+    )
+
+    inbox = project_observation(sim.state, "c2").inbox
+    assert [item["text"] for item in inbox] == ["Timber for provisions."]
+    assert inbox[0]["channel"] == "trade"
+
+
 def test_an_over_long_message_is_refused_rather_than_truncated() -> None:
     sim = contacted_pair()
 
