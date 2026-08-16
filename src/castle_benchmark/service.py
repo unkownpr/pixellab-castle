@@ -1296,7 +1296,7 @@ class GameService:
     def _submit_actions(
         self, token: str, turn: int, actions: Iterable[dict[str, object]]
     ) -> Submission:
-        submission_time = time.monotonic()
+        submission_time = time.time()
         access, match = self._authorize(token)
         if access.admin or access.colony_id is None:
             raise ForbiddenError("admin capabilities cannot submit colony actions")
@@ -1327,12 +1327,13 @@ class GameService:
                 server_latency_ms = max(0, int(round(elapsed * 1000)))
 
             # Check budgets and record server latency
-            budget_exceeded_this_turn = self._check_and_record_submission_metrics(
+            already_exceeded = access.colony_id in match.budget_exceeded_colonies
+            self._check_and_record_submission_metrics(
                 match, access.colony_id, server_latency_ms, session
             )
 
             # If budget was already exceeded in a prior turn, replace submission with wait
-            if access.colony_id in match.budget_exceeded_colonies and not budget_exceeded_this_turn:
+            if already_exceeded:
                 batch = ActionBatch(turn, access.colony_id, (WaitAction(),))
 
             match.pending[access.colony_id] = batch

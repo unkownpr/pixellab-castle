@@ -330,13 +330,14 @@ def run_mixed_match(config: MixedRunConfig) -> RunReport:
         controller_names,
     )
     service.write_resolved_turns(admin_token, writer)
-    writer.finish(match.sim.state, {})
+    metrics_report = service.run_report(admin_token)["metrics"]
+    writer.finish(match.sim.state, metrics_report)
 
     return RunReport(
         run_dir=writer.run_dir,
         report_path=writer.report_path,
         termination_reason=match.sim.state.termination_reason or "unknown",
-        metrics={},
+        metrics=metrics_report,
     )
 
 

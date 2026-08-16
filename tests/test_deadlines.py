@@ -418,6 +418,59 @@ def test_thinking_time_budget_forces_waits_on_excess(clock: Clock) -> None:
     assert cost["budget_exceeded"] == 1
 
 
+def test_thinking_time_budget_forces_waits_on_every_turn_after_the_crossing() -> None:
+    """Catches the crossing check only forcing a wait when the current submission is
+    itself under budget, which never happens again once cumulative latency stays over."""
+    import time as real_time
+
+    service = GameService()
+    now = real_time.time()
+    session = service.create_session(
+        "orch", "basic-survival-v1", 23, 1, thinking_time_budget_ms=200
+    )
+    pairing = service.create_pairing(session.admin_token, "c1", now)
+    claimed = service.claim_slot(pairing.code or "", _identity(), now)
+    token = claimed.controller_token
+    assert token is not None
+    service.heartbeat(token, 0, "connected", now)
+    service.start_match(session.admin_token, now)
+
+    # First turn crosses the 200ms ceiling.
+    real_time.sleep(0.25)
+    service.submit_actions(token, 0, ({"kind": "wait"},))
+
+    # A later turn, still over budget: a real action must still resolve as a wait.
+    real_time.sleep(0.05)
+    result = service.submit_actions(token, 1, ({"kind": "gather", "x": 0, "y": 0},))
+
+    assert result.result is not None
+    submitted = next(item for item in result.result.action_results if item.colony_id == "c1")
+    assert submitted.action_kind == "wait"
+
+
+def test_server_latency_uses_the_same_clock_as_turn_open() -> None:
+    """Catches server_latency_ms measured against a different clock than turn_opened_at,
+    which either floors it to 0 or inflates it to roughly a Unix epoch's worth of ms."""
+    import time as real_time
+
+    service = GameService()
+    now = real_time.time()
+    session = service.create_session("orch", "basic-survival-v1", 19, 1)
+    pairing = service.create_pairing(session.admin_token, "c1", now)
+    claimed = service.claim_slot(pairing.code or "", _identity(), now)
+    token = claimed.controller_token
+    assert token is not None
+    service.heartbeat(token, 0, "connected", now)
+    service.start_match(session.admin_token, now)
+
+    real_time.sleep(0.2)
+    service.submit_actions(token, 0, ({"kind": "wait"},))
+
+    report = service.run_report(session.admin_token)
+    cost = report["metrics"]["cost"]["c1"]
+    assert 100 <= cost["server_latency_ms"] < 5_000
+
+
 def test_budgets_default_unset(clock: Clock) -> None:
     """With no budget specified, controllers can use unlimited resources."""
     service = GameService()

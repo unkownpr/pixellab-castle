@@ -87,3 +87,79 @@ def test_mixed_run_with_specified_baselines(tmp_path: Path) -> None:
     assert "external:fallback" in metadata["controllers"]["c2"]
     assert "baseline:expansionist" in metadata["controllers"]["c3"]
     assert "external:fallback" in metadata["controllers"]["c4"]
+
+
+def test_mixed_run_with_connected_external_agent_writes_real_metrics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Catches the connected-agent branch exporting an empty metrics dict.
+
+    When an external agent actually claims its seat and plays to completion, the run
+    must write the same populated metrics as any other run, not an empty {}.
+    """
+    import json
+    import time as time_module
+
+    from castle_benchmark import runner as runner_module
+    from castle_benchmark.lobby import ControllerIdentity
+    from castle_benchmark.service import GameService
+
+    captured: dict[str, object] = {}
+
+    class CapturingGameService(GameService):
+        def __init__(self) -> None:
+            super().__init__()
+            captured["service"] = self
+
+    monkeypatch.setattr(runner_module, "GameService", CapturingGameService)
+
+    def fake_print(*args: object, **kwargs: object) -> None:
+        text = " ".join(str(a) for a in args)
+        if text.startswith("Seat ") and "service" in captured:
+            code = text.rsplit(": ", 1)[-1]
+            service = captured["service"]
+            now = time_module.time()
+            claimed = service.claim_slot(
+                code, ControllerIdentity(display_name="X", provider="p", model="m"), now
+            )
+            assert claimed.controller_token is not None
+            service.heartbeat(claimed.controller_token, 0, "connected", now)
+            captured["token"] = claimed.controller_token
+
+    monkeypatch.setattr(runner_module, "print", fake_print, raising=False)
+
+    class FakeTime:
+        def time(self) -> float:
+            return time_module.time()
+
+        def sleep(self, seconds: float) -> None:
+            service = captured.get("service")
+            token = captured.get("token")
+            if service is None or token is None:
+                return
+            match = next(iter(service._matches.values()))
+            if match.sim.state.terminal:
+                return
+            try:
+                service.submit_actions(token, match.sim.state.turn, ({"kind": "wait"},))
+            except Exception:
+                pass
+
+    monkeypatch.setattr(runner_module, "time", FakeTime())
+
+    report = run_mixed_match(
+        MixedRunConfig(
+            scenario=get_scenario("basic-survival-v1"),
+            seed=17,
+            output_dir=tmp_path,
+            external_seat_indices=(1,),
+            baseline_kinds=("survivalist",),
+            external_agent_timeout_seconds=5,
+        )
+    )
+
+    assert report.metrics
+    assert "composites" in report.metrics
+
+    written = json.loads(report.report_path.read_text())
+    assert written["metrics"]
