@@ -120,6 +120,12 @@ GATHER_EXTRACTION_STRUCTURES: dict[str, StructureKind] = {
 }
 GATHER_PENALTY_DIVISOR = 2
 
+# Communication window: a message is answered if the recipient replies within this many
+# turns. Matches proposal/offer expiry windows (4 turns) so diplomatic exchanges and
+# message responses use the same frame for consistency, allowing a negotiation session
+# to fit comfortably. Not a behavioural rule, only used for effect measurement.
+MESSAGE_ANSWER_WINDOW = 4
+
 # Hazard constants. Fire consumes a fixed amount of structure condition each turn a
 # structure keeps burning; a structure reduced to zero condition becomes a ruin.
 FIRE_DAMAGE_PER_TURN = 40

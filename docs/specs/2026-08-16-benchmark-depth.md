@@ -58,9 +58,12 @@ before. Second attempt still lost about eight resource-units on a *successful* s
 once the influence and the injured colonist were priced, so attacker injuries on success went
 to zero, loot to fourteen food and ten wood, and the surprise cost to three influence.
 
-**Winning.** A monument at wood 30 / stone 30 / ore 12 / tools 6 / influence 20 over eight
-turns. The first cost — forty of each and ten turns — was shown by arithmetic to be
-unreachable inside eighty turns while also eating, repairing and defending.
+**Winning.** A monument over eight turns. The first cost — forty of each and ten turns —
+was shown by arithmetic to be unreachable inside eighty turns while also eating, repairing
+and defending; the correction that followed proved reachable on turn fifteen, which is the
+story under "what running it actually taught us" below. It now costs wood 60 / stone 55 /
+ore 24 / tools 12 / influence 40: above the opening stock on every line, and unreachable
+without a workshop and a market.
 
 **Score.** One published composite plus the per-axis Pareto front. The first weighting made
 passive hoarding optimal: with uncapped wood, stone, ore and tools, `resource_value // 10`
@@ -97,6 +100,27 @@ the scenario's hazard cadence was not written into run artifacts, so replay rebu
 scenario on the biome default and burned different buildings; and alliance vision merged in
 place, which made shared sight depend on the per-turn initiative order until it was split
 into a two-step union over own-sight.
+
+## What running it actually taught us
+
+Two findings came out of putting real models on it, and neither would have come from more
+scripted matches.
+
+**The win condition was affordable on turn zero.** The monument was priced down during
+review because arithmetic said the original cost was unreachable inside eighty turns. The
+correction overshot: against a starting stock of wood 50 / stone 35 / ore 10 / tools 6 /
+influence 20, the new cost of wood 30 / stone 30 / ore 12 / tools 6 / influence 20 left only
+ore short. A model replaying one seed three times ended every match with a monument, once on
+turn 15. The cost now clears the opening stock on every line, and two lines — tools and
+influence — are not on the map at all, so they can only come from a workshop and a market.
+The lesson is not about that number. It is that a cost was tuned against a spreadsheet and
+shipped without anyone asking what the opening stock already covers.
+
+**The benchmark's own noise is larger than the gaps people will want to report.** Same
+model, same seed, same seat, three runs: composite 165, 127, 93. A 72-point spread with
+nothing about the world changed. Any single-match comparison between two models is
+therefore uninterpretable, and the paired `compare` command exists to make that impossible
+to forget — it prints how many more paired runs a difference needs before it can be called.
 
 ## What to watch next
 

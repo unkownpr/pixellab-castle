@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from .actions import VALID_ACTION_KINDS
 from .domain import MatchState, StructureKind, StructureStatus
-from .engine import TurnResult
+from .engine import TurnResult, MESSAGE_ANSWER_WINDOW
 
 # Composite score weights (economic reasoning in comments)
 # Design target (AM-19): no single term should exceed others by more than roughly 2x in realistic terminal state.
@@ -59,6 +59,14 @@ STARVATION_TURNS_PENALTY = -1
 # Monument victory is worth roughly two thirds of a whole population's survival (AM-19).
 MONUMENT_VICTORY_BONUS = 40  # AM-19: raised from 25; makes winning strategic, not accidental
 
+# Efficiency metrics: composite per unit cost. These ratios let readers see what a score
+# actually costs. A model that scores 130 for 200k tokens beats one scoring 140 for 3M tokens;
+# the report must say so. When the denominator is zero (a scripted baseline uses no tokens),
+# the ratio is reported as null, not infinity, because infinite efficiency is nonsensical.
+EFFICIENCY_OUTPUT_TOKENS_PER_UNIT = 1000  # Composite per thousand adapter-reported output tokens.
+EFFICIENCY_THINKING_TIME_MS_PER_MINUTE = 60000  # Server-measured thinking time; milliseconds per minute.
+EFFICIENCY_MCP_CALLS_PER_UNIT = 100  # Server-measured MCP calls per hundred-call unit.
+
 
 @dataclass(slots=True)
 class MetricCollector:
@@ -89,6 +97,14 @@ class MetricCollector:
     proposals_accepted: dict[str, int] = field(default_factory=dict)
     proposals_rejected: dict[str, int] = field(default_factory=dict)
     proposals_expired: dict[str, int] = field(default_factory=dict)
+    # Communication effects: messages that caused action
+    messages_answered: dict[str, int] = field(default_factory=dict)
+    agreements_after_contact: dict[str, int] = field(default_factory=dict)
+    agreements_without_contact: dict[str, int] = field(default_factory=dict)
+    raids_after_contact: dict[str, int] = field(default_factory=dict)
+    treaty_breaks_after_contact: dict[str, int] = field(default_factory=dict)
+    # Message history: (turn, sender_id, recipient_id) for effect measurement
+    message_log: list[tuple[int, str, str]] = field(default_factory=list)
     # Decision quality axes
     starvation_turns: dict[str, int] = field(default_factory=dict)
     store_full_rejections: dict[str, int] = field(default_factory=dict)
@@ -113,6 +129,13 @@ class MetricCollector:
         )
 
     def record(self, result: TurnResult) -> None:
+        # First pass: build message log for effect measurement (needed before checking answers)
+        for event in result.events:
+            if event.colony_id is not None and event.kind == "message_sent":
+                target = str((event.data or {}).get("target", ""))
+                if target:
+                    self.message_log.append((event.turn, event.colony_id, target))
+
         submitted: dict[str, list[str]] = {}
         for item in result.action_results:
             colony_id = item.colony_id
@@ -198,6 +221,44 @@ class MetricCollector:
             elif event.kind == "proposal_expired":
                 self.proposals_expired[colony_id] = self.proposals_expired.get(colony_id, 0) + 1
 
+        # Process agreement effects: check if they were preceded by contact
+        for event in result.events:
+            if event.colony_id is None:
+                continue
+            colony_id = event.colony_id
+            if event.kind == "trade_completed":
+                source_id = str((event.data or {}).get("source_colony_id", ""))
+                if source_id:
+                    # Check if source had messaged the acceptor recently
+                    if self._had_contact_window(source_id, colony_id, event.turn):
+                        self.agreements_after_contact[source_id] = self.agreements_after_contact.get(source_id, 0) + 1
+                        self.agreements_after_contact[colony_id] = self.agreements_after_contact.get(colony_id, 0) + 1
+                    else:
+                        self.agreements_without_contact[source_id] = self.agreements_without_contact.get(source_id, 0) + 1
+                        self.agreements_without_contact[colony_id] = self.agreements_without_contact.get(colony_id, 0) + 1
+            elif event.kind == "proposal_accepted":
+                source_id = str((event.data or {}).get("source_colony_id", ""))
+                if source_id:
+                    # Check if source had messaged the acceptor recently
+                    if self._had_contact_window(source_id, colony_id, event.turn):
+                        self.agreements_after_contact[source_id] = self.agreements_after_contact.get(source_id, 0) + 1
+                        self.agreements_after_contact[colony_id] = self.agreements_after_contact.get(colony_id, 0) + 1
+                    else:
+                        self.agreements_without_contact[source_id] = self.agreements_without_contact.get(source_id, 0) + 1
+                        self.agreements_without_contact[colony_id] = self.agreements_without_contact.get(colony_id, 0) + 1
+            elif event.kind in {"raid", "surprise_raid"}:
+                target_id = str((event.data or {}).get("target", ""))
+                if target_id:
+                    # Check if attacker had messaged the target recently
+                    if self._had_contact_window(colony_id, target_id, event.turn):
+                        self.raids_after_contact[colony_id] = self.raids_after_contact.get(colony_id, 0) + 1
+            elif event.kind == "treaty_broken":
+                target_id = str((event.data or {}).get("target", ""))
+                if target_id:
+                    # Check if the treaty-breaker had messaged the former ally recently
+                    if self._had_contact_window(colony_id, target_id, event.turn):
+                        self.treaty_breaks_after_contact[colony_id] = self.treaty_breaks_after_contact.get(colony_id, 0) + 1
+
         # Track population extrema and health state
         for colony_id, colony in result.state.colonies.items():
             self.peak_population[colony_id] = max(
@@ -243,6 +304,55 @@ class MetricCollector:
 
     def record_reconnect(self, colony_id: str) -> None:
         self.reconnects[colony_id] = self.reconnects.get(colony_id, 0) + 1
+
+    def _had_contact_window(self, sender_id: str, recipient_id: str, current_turn: int) -> bool:
+        """Check if sender messaged recipient within MESSAGE_ANSWER_WINDOW turns before current_turn.
+
+        Used to determine if an agreement or raid was preceded by recent contact. Iterates
+        backwards through message_log to find the most recent message from sender to recipient.
+        """
+        window_start = current_turn - MESSAGE_ANSWER_WINDOW
+        for turn, src, dst in reversed(self.message_log):
+            if turn < window_start:
+                break
+            if src == sender_id and dst == recipient_id:
+                return True
+        return False
+
+    def _was_message_answered(self, sender_id: str, recipient_id: str, message_turn: int) -> bool:
+        """Check if recipient sent a message back to sender within MESSAGE_ANSWER_WINDOW after message_turn.
+
+        Used to measure whether messages sent by a colony received responses. The answer window
+        is from message_turn to message_turn + MESSAGE_ANSWER_WINDOW.
+        """
+        window_end = message_turn + MESSAGE_ANSWER_WINDOW
+        for turn, src, dst in self.message_log:
+            if turn <= message_turn:
+                continue
+            if turn > window_end:
+                break
+            if src == recipient_id and dst == sender_id:
+                return True
+        return False
+
+    def _compute_message_answers(self) -> None:
+        """Compute which messages were answered by checking the full message log.
+
+        Must be called only after all messages have been recorded, i.e., in report().
+        Populates messages_answered with counts per sender.
+        """
+        # Group messages by sender and turn
+        sent_messages: dict[tuple[str, str], int] = {}  # (sender, recipient) -> turn sent
+        for turn, sender, recipient in self.message_log:
+            # Keep only the first message in the window; we're checking if THIS message got answered
+            key = (sender, recipient)
+            if key not in sent_messages or turn < sent_messages[key]:
+                sent_messages[key] = turn
+
+        # For each sent message, check if it was answered
+        for (sender, recipient), message_turn in sorted(sent_messages.items()):
+            if self._was_message_answered(sender, recipient, message_turn):
+                self.messages_answered[sender] = self.messages_answered.get(sender, 0) + 1
 
     @staticmethod
     def _scoring_structures(state: MatchState, colony_id: str) -> int:
@@ -305,6 +415,9 @@ class MetricCollector:
         return int(score)
 
     def report(self, state: MatchState) -> dict[str, object]:
+        # Compute message answers now that all messages have been logged
+        self._compute_message_answers()
+
         colony_ids = sorted(state.colonies)
         colony_count = len(colony_ids)
         total_map_area = state.scenario_id  # This will be used to calculate exploration share
@@ -368,10 +481,19 @@ class MetricCollector:
             "communication": {
                 colony_id: {
                     "messages_sent": self.messages_sent.get(colony_id, 0),
+                    "messages_answered": self.messages_answered.get(colony_id, 0),
+                    "messages_answer_rate": round(
+                        self.messages_answered.get(colony_id, 0) / self.messages_sent.get(colony_id, 1),
+                        4
+                    ) if self.messages_sent.get(colony_id, 0) > 0 else 0.0,
                     "proposals_made": self.proposals_made.get(colony_id, 0),
                     "proposals_accepted": self.proposals_accepted.get(colony_id, 0),
                     "proposals_rejected": self.proposals_rejected.get(colony_id, 0),
                     "proposals_expired": self.proposals_expired.get(colony_id, 0),
+                    "agreements_after_contact": self.agreements_after_contact.get(colony_id, 0),
+                    "agreements_without_contact": self.agreements_without_contact.get(colony_id, 0),
+                    "raids_after_contact": self.raids_after_contact.get(colony_id, 0),
+                    "treaty_breaks_after_contact": self.treaty_breaks_after_contact.get(colony_id, 0),
                 }
                 for colony_id in colony_ids
             },
@@ -403,10 +525,60 @@ class MetricCollector:
         }
         report["composites"] = composites
 
-        # Add Pareto front
+        # Add Pareto front (per-axis front)
         report["pareto_front"] = self._calculate_pareto_front(state, colony_ids)
 
+        # Add efficiency metrics: composite per unit cost
+        report["efficiency"] = {
+            colony_id: self._calculate_efficiency_metrics(
+                composites[colony_id],
+                report["cost"][colony_id],
+            )
+            for colony_id in colony_ids
+        }
+
+        # Add cost-quality Pareto front (2D: composite vs cost)
+        report["cost_quality_front"] = self._calculate_cost_quality_front(
+            composites, report["cost"], colony_ids
+        )
+
         return report
+
+    def _calculate_efficiency_metrics(
+        self, composite: int, cost_data: dict[str, object]
+    ) -> dict[str, float | None]:
+        """Calculate efficiency ratios: composite per unit cost.
+
+        Each ratio is null when denominator is zero (a scripted baseline makes no model calls,
+        so dividing by zero tokens would produce infinity, which reads as infinite efficiency
+        and must not be reported as a number).
+
+        Returns dict with:
+        - composite_per_thousand_output_tokens: null if output_tokens == 0
+        - composite_per_minute_thinking_time: null if server_latency_ms == 0
+        - composite_per_hundred_mcp_calls: null if mcp_calls == 0
+        """
+        output_tokens = int(cost_data.get("output_tokens", 0))
+        server_latency_ms = int(cost_data.get("server_latency_ms", 0))
+        mcp_calls = int(cost_data.get("mcp_calls", 0))
+
+        return {
+            "composite_per_thousand_output_tokens": (
+                round(composite / (output_tokens / EFFICIENCY_OUTPUT_TOKENS_PER_UNIT), 4)
+                if output_tokens > 0
+                else None
+            ),
+            "composite_per_minute_thinking_time": (
+                round(composite / (server_latency_ms / EFFICIENCY_THINKING_TIME_MS_PER_MINUTE), 4)
+                if server_latency_ms > 0
+                else None
+            ),
+            "composite_per_hundred_mcp_calls": (
+                round(composite / (mcp_calls / EFFICIENCY_MCP_CALLS_PER_UNIT), 4)
+                if mcp_calls > 0
+                else None
+            ),
+        }
 
     def _calculate_pareto_front(self, state: MatchState, colony_ids: list[str]) -> list[str]:
         """Calculate Pareto front based on per-axis values.
@@ -440,6 +612,47 @@ class MetricCollector:
                 # Check if candidate is dominated by other
                 if all(other_point[i] >= candidate_point[i] for i in range(len(candidate_point))):
                     if any(other_point[i] > candidate_point[i] for i in range(len(candidate_point))):
+                        is_dominated = True
+                        break
+            if not is_dominated:
+                front.append(candidate_id)
+        return sorted(front)
+
+    def _calculate_cost_quality_front(
+        self, composites: dict[str, int], cost_data: dict[str, dict[str, object]], colony_ids: list[str]
+    ) -> list[str]:
+        """Calculate cost-quality Pareto front: composite vs total cost.
+
+        A colony is on the front if it maximizes composite or minimizes cost better than
+        any dominated alternative. In the 2D case of (composite, cost), a colony is on
+        the frontier if no other colony beats it on both axes.
+
+        Returns sorted list of colony IDs on the cost-quality front.
+        """
+        # For cost, we use a simple aggregate: penalize output tokens and mcp calls.
+        # Lower is better for cost, higher is better for composite.
+        def get_cost_point(cid: str) -> tuple[int, int]:
+            composite = composites.get(cid, 0)
+            cost = cost_data.get(cid, {})
+            # Cost is a scalar; use output tokens and mcp calls as proxies.
+            output_tokens = int(cost.get("output_tokens", 0))
+            mcp_calls = int(cost.get("mcp_calls", 0))
+            # Aggregate cost: weight tokens higher than calls (tokens are primary measure).
+            total_cost = output_tokens + mcp_calls * 10  # Crude weighting for simplicity
+            return (composite, total_cost)
+
+        front = []
+        for candidate_id in colony_ids:
+            candidate_composite, candidate_cost = get_cost_point(candidate_id)
+            is_dominated = False
+            for other_id in colony_ids:
+                if candidate_id == other_id:
+                    continue
+                other_composite, other_cost = get_cost_point(other_id)
+                # Candidate is dominated if other has higher or equal composite AND lower or equal cost,
+                # with at least one strict inequality.
+                if other_composite >= candidate_composite and other_cost <= candidate_cost:
+                    if other_composite > candidate_composite or other_cost < candidate_cost:
                         is_dominated = True
                         break
             if not is_dominated:

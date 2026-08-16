@@ -103,6 +103,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds to wait for external agents to connect",
     )
     mixed.add_argument("--output", type=Path, default=Path("runs"))
+    mixed.add_argument("--port", type=int, default=8000, help="HTTP port for external agents")
+    mixed.add_argument(
+        "--remote",
+        action="store_true",
+        help="allow a non-loopback bind; terminate TLS at a reverse proxy or secure tunnel",
+    )
+    mixed.add_argument(
+        "--allowed-origin",
+        action="append",
+        default=[],
+        help="explicit credentialed browser origin; repeat for each trusted origin",
+    )
+    mixed.add_argument(
+        "--trusted-proxy",
+        action="append",
+        default=[],
+        help="explicit proxy IP/CIDR allowed to supply X-Forwarded-For; repeat as needed",
+    )
     suite = commands.add_parser("suite")
     suite.add_argument("--scenario", default="basic-survival-v1")
     suite.add_argument("--seeds", default="11,17,23,29,37", help="comma-separated seed list")
@@ -176,6 +194,23 @@ def main() -> None:
             baseline_kinds = tuple(
                 k.strip() for k in args.baseline_kinds.split(",") if k.strip()
             )
+
+        # Determine the host (loopback by default)
+        host = "127.0.0.1"
+
+        # Validate remote configuration if needed
+        orchestrator_token = os.environ.get("CASTLE_BENCHMARK_ORCHESTRATOR_TOKEN")
+        allowed_origins = tuple(args.allowed_origin)
+        try:
+            validate_remote_configuration(
+                host,
+                args.remote,
+                orchestrator_token,
+                allowed_origins,
+            )
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+
         report = run_mixed_match(
             MixedRunConfig(
                 get_scenario(args.scenario),
@@ -184,7 +219,13 @@ def main() -> None:
                 external_seats,
                 baseline_kinds,
                 args.external_timeout,
-            )
+            ),
+            host=host,
+            port=args.port,
+            orchestrator_token=orchestrator_token,
+            allowed_origins=allowed_origins,
+            trusted_proxies=tuple(args.trusted_proxy),
+            remote=args.remote,
         )
         print(report.report_path)
     elif args.command == "suite":

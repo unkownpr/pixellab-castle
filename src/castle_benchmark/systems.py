@@ -4,11 +4,20 @@ from typing import Mapping
 
 from .domain import ResourceStock, Structure, StructureKind, StructureStatus
 
-# Monument victory (A10/AM-18). Completing a monument ends the match. The cost
-# forces the full production chain (mine→workshop for ore/tools, market for
-# influence) and prevents rushing before roughly turn 35 in an eighty-turn match.
-# Monument_victory is worth 40 composite points, roughly two thirds of survival.
-MONUMENT_COST = {"wood": 30, "stone": 30, "ore": 12, "tools": 6, "influence": 20}
+# Monument victory (A10/AM-18). Completing a monument ends the match, so its cost is
+# what stops the win condition from being a rush. The first version was priced at
+# wood 30 / stone 30 / ore 12 / tools 6 / influence 20 against a starting stock of
+# wood 50 / stone 35 / ore 10 / tools 6 / influence 20 — every line but ore was
+# already in the wagon on turn zero. A model found it immediately: three runs of the
+# same seed all ended in a monument, one of them on turn 15, and the match that was
+# meant to test eighty turns of scarcity ended before the first well paid for itself.
+#
+# Every line now sits above the starting stock, and two of them can only be met by
+# production: tools come from a workshop (one a turn, two ore each) and influence
+# from a market (two a turn). Doubling tools and influence is therefore six workshop
+# turns and ten market turns on top of building both — which is the turn-forty
+# investment the rule was supposed to describe.
+MONUMENT_COST = {"wood": 60, "stone": 55, "ore": 24, "tools": 12, "influence": 40}
 MONUMENT_BUILD_TURNS = 8
 
 BUILD_COSTS: dict[StructureKind, dict[str, int]] = {

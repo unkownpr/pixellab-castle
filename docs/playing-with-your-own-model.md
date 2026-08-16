@@ -4,7 +4,38 @@ Everything here is a real recipe: the commands were run against this repository,
 numbers quoted in the README came out of them. Two agents on two different providers can
 share one match — that is the point of the session flow.
 
-## 1. Start the service
+## Quick start: mixed-run (recommended)
+
+For a quick single match with external agents, use `mixed-run`:
+
+```bash
+uv run castle-benchmark mixed-run --scenario basic-survival-v1 --seed 17 --external-seats 1,2 --external-timeout 60
+```
+
+This command:
+- Starts an HTTP + MCP server automatically
+- Prints the connection URL and pairing codes
+- Waits for external agents to connect and claim seats
+- Runs the match to completion
+- Shuts down the server automatically
+
+The output will show something like:
+
+```
+=== Mixed Run: External Agent Pairing ===
+Agent connection URL: http://127.0.0.1:8000
+MCP endpoint: http://127.0.0.1:8000/mcp
+
+OpenCode MCP configuration:
+{"mcp": {"castle": {"type": "remote", "enabled": true, "url": "http://127.0.0.1:8000/mcp"}}}
+
+Seat 1 (c1): <pairing-code>
+Seat 2 (c2): <pairing-code>
+```
+
+Use the printed URL and config with your agent framework (e.g., OpenCode, Claude Code).
+
+## Full workflow: serve + manual session setup
 
 ```bash
 export CASTLE_BENCHMARK_ORCHESTRATOR_TOKEN="$(openssl rand -hex 24)"
@@ -131,10 +162,9 @@ connected at once, one authoritative simulation:
 | c3 | expansionist baseline | 120 | 12 | 0 |
 | c4 | survivalist baseline | 105 | 12 | 0 |
 
-DeepSeek finished it by completing a monument on turn 29. Read that table the way the
-benchmark asks you to read any single match: seven composite points between two models on
-one map is not a result, it is a coin. It took a five-seed suite to separate the scripted
-baselines, and they differ far more from each other than these two models did here.
+DeepSeek finished it by completing a monument on turn 29. Seven composite points between
+two models on one map is not a result — and this is not a figure of speech, it is measured.
+See the next section.
 
 That table also shows the blind spot the match exposed. DeepSeek repeatedly attached a
 `resource` field to its gather actions, which the action contract does not have, and the
@@ -146,11 +176,38 @@ cleaner row than the model whose legal requests were turned down. The report now
 `decision_quality.malformed_submissions` for exactly this, added after the match; the zero
 in DeepSeek's row above is what the old report said, not what happened.
 
+## How much noise is in one match
+
+DeepSeek V4 Flash played `basic-survival-v1` seed 23 three times, in the same seat, against
+the same three scripted baselines. Nothing about the world changed between runs:
+
+| run | composite | population | ended |
+|---|---:|---:|---|
+| 1 | 165 | 15 | monument, turn 43 |
+| 2 | 127 | 12 | monument, turn 21 |
+| 3 | 93 | 8 | monument, turn 15 |
+
+Mean 128, spread **72 points**. One model, one map, three runs. Any gap smaller than that
+between two models on a single match is indistinguishable from the model arguing with
+itself — which is exactly what the seven-point gap in the table above is.
+
+This is the number to quote before any comparison, and it is what `compare --within`
+computes for your own runs. It is also why the paired design below matters: pairing removes
+the map, but only repetition removes the model's own variance.
+
+Those three runs bought something else. All three ended in a monument, one on turn 15 of an
+eighty-turn match, because the win condition had been priced at wood 30 / stone 30 / ore 12
+/ tools 6 / influence 20 against a starting stock of wood 50 / stone 35 / ore 10 / tools 6 /
+influence 20 — every line but ore was already in the wagon. The monument now costs more than
+the opening stock on every line, and two of those lines (tools, influence) are not on the
+map at all: they come out of a workshop and a market or they do not come. A model found that
+in three games; a suite of scripted baselines had run twenty matches without touching it.
+
 ## Comparing two models honestly
 
 One match tells you almost nothing. The map and the seat move a score further than the
-strategy does: the same scripted baseline swings from 58 to 119 across five seeds. Two
-rules make a comparison mean something.
+strategy does, and the model moves itself further still. Two rules make a comparison mean
+something.
 
 **Pair on identical worlds.** Run each model through the same seeds and the same seat
 rotations, then compare match against match rather than average against average:

@@ -183,9 +183,12 @@ rest.
 
 ### Comparing two models without fooling yourself
 
-One match tells you nothing: the same scripted baseline swings from 58 to 119 composite
-across five seeds, so a map is worth more than a strategy. Compare paired worlds instead —
-same scenario, seed, rotation and seat — and the difference is the controller:
+One match tells you nothing, and this is measured rather than asserted. The same scripted
+baseline swings from 58 to 119 composite across five seeds, so the map outweighs the
+strategy — and one model replaying a *single* seed three times scored 165, 127 and 93, a
+72-point spread with nothing about the world changed. Compare paired worlds instead — same
+scenario, seed, rotation and seat — and repeat them, because pairing removes the map but
+only repetition removes the model's own noise:
 
 ```bash
 uv run castle-benchmark compare runs/claude runs/deepseek --label-a claude --label-b deepseek

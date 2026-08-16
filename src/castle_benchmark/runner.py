@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import socket
 import sqlite3
 import statistics
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +48,14 @@ T_CRITICAL_VALUES = {
     60: 2.000,
     120: 1.980,
 }
+
+
+def _run_server(server: Any) -> None:
+    """Run uvicorn server in current thread, blocking until shutdown."""
+    try:
+        asyncio.run(server.serve())
+    except Exception as exc:
+        logger.error(f"Server error: {exc}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,12 +148,24 @@ def run_match(config: RunConfig) -> RunReport:
     )
 
 
-def run_mixed_match(config: MixedRunConfig) -> RunReport:
+def run_mixed_match(
+    config: MixedRunConfig,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    orchestrator_token: str | None = None,
+    allowed_origins: tuple[str, ...] = (),
+    trusted_proxies: tuple[str, ...] = (),
+    remote: bool = False,
+) -> RunReport:
     """Run a match with a mix of external agents and baseline controllers.
 
     External agent seats are configured to wait for connection via pairing codes.
     Baseline seats are automatically driven by the service. For fallback testing
     when no external agents connect, this falls back to manual baseline-only mode.
+
+    If host and port are provided, serves HTTP + MCP endpoints for external agents
+    to connect through. The server runs in a background thread while the match plays,
+    then shuts down when the match completes.
 
     Determinism and replay verification are preserved: both controller types use
     the same simulation and no wall-clock time reaches SimCore.
@@ -188,7 +211,58 @@ def run_mixed_match(config: MixedRunConfig) -> RunReport:
 
     # Create session with baselines and external slots configured upfront
     service = GameService()
-    orchestrator_token = "orchestrator"
+    # Use the provided orchestrator token if given, otherwise use a default
+    final_orchestrator_token = orchestrator_token or "orchestrator"
+
+    # Initialize server variables for the finally block
+    server_thread = None
+    server = None
+
+    # Start HTTP server if hosting is requested
+    try:
+        from .api import create_app
+
+        # Find an available port starting from the requested one
+        available_port = port
+        for attempt in range(100):  # Try up to 100 ports
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            result = sock.connect_ex((host, available_port))
+            sock.close()
+            if result != 0:  # Port is available
+                port = available_port
+                break
+            available_port += 1
+        else:
+            raise SystemExit(f"Could not find an available port starting from {port}")
+
+        # Create the app with the service
+        app = create_app(
+            service=service,
+            orchestrator_token=final_orchestrator_token,
+            allowed_origins=allowed_origins,
+            trusted_proxies=trusted_proxies,
+            remote=remote,
+        )
+
+        # Start uvicorn in a background thread
+        import uvicorn
+
+        config_obj = uvicorn.Config(
+            app,
+            host=host,
+            port=port,
+            log_level="info",
+            proxy_headers=False,
+        )
+        server = uvicorn.Server(config_obj)
+        server_thread = threading.Thread(target=_run_server, args=(server,), daemon=True)
+        server_thread.start()
+        # Give the server a moment to start
+        time.sleep(0.5)
+
+    except Exception as exc:
+        logger.error(f"Failed to start server: {exc}")
+        raise
 
     # Build slot configs for baselines
     slot_configs: list[tuple[str, str, str | None]] = []
@@ -197,7 +271,7 @@ def run_mixed_match(config: MixedRunConfig) -> RunReport:
         slot_configs.append((colony_id, ControllerType.BASELINE.value, baseline_kind))
 
     session = service.create_session(
-        orchestrator_token=orchestrator_token,
+        orchestrator_token=final_orchestrator_token,
         scenario_id=config.scenario.id,
         seed=config.seed,
         colony_count=colony_count,
@@ -213,6 +287,15 @@ def run_mixed_match(config: MixedRunConfig) -> RunReport:
     print(f"External seats: {', '.join(str(i) for i in config.external_seat_indices)}")
     print()
 
+    # Print server URL and MCP config
+    base_url = f"http://{host}:{port}"
+    print(f"Agent connection URL: {base_url}")
+    print(f"MCP endpoint: {base_url}/mcp")
+    print()
+    print("OpenCode MCP configuration:")
+    print('{"mcp": {"castle": {"type": "remote", "enabled": true, "url": "' + base_url + '/mcp"}}}')
+    print()
+
     now = time.time()
     for seat_index in config.external_seat_indices:
         colony_id = f"c{seat_index}"
@@ -221,124 +304,137 @@ def run_mixed_match(config: MixedRunConfig) -> RunReport:
 
     print()
 
-    # Open lobby to allow external agents to connect
-    service.open_lobby(admin_token)
+    # Wrap match logic in try-finally to ensure server shutdown
+    try:
+        # Open lobby to allow external agents to connect
+        service.open_lobby(admin_token)
 
-    # Wait for external agents to connect
-    deadline_at = time.time() + config.external_agent_timeout_seconds
-    claimed_seats: set[int] = set()
-    while time.time() < deadline_at:
-        session_current = service._lobbies[session.match_id]
-        for seat_index in config.external_seat_indices:
-            colony_id = f"c{seat_index}"
-            slot = next(s for s in session_current.slots if s.colony_id == colony_id)
-            if slot.pairing_consumed:
-                claimed_seats.add(seat_index)
-        if len(claimed_seats) == external_count:
-            logger.info("all external agents connected")
-            break
-        time.sleep(0.05)
+        # Wait for external agents to connect
+        deadline_at = time.time() + config.external_agent_timeout_seconds
+        claimed_seats: set[int] = set()
+        while time.time() < deadline_at:
+            session_current = service._lobbies[session.match_id]
+            for seat_index in config.external_seat_indices:
+                colony_id = f"c{seat_index}"
+                slot = next(s for s in session_current.slots if s.colony_id == colony_id)
+                if slot.pairing_consumed:
+                    claimed_seats.add(seat_index)
+            if len(claimed_seats) == external_count:
+                logger.info("all external agents connected")
+                break
+            time.sleep(0.05)
 
-    # Log unclaimed external seats
-    unclaimed = set(config.external_seat_indices) - claimed_seats
-    if unclaimed:
-        logger.warning(
-            f"external agent connection timeout: {len(claimed_seats)}/{external_count} connected"
-        )
-
-    # If no external agents connected, fall back to baseline-only mode
-    if not claimed_seats:
-        logger.warning("no external agents connected; falling back to baseline-only manual drive")
-        # Build all baselines and drive manually
-        all_baselines: dict[str, Controller] = {}
-        for seat_index in range(1, colony_count + 1):
-            colony_id = f"c{seat_index}"
-            if seat_index in config.external_seat_indices:
-                # Use survivalist for unclaimed external
-                kind = "survivalist"
-            else:
-                kind = baseline_kinds_by_seat[seat_index]
-            factory = AGENT_TYPES[kind]
-            all_baselines[colony_id] = factory(seed=config.seed + seat_index)
-
-        # Record controller names showing fallback
-        controller_names = {}
-        for seat_index in range(1, colony_count + 1):
-            colony_id = f"c{seat_index}"
-            if seat_index in config.external_seat_indices:
-                controller_names[colony_id] = "external:fallback-survivalist"
-            else:
-                controller_names[colony_id] = f"baseline:{baseline_kinds_by_seat[seat_index]}"
-
-        # Manual drive (use the match's sim directly)
-        metrics = MetricCollector.create(match.sim.state)
-        writer = ArtifactWriter.create(
-            run_dir,
-            config.scenario,
-            config.seed,
-            colony_count,
-            controller_names,
-        )
-        while not match.sim.state.terminal:
-            batches = tuple(
-                all_baselines[colony_id].decide(project_observation(match.sim.state, colony_id))
-                for colony_id in sorted(all_baselines)
+        # Log unclaimed external seats
+        unclaimed = set(config.external_seat_indices) - claimed_seats
+        if unclaimed:
+            logger.warning(
+                f"external agent connection timeout: {len(claimed_seats)}/{external_count} connected"
             )
-            result = match.sim.resolve(batches)
-            metrics.record(result)
-            writer.write_turn(batches, result)
 
-        metrics_report = metrics.report(match.sim.state)
-        writer.finish(match.sim.state, metrics_report)
+        # If no external agents connected, fall back to baseline-only mode
+        if not claimed_seats:
+            logger.warning("no external agents connected; falling back to baseline-only manual drive")
+            # Build all baselines and drive manually
+            all_baselines: dict[str, Controller] = {}
+            for seat_index in range(1, colony_count + 1):
+                colony_id = f"c{seat_index}"
+                if seat_index in config.external_seat_indices:
+                    # Use survivalist for unclaimed external
+                    kind = "survivalist"
+                else:
+                    kind = baseline_kinds_by_seat[seat_index]
+                factory = AGENT_TYPES[kind]
+                all_baselines[colony_id] = factory(seed=config.seed + seat_index)
 
-        return RunReport(
-            run_dir=writer.run_dir,
-            report_path=writer.report_path,
-            termination_reason=match.sim.state.termination_reason or "unknown",
-            metrics=metrics_report,
-        )
+            # Record controller names showing fallback
+            controller_names = {}
+            for seat_index in range(1, colony_count + 1):
+                colony_id = f"c{seat_index}"
+                if seat_index in config.external_seat_indices:
+                    controller_names[colony_id] = "external:fallback-survivalist"
+                else:
+                    controller_names[colony_id] = f"baseline:{baseline_kinds_by_seat[seat_index]}"
 
-    # At least one external agent connected: proceed with session-based matching
-    service.start_match(admin_token, now)
+            # Manual drive (use the match's sim directly)
+            metrics = MetricCollector.create(match.sim.state)
+            writer = ArtifactWriter.create(
+                run_dir,
+                config.scenario,
+                config.seed,
+                colony_count,
+                controller_names,
+            )
+            while not match.sim.state.terminal:
+                batches = tuple(
+                    all_baselines[colony_id].decide(project_observation(match.sim.state, colony_id))
+                    for colony_id in sorted(all_baselines)
+                )
+                result = match.sim.resolve(batches)
+                metrics.record(result)
+                writer.write_turn(batches, result)
 
-    # Wait for match to complete
-    # Service drives baselines automatically; external agents submit via session
-    max_wait = 3600.0
-    while not match.sim.state.terminal and time.time() - now < max_wait:
-        time.sleep(0.1)
+            metrics_report = metrics.report(match.sim.state)
+            writer.finish(match.sim.state, metrics_report)
 
-    # Record controller names showing which were real external vs baseline
-    controller_names = {}
-    session_current = service._lobbies[session.match_id]
-    for seat_index in range(1, colony_count + 1):
-        colony_id = f"c{seat_index}"
-        if seat_index in config.external_seat_indices:
-            slot = next(s for s in session_current.slots if s.colony_id == colony_id)
-            if slot.pairing_consumed and slot.identity:
-                controller_names[colony_id] = f"{slot.identity.model} ({slot.identity.provider})"
-            else:
-                controller_names[colony_id] = "external:fallback-survivalist"
+            return RunReport(
+                run_dir=writer.run_dir,
+                report_path=writer.report_path,
+                termination_reason=match.sim.state.termination_reason or "unknown",
+                metrics=metrics_report,
+            )
+
         else:
-            controller_names[colony_id] = f"baseline:{baseline_kinds_by_seat[seat_index]}"
+            # At least one external agent connected: proceed with session-based matching
+            service.start_match(admin_token, now)
 
-    # Export via service
-    writer = ArtifactWriter.create(
-        run_dir,
-        config.scenario,
-        config.seed,
-        colony_count,
-        controller_names,
-    )
-    service.write_resolved_turns(admin_token, writer)
-    metrics_report = service.run_report(admin_token)["metrics"]
-    writer.finish(match.sim.state, metrics_report)
+            # Wait for match to complete
+            # Service drives baselines automatically; external agents submit via session
+            max_wait = 3600.0
+            while not match.sim.state.terminal and time.time() - now < max_wait:
+                time.sleep(0.1)
 
-    return RunReport(
-        run_dir=writer.run_dir,
-        report_path=writer.report_path,
-        termination_reason=match.sim.state.termination_reason or "unknown",
-        metrics=metrics_report,
-    )
+            # Record controller names showing which were real external vs baseline
+            controller_names = {}
+            session_current = service._lobbies[session.match_id]
+            for seat_index in range(1, colony_count + 1):
+                colony_id = f"c{seat_index}"
+                if seat_index in config.external_seat_indices:
+                    slot = next(s for s in session_current.slots if s.colony_id == colony_id)
+                    if slot.pairing_consumed and slot.identity:
+                        controller_names[colony_id] = f"{slot.identity.model} ({slot.identity.provider})"
+                    else:
+                        controller_names[colony_id] = "external:fallback-survivalist"
+                else:
+                    controller_names[colony_id] = f"baseline:{baseline_kinds_by_seat[seat_index]}"
+
+            # Export via service
+            writer = ArtifactWriter.create(
+                run_dir,
+                config.scenario,
+                config.seed,
+                colony_count,
+                controller_names,
+            )
+            service.write_resolved_turns(admin_token, writer)
+            metrics_report = service.run_report(admin_token)["metrics"]
+            writer.finish(match.sim.state, metrics_report)
+
+            return RunReport(
+                run_dir=writer.run_dir,
+                report_path=writer.report_path,
+                termination_reason=match.sim.state.termination_reason or "unknown",
+                metrics=metrics_report,
+            )
+    finally:
+        # Shut down the server if it was started
+        if server is not None:
+            try:
+                server.should_exit = True
+                # Wait for server thread to finish (timeout after 5 seconds)
+                if server_thread is not None:
+                    server_thread.join(timeout=5)
+            except Exception as exc:
+                logger.warning(f"Error shutting down server: {exc}")
 
 
 def verify_replay(run_dir: Path) -> ReplayVerification:

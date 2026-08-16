@@ -42,3 +42,6 @@ task-*-report.md
 # Remotion promo: dependencies and render scratch, never the rendered artifacts in docs/media
 promo/node_modules/
 promo/out/
+
+# Agent worktrees created inside the repo by tooling
+.claude/worktrees/

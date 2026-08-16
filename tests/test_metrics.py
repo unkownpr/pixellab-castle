@@ -293,6 +293,174 @@ def test_gather_radius_constant():
     assert isinstance(GATHER_RADIUS, int)
 
 
+def test_efficiency_metrics_with_nonzero_cost():
+    """Efficiency ratios are calculated correctly when denominators are nonzero."""
+    state = _minimal_state()
+    collector = MetricCollector.create(state)
+
+    composite = 100  # Integer composite score
+    cost_data = {
+        "model_calls": 10,
+        "mcp_calls": 50,
+        "input_tokens": 1000,
+        "output_tokens": 2000,
+        "latency_ms": 5000,
+        "server_latency_ms": 120000,  # 2 minutes
+        "timeouts": 0,
+        "reconnects": 0,
+        "budget_exceeded": 0,
+    }
+
+    efficiency = collector._calculate_efficiency_metrics(composite, cost_data)
+
+    # composite / (2000 / 1000) = 100 / 2 = 50.0
+    assert efficiency["composite_per_thousand_output_tokens"] == 50.0
+
+    # composite / (120000 / 60000) = 100 / 2 = 50.0
+    assert efficiency["composite_per_minute_thinking_time"] == 50.0
+
+    # composite / (50 / 100) = 100 / 0.5 = 200.0
+    assert efficiency["composite_per_hundred_mcp_calls"] == 200.0
+
+
+def test_efficiency_metrics_with_zero_cost():
+    """Efficiency ratios are null when denominators are zero (scripted baseline case)."""
+    state = _minimal_state()
+    collector = MetricCollector.create(state)
+
+    composite = 100
+    cost_data = {
+        "model_calls": 0,
+        "mcp_calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,  # Scripted baseline: no tokens
+        "latency_ms": 0,
+        "server_latency_ms": 0,  # No thinking time
+        "timeouts": 0,
+        "reconnects": 0,
+        "budget_exceeded": 0,
+    }
+
+    efficiency = collector._calculate_efficiency_metrics(composite, cost_data)
+
+    # All ratios are null when denominators are zero
+    assert efficiency["composite_per_thousand_output_tokens"] is None
+    assert efficiency["composite_per_minute_thinking_time"] is None
+    assert efficiency["composite_per_hundred_mcp_calls"] is None
+
+
+def test_efficiency_metrics_rounding():
+    """Efficiency metrics are rounded to 4 decimals."""
+    state = _minimal_state()
+    collector = MetricCollector.create(state)
+
+    composite = 123
+    cost_data = {
+        "model_calls": 0,
+        "mcp_calls": 100,
+        "input_tokens": 0,
+        "output_tokens": 3333,  # Not divisible evenly
+        "latency_ms": 0,
+        "server_latency_ms": 77777,
+        "timeouts": 0,
+        "reconnects": 0,
+        "budget_exceeded": 0,
+    }
+
+    efficiency = collector._calculate_efficiency_metrics(composite, cost_data)
+
+    # Check that values are rounded to 4 decimals
+    if efficiency["composite_per_thousand_output_tokens"] is not None:
+        # Round to check it has at most 4 decimals
+        val = efficiency["composite_per_thousand_output_tokens"]
+        assert len(str(val).split(".")[-1]) <= 4
+
+    if efficiency["composite_per_minute_thinking_time"] is not None:
+        val = efficiency["composite_per_minute_thinking_time"]
+        assert len(str(val).split(".")[-1]) <= 4
+
+    if efficiency["composite_per_hundred_mcp_calls"] is not None:
+        val = efficiency["composite_per_hundred_mcp_calls"]
+        assert len(str(val).split(".")[-1]) <= 4
+
+
+def test_cost_quality_front_dominated_colony():
+    """Cost-quality front identifies dominated colonies."""
+    state = _minimal_state()
+    collector = MetricCollector.create(state)
+
+    composites = {"c1": 100, "c2": 150}  # c2 has higher score
+    cost_data = {
+        "c1": {"output_tokens": 1000, "mcp_calls": 50},
+        "c2": {"output_tokens": 1000, "mcp_calls": 50},  # c2 has same cost but higher score
+    }
+
+    front = collector._calculate_cost_quality_front(composites, cost_data, ["c1", "c2"])
+
+    # c2 dominates c1 (higher score, same cost), so c1 is off the front
+    assert "c2" in front
+    assert "c1" not in front
+
+
+def test_cost_quality_front_tradeoff():
+    """Cost-quality front includes colonies with score-cost tradeoff."""
+    state = _minimal_state()
+    collector = MetricCollector.create(state)
+
+    composites = {"c1": 100, "c2": 120}  # c2 has higher score
+    cost_data = {
+        "c1": {"output_tokens": 500, "mcp_calls": 10},    # c1 is more efficient
+        "c2": {"output_tokens": 2000, "mcp_calls": 100},  # c2 costs more
+    }
+
+    front = collector._calculate_cost_quality_front(composites, cost_data, ["c1", "c2"])
+
+    # Both should be on the front: c1 is on the efficient frontier, c2 is too
+    # (trade-off between cost and score)
+    assert "c1" in front
+    assert "c2" in front
+
+
+def test_report_includes_efficiency_and_cost_quality_front():
+    """Report includes efficiency metrics and cost-quality front."""
+    state = _minimal_state()
+    collector = MetricCollector.create(state)
+
+    # Manually set some cost data
+    report = collector.report(state)
+
+    assert "efficiency" in report
+    assert "cost_quality_front" in report
+
+    # Efficiency should have entries for each colony
+    assert "c1" in report["efficiency"]
+    assert "c2" in report["efficiency"]
+
+    # cost_quality_front should be a list of colony IDs
+    assert isinstance(report["cost_quality_front"], list)
+
+
+def test_efficiency_and_composites_determinism():
+    """Efficiency metrics and Pareto fronts are deterministic for identical inputs."""
+    state1 = _minimal_state()
+    collector1 = MetricCollector.create(state1)
+    report1 = collector1.report(state1)
+
+    state2 = _minimal_state()
+    collector2 = MetricCollector.create(state2)
+    report2 = collector2.report(state2)
+
+    # Composites should be identical
+    assert report1["composites"] == report2["composites"]
+
+    # Pareto fronts should be identical
+    assert report1["pareto_front"] == report2["pareto_front"]
+    assert report1["cost_quality_front"] == report2["cost_quality_front"]
+
+    # Efficiency metrics should be identical (including null values)
+    assert report1["efficiency"] == report2["efficiency"]
+
+
 def test_end_to_end_match_with_metrics():
     """End-to-end: run a small match and verify metrics collection."""
     with TemporaryDirectory() as tmpdir:
@@ -311,11 +479,15 @@ def test_end_to_end_match_with_metrics():
         assert "survival" in report.metrics
         assert "composites" in report.metrics
         assert "pareto_front" in report.metrics
+        assert "efficiency" in report.metrics
+        assert "cost_quality_front" in report.metrics
 
         # Verify report.json was written with new fields
         report_data = json.loads(report.report_path.read_text())
         assert "composites" in report_data["metrics"]
         assert "pareto_front" in report_data["metrics"]
+        assert "efficiency" in report_data["metrics"]
+        assert "cost_quality_front" in report_data["metrics"]
         assert "exploration" in report_data["metrics"]
         assert "labour" in report_data["metrics"]
         assert "recovery" in report_data["metrics"]

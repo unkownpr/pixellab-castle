@@ -292,10 +292,16 @@ class RecoveryMetricResponse(ContractModel):
 
 class CommunicationMetricResponse(ContractModel):
     messages_sent: int
+    messages_answered: int = 0
+    messages_answer_rate: float = 0.0
     proposals_made: int
     proposals_accepted: int
     proposals_rejected: int
     proposals_expired: int
+    agreements_after_contact: int = 0
+    agreements_without_contact: int = 0
+    raids_after_contact: int = 0
+    treaty_breaks_after_contact: int = 0
 
 
 class CostMetricResponse(ContractModel):
@@ -308,6 +314,12 @@ class CostMetricResponse(ContractModel):
     timeouts: int = 0
     reconnects: int = 0
     budget_exceeded: int = 0
+
+
+class EfficiencyMetricResponse(ContractModel):
+    composite_per_thousand_output_tokens: float | None = None
+    composite_per_minute_thinking_time: float | None = None
+    composite_per_hundred_mcp_calls: float | None = None
 
 
 class PresenceMetricResponse(ContractModel):
@@ -362,6 +374,11 @@ class BenchmarkMetricsResponse(ContractModel):
     # same terminal state, so they travel with the axes rather than beside them.
     composites: dict[str, int] = Field(default_factory=dict)
     pareto_front: tuple[str, ...] = ()
+    # Efficiency metrics: composite per unit cost, null when denominator is zero.
+    # cost_quality_front: 2D Pareto front of composite vs cost, identifies which controllers
+    # are efficient (not dominated on both score and spend).
+    efficiency: dict[str, EfficiencyMetricResponse] = Field(default_factory=dict)
+    cost_quality_front: tuple[str, ...] = ()
     presence: PresenceMetricResponse | None = None
     server_measured: AggregateServerMeasuredResponse | None = None
     adapter_reported_model_usage: dict[str, AdapterReportedUsageResponse] | None = None

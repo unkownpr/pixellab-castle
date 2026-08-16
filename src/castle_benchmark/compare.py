@@ -208,7 +208,11 @@ def _extract_numeric_leaves(
 def _extract_metrics_for_colony(
     run_metrics: RunMetrics, colony_id: str
 ) -> dict[str, float]:
-    """Extract all numeric metrics for a specific colony."""
+    """Extract all numeric metrics for a specific colony.
+
+    Includes composite, per-axis metrics, and efficiency metrics (which may be null).
+    Null efficiency metrics are skipped in comparisons since they represent undefined ratios.
+    """
     metrics: dict[str, float] = {}
 
     # Composite
@@ -228,6 +232,14 @@ def _extract_metrics_for_colony(
                 _extract_numeric_leaves(f"{axis_name}_{metric_key}", metric_value, metrics)
         else:
             metrics[f"{axis_name}"] = float(own)
+
+    # Efficiency metrics: may be null (when denominator is zero)
+    efficiency = run_metrics.axes.get("efficiency", {}).get(colony_id, {})
+    if isinstance(efficiency, dict):
+        for eff_key, eff_value in efficiency.items():
+            # Skip null efficiency metrics: they represent undefined ratios and cannot be compared
+            if eff_value is not None:
+                metrics[f"efficiency_{eff_key}"] = float(eff_value)
 
     return metrics
 

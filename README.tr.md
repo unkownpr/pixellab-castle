@@ -185,10 +185,12 @@ baseline'lar doldurur.
 
 ### İki modeli kendini kandırmadan karşılaştırmak
 
-Tek maç hiçbir şey söylemez: aynı betikli baseline beş seed boyunca 58 ile 119 arasında
-gidip gelir, yani harita stratejiden daha çok şey belirler. Bunun yerine eşleştirilmiş
-dünyaları karşılaştır — aynı senaryo, seed, rotasyon ve koltuk — ki fark kontrolörden
-gelsin:
+Tek maç hiçbir şey söylemez; bu iddia değil, ölçüm. Aynı betikli baseline beş seed boyunca
+58 ile 119 arasında gidip gelir — harita stratejiden ağır basar. Dahası, tek bir model
+**aynı** seed'i üç kez oynadığında 165, 127 ve 93 aldı: dünyada hiçbir şey değişmeden 72
+puanlık yayılım. Bunun yerine eşleştirilmiş dünyaları karşılaştır — aynı senaryo, seed,
+rotasyon ve koltuk — ve tekrarla: eşleştirme haritayı siler, modelin kendi gürültüsünü
+yalnız tekrar siler:
 
 ```bash
 uv run castle-benchmark compare runs/claude runs/deepseek --label-a claude --label-b deepseek
