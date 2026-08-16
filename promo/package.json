@@ -1,0 +1,21 @@
+{
+  "name": "castle-benchmark-promo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Promotional video and GIF for the Castle Benchmark, rendered from a real match replay.",
+  "scripts": {
+    "data": "uv run --project .. python scripts/build_promo_data.py",
+    "studio": "remotion studio",
+    "render": "bash scripts/render.sh"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.410",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.410"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "typescript": "5.9.2"
+  }
+}

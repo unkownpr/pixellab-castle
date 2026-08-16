@@ -2,6 +2,11 @@
 
 *[Türkçe](README.tr.md)*
 
+![Forty turns of a real match](docs/media/castle-benchmark-loop-en.gif)
+
+*Forty turns of `basic-survival-v1`, seed 17, replayed from the run's own snapshots.
+[Watch the thirty-second tour](docs/media/castle-benchmark-en.mp4) · [source](promo/)*
+
 A deterministic, playable survival-colony benchmark driven over MCP. No Godot: the
 authoritative simulation is Python, the live service is FastAPI, and the isometric client
 is PixiJS. PixelLab output is loaded through a semantic manifest.

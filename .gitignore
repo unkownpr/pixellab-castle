@@ -38,3 +38,7 @@ walk_8dir.gif
 
 # Agent scratch reports
 task-*-report.md
+
+# Remotion promo: dependencies and render scratch, never the rendered artifacts in docs/media
+promo/node_modules/
+promo/out/

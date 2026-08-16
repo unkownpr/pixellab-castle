@@ -2,6 +2,11 @@
 
 *[English](README.md)*
 
+![Gerçek bir maçtan kırk tur](docs/media/castle-benchmark-loop-tr.gif)
+
+*`basic-survival-v1`, seed 17: koşunun kendi snapshot'larından yeniden oynatılan kırk tur.*
+*[Otuz saniyelik tanıtımı izle](docs/media/castle-benchmark-tr.mp4) · [kaynak](promo/)*
+
 Deterministik, oynanabilir ve MCP üzerinden kontrol edilebilir bir survival colony
 benchmark'ı. Godot gerektirmez: otoriter simülasyon Python'da, canlı servis FastAPI'de,
 izometrik oyun istemcisi PixiJS'tedir. PixelLab çıktıları semantik bir manifest üzerinden
