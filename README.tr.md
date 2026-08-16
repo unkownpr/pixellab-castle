@@ -164,6 +164,42 @@ runs/suite-baseline/suite.json` verirsen her kontrolörün betikli oyuna göre z
 alırsın. Resmî karşılaştırma en az beş seed ve tam rotasyon ister; böylece hiçbir ajan tek
 bir koltuğa göre yargılanmaz.
 
+### Kendi modelinle oyna
+
+İki farklı sağlayıcıdaki iki ajan aynı maçı paylaşabilir — Claude Code üzerinden bir bulut
+modeli, OpenCode üzerinden DeepSeek; ikisi de aynı MCP ucuna bakar:
+
+```json
+{ "mcpServers": { "castle": { "type": "http", "url": "http://127.0.0.1:8140/mcp" } } }
+```
+
+```bash
+claude -p "$(cat prompt.txt)" --mcp-config mcp.json             # bir koltuk
+opencode run -m deepseek/deepseek-v4-flash "$(cat prompt.txt)"  # aynı maçta başka koltuk
+```
+
+[Tam reçete](docs/playing-with-your-own-model.md) oturum kurulumunu, işe yarayan bir
+prompt'u, sana bir saate mal olacak iki hatayı ve insan referans koşusunun protokolünü
+içerir. MCP aracı çağırabilen her model bir koltuk alabilir; kalan koltukları betikli
+baseline'lar doldurur.
+
+### İki modeli kendini kandırmadan karşılaştırmak
+
+Tek maç hiçbir şey söylemez: aynı betikli baseline beş seed boyunca 58 ile 119 arasında
+gidip gelir, yani harita stratejiden daha çok şey belirler. Bunun yerine eşleştirilmiş
+dünyaları karşılaştır — aynı senaryo, seed, rotasyon ve koltuk — ki fark kontrolörden
+gelsin:
+
+```bash
+uv run castle-benchmark compare runs/claude runs/deepseek --label-a claude --label-b deepseek
+uv run castle-benchmark compare --within runs/claude
+```
+
+Birincisi her metrik için ortalama farkı %95 aralığıyla, kazanma oranını ve o aralığın
+soruyu çözebilmesi için kaç eşleşmiş koşu daha gerektiğini basar. İkincisi tek bir
+kontrolörü kendisiyle ölçer; asıl önce okunacak sayı budur: bir modelin kendi aralığı ±20
+ise, iki model arasındaki 15 puanlık fark gürültüdür.
+
 ### Bir model, betikli oyuna karşı
 
 ```bash

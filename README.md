@@ -162,6 +162,41 @@ on a later suite to get each controller's z-score against scripted play. An offi
 comparison uses at least five seeds and the full rotation, so no agent is judged on one
 seat.
 
+### Play it with your own model
+
+Two agents on two different providers can share one match — a cloud model through Claude
+Code and DeepSeek through OpenCode, both pointed at the same MCP endpoint:
+
+```json
+{ "mcpServers": { "castle": { "type": "http", "url": "http://127.0.0.1:8140/mcp" } } }
+```
+
+```bash
+claude -p "$(cat prompt.txt)" --mcp-config mcp.json          # one seat
+opencode run -m deepseek/deepseek-v4-flash "$(cat prompt.txt)"  # another seat, same match
+```
+
+[The full recipe](docs/playing-with-your-own-model.md) has the session setup, a prompt that
+works, the two mistakes that will cost you an hour, and the protocol for a human reference
+run. Any model that can call MCP tools can take a seat; the scripted baselines fill the
+rest.
+
+### Comparing two models without fooling yourself
+
+One match tells you nothing: the same scripted baseline swings from 58 to 119 composite
+across five seeds, so a map is worth more than a strategy. Compare paired worlds instead —
+same scenario, seed, rotation and seat — and the difference is the controller:
+
+```bash
+uv run castle-benchmark compare runs/claude runs/deepseek --label-a claude --label-b deepseek
+uv run castle-benchmark compare --within runs/claude
+```
+
+The first prints, per metric, the mean difference with a 95% interval, the win rate, and
+how many more paired runs you would need before that interval could settle the question.
+The second measures a single controller against itself, which is the number to read first:
+if one model's own interval is ±20, a 15-point gap between two models is noise.
+
 ### One model against scripted play
 
 ```bash

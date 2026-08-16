@@ -7,6 +7,7 @@ import logging
 import os
 from pathlib import Path
 
+from .compare import compare_runs, format_comparison_table, format_within_table, within_controller_stats
 from .runner import MixedRunConfig, RunConfig, SuiteConfig, run_match, run_mixed_match, run_suite, verify_replay
 from .scenarios import get_scenario
 
@@ -139,6 +140,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     report = commands.add_parser("report")
     report.add_argument("run_dir", type=Path)
+    compare = commands.add_parser("compare")
+    compare.add_argument("dir_a", type=Path, help="directory with run results from controller A (or single dir with --within)")
+    compare.add_argument("dir_b", nargs="?", type=Path, help="directory with run results from controller B (omit with --within)")
+    compare.add_argument("--label-a", default="A", help="label for controller A")
+    compare.add_argument("--label-b", default="B", help="label for controller B")
+    compare.add_argument("--output", type=Path, help="write comparison.json to this path")
+    compare.add_argument(
+        "--target-margin",
+        type=float,
+        default=5.0,
+        help="target confidence interval half-width in composite points (default: 5)",
+    )
+    compare.add_argument("--within", action="store_true", help="report within-controller stats for single directory")
     return parser
 
 
@@ -228,6 +242,23 @@ def main() -> None:
     elif args.command == "report":
         payload = json.loads((args.run_dir / "report.json").read_text())
         print(json.dumps(payload, indent=2, sort_keys=True))
+    elif args.command == "compare":
+        if args.within:
+            # Within-controller mode: single directory (uses dir_a)
+            result = within_controller_stats(args.dir_a, args.target_margin)
+            print(format_within_table(result))
+            if args.output:
+                args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        else:
+            # Paired comparison mode: two directories
+            if not args.dir_b:
+                raise SystemExit("dir_b required for paired comparison (or use --within for single directory)")
+            result = compare_runs(
+                args.dir_a, args.dir_b, args.label_a, args.label_b, args.target_margin
+            )
+            print(format_comparison_table(result, args.label_a, args.label_b))
+            if args.output:
+                args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
 
 
 if __name__ == "__main__":
