@@ -94,6 +94,7 @@ class MetricCollector:
     store_full_rejections: dict[str, int] = field(default_factory=dict)
     wait_turns: dict[str, int] = field(default_factory=dict)
     opportunity_waits: dict[str, int] = field(default_factory=dict)
+    malformed_submissions: dict[str, int] = field(default_factory=dict)
     # The state each colony actually decided against: this turn's observation is last
     # turn's result, so judging a wait against the post-resolution state would credit or
     # blame a colony for hands it did not have when it chose.
@@ -224,6 +225,18 @@ class MetricCollector:
                 self.turns_with_damaged_structures[colony_id] = (
                     self.turns_with_damaged_structures.get(colony_id, 0) + 1
                 )
+
+    def record_malformed(self, colony_id: str) -> None:
+        """A submission the parser refused before the simulation ever saw it.
+
+        Two models playing the same match exposed the blind spot: one of them kept
+        attaching a field the gather action does not have, the parser refused every
+        submission, and the colony finished with a perfect decision-quality row because
+        rejections are only counted once an action reaches the engine. A controller that
+        cannot form a legal request is making worse decisions than one whose legal
+        requests get turned down, and the report has to be able to say so.
+        """
+        self.malformed_submissions[colony_id] = self.malformed_submissions.get(colony_id, 0) + 1
 
     def record_timeout(self, colony_id: str) -> None:
         self.timeouts[colony_id] = self.timeouts.get(colony_id, 0) + 1
@@ -373,6 +386,7 @@ class MetricCollector:
                     ),
                     "starvation_turns": self.starvation_turns.get(colony_id, 0),
                     "store_full_rejections": self.store_full_rejections.get(colony_id, 0),
+                    "malformed_submissions": self.malformed_submissions.get(colony_id, 0),
                 }
                 for colony_id in colony_ids
             },

@@ -118,6 +118,34 @@ The composite is the ranking number; the axes under it say why. `cost.server_lat
 is measured by the service, `cost.input_tokens` is whatever the adapter reported — the two
 are kept apart on purpose.
 
+## What happened when this was run
+
+Claude and DeepSeek V4 Flash took seats `c1` and `c2` of `basic-survival-v1` seed 23, with
+an expansionist and a survivalist baseline in the other two. Thirty turns each, both
+connected at once, one authoritative simulation:
+
+| seat | controller | composite | population | rejected actions |
+|---|---|---:|---:|---:|
+| c2 | DeepSeek V4 Flash | 139 | 12 | 0 |
+| c1 | Claude | 132 | 13 | 3 |
+| c3 | expansionist baseline | 120 | 12 | 0 |
+| c4 | survivalist baseline | 105 | 12 | 0 |
+
+DeepSeek finished it by completing a monument on turn 29. Read that table the way the
+benchmark asks you to read any single match: seven composite points between two models on
+one map is not a result, it is a coin. It took a five-seed suite to separate the scripted
+baselines, and they differ far more from each other than these two models did here.
+
+That table also shows the blind spot the match exposed. DeepSeek repeatedly attached a
+`resource` field to its gather actions, which the action contract does not have, and the
+service refused every one of those submissions rather than reading the coordinates and
+dropping the rest — a controller scored on a plan the simulation never saw is being
+measured on fiction. But refusals happen at the parser, before the engine, so they never
+reached `rejected actions`: the model that could not form a legal request finished with a
+cleaner row than the model whose legal requests were turned down. The report now carries
+`decision_quality.malformed_submissions` for exactly this, added after the match; the zero
+in DeepSeek's row above is what the old report said, not what happened.
+
 ## Comparing two models honestly
 
 One match tells you almost nothing. The map and the seat move a score further than the

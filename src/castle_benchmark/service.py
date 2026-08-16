@@ -1304,6 +1304,8 @@ class GameService:
             parsed = tuple(action_from_dict(dict(action)) for action in actions)
             batch = ActionBatch(turn, access.colony_id, parsed)  # type: ignore[arg-type]
         except (KeyError, TypeError, ValueError) as exc:
+            if match.metrics is not None:
+                match.metrics.record_malformed(access.colony_id)
             raise InvalidActionError(str(exc)) from exc
         with match.turn_lock:
             access, match = self._authorize(token)

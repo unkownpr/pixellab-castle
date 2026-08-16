@@ -265,6 +265,7 @@ class DecisionQualityMetricResponse(ContractModel):
     opportunity_waits: int = 0
     starvation_turns: int = 0
     store_full_rejections: int = 0
+    malformed_submissions: int = 0
 
 
 class ExplorationMetricResponse(ContractModel):
