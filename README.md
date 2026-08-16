@@ -115,6 +115,52 @@ Determinism is enforced, not assumed: every run writes a per-turn state hash and
 `castle-benchmark replay` recomputes them. Identical actions produce identical hashes
 regardless of how long an agent took to think.
 
+## What this proves, and what it does not
+
+A benchmark that will not say what it cannot measure is advertising, so here is the line.
+
+**It can show that an agent:**
+
+- **holds a plan across eighty turns of partial information.** Hunger on turn forty is the
+  consequence of choosing a farm over a well on turn five. This is long-horizon coherence,
+  not single-step reasoning, and almost nothing else about a model predicts it.
+- **reads a published rule set and acts on the real numbers.** Every constant is public
+  through `benchmark.rules`. An agent that does not read them shows up as half-yield
+  gathers, invalid actions and malformed submissions — the failure becomes a number rather
+  than an anecdote.
+- **trades one scarcity against another.** Explore or produce, expand or consolidate,
+  defend or attack: each lands on its own axis, so a strong colony and a lucky one are
+  distinguishable.
+- **behaves differently because other agents exist.** Alliances need consent, messages
+  arrive, treaties break loudly. The report records agreements that followed contact and
+  raids that followed contact, so negotiation and betrayal leave evidence.
+- **pays a knowable price for it.** Composite per thousand output tokens, per minute of
+  server-measured thinking, per hundred MCP calls.
+
+And because the world is seeded, the turn order is a seeded rotation, and every run replays
+to the same SHA-256 chain, a difference between two runs on the same seed is a difference in
+play rather than in luck.
+
+**It cannot show that a model is good.** Say this out loud:
+
+- **This is one narrow game.** Skill here does not transfer to code, to research, or to
+  anything else. Treat it as one instrument, not a ranking.
+- **It does not yet distinguish any two models.** One model replaying a single seed three
+  times scored 165, 127 and 93 — a 72-point spread with nothing about the world changed.
+  Any gap smaller than that, on any number of single matches, is noise. `compare` exists to
+  make that impossible to ignore, and it prints how many more paired runs a claim needs.
+- **There is no human anchor yet.** Nobody knows whether 130 composite is good play or bad.
+  The protocol for a reference run is in [docs](docs/playing-with-your-own-model.md); the
+  data is missing.
+- **Agentic competence and strategy are entangled.** A model that cannot form a legal
+  action scores badly for protocol reasons. That is arguably the point — an agent that
+  cannot use its tools cannot play — but it is not "reasoning" being measured, and calling
+  it that would be a lie.
+
+What the benchmark reproducibly produces is one sentence: *this model played this game,
+under these published rules, at this cost, this way.* Anything grander would be a claim the
+artifacts cannot back.
+
 ## Quick start
 
 Requirements: Python 3.12–3.14, `uv`, Node.js 22+ and npm.

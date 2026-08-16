@@ -116,6 +116,49 @@ Determinizm varsayılmaz, zorlanır: her koşu tur başına bir durum hash'i yaz
 `castle-benchmark replay` bunları yeniden hesaplar. Aynı aksiyonlar, ajanın düşünmesi ne
 kadar sürerse sürsün, aynı hash'i üretir.
 
+## Bu benchmark neyi kanıtlar, neyi kanıtlamaz
+
+Ölçemediğini söylemeyen bir benchmark reklamdır. O yüzden sınırı burada çiziyoruz.
+
+**Şunları gösterebilir — bir ajanın:**
+
+- **seksen tur boyunca kısmi bilgiyle bir planı taşıyabildiğini.** Kırkıncı turdaki açlık,
+  beşinci turda kuyu yerine tarla seçmenin sonucudur. Bu tek adımlık akıl yürütme değil,
+  uzun ufuklu tutarlılıktır — ve bir modelin başka hiçbir özelliği bunu iyi öngörmez.
+- **yayımlanmış bir kural setini okuyup gerçek sayılara göre davrandığını.** Her sabit
+  `benchmark.rules` üzerinden açıktır. Okumayan ajan yarı verimli toplamalarda, geçersiz
+  aksiyonlarda ve reddedilen gönderimlerde görünür: kusur anekdot değil, sayı olur.
+- **bir kıtlığı diğerine karşı tarttığını.** Keşif mi üretim mi, genişleme mi konsolidasyon
+  mu, savunma mı saldırı mı — her biri kendi ekseninde durur, böylece güçlü koloni ile
+  şanslı koloni ayırt edilebilir.
+- **başka ajanlar var diye farklı davrandığını.** İttifak rıza ister, mesajlar ulaşır,
+  anlaşma bozmak herkese duyurulur. Rapor, temastan sonra gelen anlaşmaları ve temastan
+  sonra gelen baskınları kaydeder; pazarlık da ihanet de iz bırakır.
+- **bunun bilinebilir bir bedelini ödediğini.** Bin çıktı tokenı, bir dakika sunucu-ölçümlü
+  düşünme ve yüz MCP çağrısı başına bileşik puan.
+
+Dünya seed'li, tur sırası tohumlanmış bir rotasyon ve her koşu aynı SHA-256 zincirine
+yeniden oynandığı için, aynı seed'deki iki koşu arasındaki fark şansın değil oyunun farkıdır.
+
+**Bir modelin "iyi" olduğunu gösteremez.** Bunu açıkça söylüyoruz:
+
+- **Bu tek ve dar bir oyun.** Buradaki beceri koda, araştırmaya ya da başka bir şeye
+  taşınmaz. Sıralama değil, tek bir ölçüm aleti olarak görün.
+- **Şu an hiçbir iki modeli birbirinden ayıramaz.** Tek bir model, tek bir seed'i üç kez
+  oynadığında 165, 127 ve 93 aldı — dünyada hiçbir şey değişmeden 72 puanlık yayılım.
+  Bunun altındaki her fark, kaç tek maç koşarsan koş, gürültüdür. `compare` bunu görmezden
+  gelmeyi imkânsız kılmak için var ve bir iddianın kaç eşleşmiş koşu daha istediğini basar.
+- **Henüz insan çapası yok.** 130 bileşik puanın iyi mi kötü mü olduğunu kimse bilmiyor.
+  Referans koşusunun protokolü [dokümanda](docs/playing-with-your-own-model.md) duruyor,
+  verisi yok.
+- **Ajanlık yetkinliği ile strateji iç içe.** Yasal aksiyon üretemeyen model, protokol
+  sebebiyle düşük puan alır. Bu tartışmalı biçimde amacın kendisidir — aracını kullanamayan
+  ajan oynayamaz — ama ölçülen şey "akıl yürütme" değildir ve öyle demek yalan olur.
+
+Benchmark'ın tekrar üretilebilir biçimde ürettiği şey tek bir cümledir: *bu model, bu
+yayımlanmış kurallarla, bu maliyetle, bu oyunu böyle oynadı.* Bundan büyüğü, artefaktların
+arkasında duramayacağı bir iddia olur.
+
 ## Hızlı başlangıç
 
 Gereksinimler: Python 3.12–3.14, `uv`, Node.js 22+ ve npm.
