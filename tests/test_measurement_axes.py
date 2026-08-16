@@ -14,6 +14,7 @@ from castle_benchmark.actions import (
     MessageAction,
     WaitAction,
 )
+from castle_benchmark.actions import VALID_ACTION_KINDS
 from castle_benchmark.domain import ResourceStock
 from castle_benchmark.engine import SimCore
 from castle_benchmark.metrics import MetricCollector
@@ -79,6 +80,62 @@ def test_a_fed_colony_records_no_starvation() -> None:
         metrics.record(sim.resolve((batch(sim, "c1", WaitAction()),)))
 
     assert metrics.report(sim.state)["decision_quality"]["c1"]["starvation_turns"] == 0
+
+
+def test_a_colony_with_no_population_records_no_starvation() -> None:
+    """Nobody left to feed is not the same as a colony that went hungry."""
+    sim = quiet_hazards(SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=3))
+    colonies = dict(sim.state.colonies)
+    colonies["c1"] = replace(colonies["c1"], population=0, hungry=0, resources=ResourceStock())
+    sim.state = replace(sim.state, colonies=colonies)
+    metrics = MetricCollector.create(sim.state)
+
+    for _ in range(3):
+        metrics.record(
+            sim.resolve(
+                (
+                    batch(sim, "c1", WaitAction()),
+                    batch(sim, "c2", WaitAction()),
+                    batch(sim, "c3", WaitAction()),
+                )
+            )
+        )
+
+    assert metrics.report(sim.state)["decision_quality"]["c1"]["starvation_turns"] == 0
+
+
+def test_an_idle_colony_records_opportunity_waits() -> None:
+    """Waiting with hands and materials is the passivity the decision axis exists to see."""
+    sim = quiet_hazards(SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=1))
+    metrics = MetricCollector.create(sim.state)
+
+    for _ in range(3):
+        metrics.record(sim.resolve((batch(sim, "c1", WaitAction()),)))
+
+    assert metrics.report(sim.state)["decision_quality"]["c1"]["opportunity_waits"] == 3
+
+
+def test_waiting_with_nothing_to_spend_is_not_an_opportunity_wait() -> None:
+    """A colony with no able colonists has no other move; that is not passivity."""
+    sim = quiet_hazards(SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=1))
+    colonies = dict(sim.state.colonies)
+    colonies["c1"] = replace(colonies["c1"], sick=colonies["c1"].population)
+    sim.state = replace(sim.state, colonies=colonies)
+    metrics = MetricCollector.create(sim.state)
+
+    metrics.record(sim.resolve((batch(sim, "c1", WaitAction()),)))
+
+    assert metrics.report(sim.state)["decision_quality"]["c1"]["opportunity_waits"] == 0
+
+
+def test_action_diversity_is_measured_against_the_published_action_list() -> None:
+    sim = quiet_hazards(SimCore.create(BASIC_SURVIVAL, seed=19, colony_count=1))
+    metrics = MetricCollector.create(sim.state)
+
+    metrics.record(sim.resolve((batch(sim, "c1", WaitAction()),)))
+
+    expected = round(1 / len(VALID_ACTION_KINDS), 4)
+    assert metrics.report(sim.state)["decision_quality"]["c1"]["action_diversity"] == expected
 
 
 def test_the_composite_is_an_integer() -> None:

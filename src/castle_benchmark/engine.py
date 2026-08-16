@@ -1410,8 +1410,8 @@ class SimCore:
             # in good times it is strictly worse than eating properly.
             tight_rationing = colony.policies.get("rationing") == "tight"
             base_need = colony.population // 4 if not tight_rationing else colony.population // 8
-            food_need = max(1, base_need)
-            water_need = max(1, base_need)
+            food_need = max(1, base_need) if colony.population > 0 else 0
+            water_need = max(1, base_need) if colony.population > 0 else 0
             food = min(food_need, colony.resources.food)
             water = min(water_need, colony.resources.water)
             stock = colony.resources.apply({"food": -food, "water": -water})

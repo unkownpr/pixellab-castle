@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+from .actions import VALID_ACTION_KINDS
 from .domain import MatchState, StructureStatus
 from .engine import TurnResult
 
@@ -72,7 +73,11 @@ class MetricCollector:
     starvation_turns: dict[str, int] = field(default_factory=dict)
     store_full_rejections: dict[str, int] = field(default_factory=dict)
     wait_turns: dict[str, int] = field(default_factory=dict)
-    opportunity_waits: dict[str, int] = field(default_factory=dict)  # Waits when labour/resources available
+    opportunity_waits: dict[str, int] = field(default_factory=dict)
+    # The state each colony actually decided against: this turn's observation is last
+    # turn's result, so judging a wait against the post-resolution state would credit or
+    # blame a colony for hands it did not have when it chose.
+    decided_against: MatchState | None = None
     action_kinds_used: dict[str, set[str]] = field(default_factory=dict)
 
     @classmethod
@@ -83,22 +88,37 @@ class MetricCollector:
             peak_population=dict(populations),
             min_population=dict(populations),
             action_kinds_used={colony_id: set() for colony_id in populations},
+            decided_against=state,
         )
 
     def record(self, result: TurnResult) -> None:
+        submitted: dict[str, list[str]] = {}
         for item in result.action_results:
             colony_id = item.colony_id
+            submitted.setdefault(colony_id, []).append(item.action_kind)
             if item.status == "rejected":
                 self.invalid_actions[colony_id] = self.invalid_actions.get(colony_id, 0) + 1
                 if item.code == "store_full":
                     self.store_full_rejections[colony_id] = self.store_full_rejections.get(colony_id, 0) + 1
             else:
-                # Track action kinds used
                 if colony_id not in self.action_kinds_used:
                     self.action_kinds_used[colony_id] = set()
                 self.action_kinds_used[colony_id].add(item.action_kind)
             if item.action_kind == "wait":
                 self.wait_turns[colony_id] = self.wait_turns.get(colony_id, 0) + 1
+
+        # A wait is only evidence of passivity when the colony had something to spend it
+        # on. Waiting with nobody able to work, or with an empty store, is the only move
+        # there is; waiting with hands and materials is a decision, and it is the one
+        # thing that separates a careful agent from an idle one.
+        for colony_id, kinds in submitted.items():
+            source = self.decided_against or result.state
+            colony = source.colonies.get(colony_id)
+            if colony is None or not kinds or any(kind != "wait" for kind in kinds):
+                continue
+            if colony.available_population >= 1 and any(colony.resources.as_dict().values()):
+                self.opportunity_waits[colony_id] = self.opportunity_waits.get(colony_id, 0) + 1
+        self.decided_against = result.state
 
         for event in result.events:
             if event.colony_id is None:
@@ -314,8 +334,9 @@ class MetricCollector:
                     "wait_turns": self.wait_turns.get(colony_id, 0),
                     "opportunity_waits": self.opportunity_waits.get(colony_id, 0),
                     "action_diversity": round(
-                        len(self.action_kinds_used.get(colony_id, set())) / 10.0, 4
-                    ),  # Approximate total action kinds
+                        len(self.action_kinds_used.get(colony_id, set())) / len(VALID_ACTION_KINDS),
+                        4,
+                    ),
                     "starvation_turns": self.starvation_turns.get(colony_id, 0),
                     "store_full_rejections": self.store_full_rejections.get(colony_id, 0),
                 }

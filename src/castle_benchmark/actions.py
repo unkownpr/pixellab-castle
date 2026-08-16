@@ -117,6 +117,27 @@ GameAction: TypeAlias = (
 )
 
 
+# Every action kind a controller may submit, in the order the observation publishes them.
+# Kept here rather than inline in the projection so the contract and anything measuring
+# action variety count the same list instead of a hand-copied number.
+VALID_ACTION_KINDS: tuple[str, ...] = (
+    "wait",
+    "gather",
+    "build",
+    "diplomacy",
+    "trade_offer",
+    "trade_respond",
+    "raid",
+    "set_policy",
+    "scout",
+    "repair",
+    "extinguish",
+    "demolish",
+    "message",
+    "diplomacy_respond",
+)
+
+
 @dataclass(frozen=True, slots=True)
 class ActionBatch:
     turn: int

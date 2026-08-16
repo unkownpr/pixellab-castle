@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .actions import VALID_ACTION_KINDS
 from .domain import MatchState
 from .world import WorldState
 
@@ -140,22 +141,7 @@ def project_observation(state: MatchState, colony_id: str) -> Observation:
         active_offers=offers,
         inbox=messages,
         open_proposals=proposals,
-        valid_action_kinds=(
-            "wait",
-            "gather",
-            "build",
-            "diplomacy",
-            "trade_offer",
-            "trade_respond",
-            "raid",
-            "set_policy",
-            "scout",
-            "repair",
-            "extinguish",
-            "demolish",
-            "message",
-            "diplomacy_respond",
-        ),
+        valid_action_kinds=VALID_ACTION_KINDS,
     )
 
 
