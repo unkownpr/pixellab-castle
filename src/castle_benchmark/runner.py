@@ -1,20 +1,26 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import statistics
+import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .actions import WaitAction
 from .agents import AGENT_TYPES, Controller
 from .engine import SimCore
 from .events import state_hash
+from .lobby import ControllerType
 from .metrics import MetricCollector
 from .observation import project_observation
 from .persistence import ArtifactWriter, batch_from_dict, scenario_from_dict
 from .scenarios import Scenario
+from .service import GameService
+
+logger = logging.getLogger("castle_benchmark.runner")
 
 # t-critical values for 95% confidence interval, indexed by degrees of freedom.
 # Source: standard t-distribution table for alpha=0.05 (two-tailed).
@@ -48,6 +54,22 @@ class RunConfig:
     colony_count: int
     output_dir: Path
     controller_kinds: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MixedRunConfig:
+    """Config for a mixed run with external agents and baselines in the same match.
+
+    External agents connect via pairing codes and submit actions through the session flow.
+    Baseline controllers are automatically driven by the service.
+    """
+
+    scenario: Scenario
+    seed: int
+    output_dir: Path
+    external_seat_indices: tuple[int, ...]  # 1-indexed seat numbers for external agents
+    baseline_kinds: tuple[str, ...] | None = None  # baseline kinds for non-external seats
+    external_agent_timeout_seconds: int = 30  # wait for external agents to claim
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,29 +119,11 @@ def run_match(config: RunConfig) -> RunReport:
     )
     metrics = MetricCollector.create(sim.state)
     while not sim.state.terminal:
-        # Capture pre-resolution state for opportunity_waits tracking
-        pre_state_colonies = {cid: colony for cid, colony in sim.state.colonies.items()}
-
         batches = tuple(
             controllers[colony_id].decide(project_observation(sim.state, colony_id))
             for colony_id in sorted(controllers)
         )
         result = sim.resolve(batches)
-
-        # Track opportunity_waits: only wait actions submitted + had labour + had resources
-        for batch in batches:
-            colony_id = batch.colony_id
-            pre_colony = pre_state_colonies.get(colony_id)
-            if pre_colony is None:
-                continue
-            # Check if all actions in batch were wait actions
-            all_waits = all(isinstance(action, WaitAction) for action in batch.actions) if batch.actions else True
-            # Check if colony had available labour and non-empty resources
-            has_labour = pre_colony.available_population > 0
-            has_resources = any(getattr(pre_colony.resources, name, 0) > 0
-                               for name in ["food", "water", "wood", "stone", "ore", "tools", "influence"])
-            if all_waits and has_labour and has_resources:
-                metrics.opportunity_waits[colony_id] = metrics.opportunity_waits.get(colony_id, 0) + 1
 
         metrics.record(result)
         writer.write_turn(batches, result)
@@ -130,6 +134,209 @@ def run_match(config: RunConfig) -> RunReport:
         report_path=writer.report_path,
         termination_reason=sim.state.termination_reason or "unknown",
         metrics=metric_report,
+    )
+
+
+def run_mixed_match(config: MixedRunConfig) -> RunReport:
+    """Run a match with a mix of external agents and baseline controllers.
+
+    External agent seats are configured to wait for connection via pairing codes.
+    Baseline seats are automatically driven by the service. For fallback testing
+    when no external agents connect, this falls back to manual baseline-only mode.
+
+    Determinism and replay verification are preserved: both controller types use
+    the same simulation and no wall-clock time reaches SimCore.
+    """
+    # Derive colony count and baseline assignments
+    external_count = len(config.external_seat_indices)
+    baseline_count = len(config.baseline_kinds) if config.baseline_kinds else 0
+    colony_count = external_count + baseline_count
+    if not colony_count:
+        raise ValueError("must have at least one seat (external or baseline)")
+
+    # Prepare baseline kinds: cycle through provided kinds or default to survivalist
+    provided_baseline_kinds = config.baseline_kinds or ("survivalist",)
+    baseline_kinds_by_seat: dict[int, str] = {}
+    baseline_kind_cycle = iter(provided_baseline_kinds)
+    for seat_index in range(1, colony_count + 1):
+        if seat_index not in config.external_seat_indices:
+            baseline_kinds_by_seat[seat_index] = next(baseline_kind_cycle)
+
+    # Determine output directory early
+    run_name = f"{config.scenario.id}-seed-{config.seed}"
+    run_dir = config.output_dir / run_name
+    suffix = 1
+    while run_dir.exists():
+        run_dir = config.output_dir / f"{run_name}-{suffix}"
+        suffix += 1
+
+    # If no external seats, just run a normal baseline match
+    if not config.external_seat_indices:
+        # Build controller order: apply baseline kinds in order
+        controller_kinds = list(provided_baseline_kinds[:colony_count])
+        if len(controller_kinds) < colony_count:
+            controller_kinds += [provided_baseline_kinds[-1]] * (colony_count - len(controller_kinds))
+        return run_match(
+            RunConfig(
+                config.scenario,
+                config.seed,
+                colony_count,
+                config.output_dir,
+                tuple(controller_kinds[:colony_count]),
+            )
+        )
+
+    # Create session with baselines and external slots configured upfront
+    service = GameService()
+    orchestrator_token = "orchestrator"
+
+    # Build slot configs for baselines
+    slot_configs: list[tuple[str, str, str | None]] = []
+    for seat_index, baseline_kind in baseline_kinds_by_seat.items():
+        colony_id = f"c{seat_index}"
+        slot_configs.append((colony_id, ControllerType.BASELINE.value, baseline_kind))
+
+    session = service.create_session(
+        orchestrator_token=orchestrator_token,
+        scenario_id=config.scenario.id,
+        seed=config.seed,
+        colony_count=colony_count,
+        deadline_seconds=config.external_agent_timeout_seconds,
+        slot_configs=slot_configs,
+    )
+    admin_token = session.admin_token
+    match = service._matches[session.match_id]
+
+    # Print pairing codes for external agents
+    print("\n=== Mixed Run: External Agent Pairing ===")
+    print(f"Scenario: {config.scenario.id}, Seed: {config.seed}, Colonies: {colony_count}")
+    print(f"External seats: {', '.join(str(i) for i in config.external_seat_indices)}")
+    print()
+
+    now = time.time()
+    for seat_index in config.external_seat_indices:
+        colony_id = f"c{seat_index}"
+        pairing = service.create_pairing(admin_token, colony_id, now)
+        print(f"Seat {seat_index} ({colony_id}): {pairing.code}")
+
+    print()
+
+    # Open lobby to allow external agents to connect
+    service.open_lobby(admin_token)
+
+    # Wait for external agents to connect
+    deadline_at = time.time() + config.external_agent_timeout_seconds
+    claimed_seats: set[int] = set()
+    while time.time() < deadline_at:
+        session_current = service._lobbies[session.match_id]
+        for seat_index in config.external_seat_indices:
+            colony_id = f"c{seat_index}"
+            slot = next(s for s in session_current.slots if s.colony_id == colony_id)
+            if slot.pairing_consumed:
+                claimed_seats.add(seat_index)
+        if len(claimed_seats) == external_count:
+            logger.info("all external agents connected")
+            break
+        time.sleep(0.05)
+
+    # Log unclaimed external seats
+    unclaimed = set(config.external_seat_indices) - claimed_seats
+    if unclaimed:
+        logger.warning(
+            f"external agent connection timeout: {len(claimed_seats)}/{external_count} connected"
+        )
+
+    # If no external agents connected, fall back to baseline-only mode
+    if not claimed_seats:
+        logger.warning("no external agents connected; falling back to baseline-only manual drive")
+        # Build all baselines and drive manually
+        all_baselines: dict[str, Controller] = {}
+        for seat_index in range(1, colony_count + 1):
+            colony_id = f"c{seat_index}"
+            if seat_index in config.external_seat_indices:
+                # Use survivalist for unclaimed external
+                kind = "survivalist"
+            else:
+                kind = baseline_kinds_by_seat[seat_index]
+            factory = AGENT_TYPES[kind]
+            all_baselines[colony_id] = factory(seed=config.seed + seat_index)
+
+        # Record controller names showing fallback
+        controller_names = {}
+        for seat_index in range(1, colony_count + 1):
+            colony_id = f"c{seat_index}"
+            if seat_index in config.external_seat_indices:
+                controller_names[colony_id] = "external:fallback-survivalist"
+            else:
+                controller_names[colony_id] = f"baseline:{baseline_kinds_by_seat[seat_index]}"
+
+        # Manual drive (use the match's sim directly)
+        metrics = MetricCollector.create(match.sim.state)
+        writer = ArtifactWriter.create(
+            run_dir,
+            config.scenario,
+            config.seed,
+            colony_count,
+            controller_names,
+        )
+        while not match.sim.state.terminal:
+            batches = tuple(
+                all_baselines[colony_id].decide(project_observation(match.sim.state, colony_id))
+                for colony_id in sorted(all_baselines)
+            )
+            result = match.sim.resolve(batches)
+            metrics.record(result)
+            writer.write_turn(batches, result)
+
+        metrics_report = metrics.report(match.sim.state)
+        writer.finish(match.sim.state, metrics_report)
+
+        return RunReport(
+            run_dir=writer.run_dir,
+            report_path=writer.report_path,
+            termination_reason=match.sim.state.termination_reason or "unknown",
+            metrics=metrics_report,
+        )
+
+    # At least one external agent connected: proceed with session-based matching
+    service.start_match(admin_token, now)
+
+    # Wait for match to complete
+    # Service drives baselines automatically; external agents submit via session
+    max_wait = 3600.0
+    while not match.sim.state.terminal and time.time() - now < max_wait:
+        time.sleep(0.1)
+
+    # Record controller names showing which were real external vs baseline
+    controller_names = {}
+    session_current = service._lobbies[session.match_id]
+    for seat_index in range(1, colony_count + 1):
+        colony_id = f"c{seat_index}"
+        if seat_index in config.external_seat_indices:
+            slot = next(s for s in session_current.slots if s.colony_id == colony_id)
+            if slot.pairing_consumed and slot.identity:
+                controller_names[colony_id] = f"{slot.identity.model} ({slot.identity.provider})"
+            else:
+                controller_names[colony_id] = "external:fallback-survivalist"
+        else:
+            controller_names[colony_id] = f"baseline:{baseline_kinds_by_seat[seat_index]}"
+
+    # Export via service
+    writer = ArtifactWriter.create(
+        run_dir,
+        config.scenario,
+        config.seed,
+        colony_count,
+        controller_names,
+    )
+    service.write_resolved_turns(admin_token, writer)
+    writer.finish(match.sim.state, {})
+
+    return RunReport(
+        run_dir=writer.run_dir,
+        report_path=writer.report_path,
+        termination_reason=match.sim.state.termination_reason or "unknown",
+        metrics={},
     )
 
 
@@ -293,11 +500,33 @@ def run_suite(config: SuiteConfig) -> dict[str, Any]:
     return suite_output
 
 
+def _collect_numeric_leaves(
+    key: str, value: object, target: dict[str, list[float]]
+) -> None:
+    """Recursively collect numeric leaves from potentially nested structures.
+
+    Handles flat integers, nested dicts (for resources, etc.), and nested metrics.
+    Flattens the key path with underscores for hierarchical metrics.
+    """
+    if isinstance(value, (int, float)):
+        if key not in target:
+            target[key] = []
+        target[key].append(float(value))
+    elif isinstance(value, dict):
+        # Recurse into nested dicts
+        for subkey, subvalue in value.items():
+            nested_key = f"{key}_{subkey}"
+            _collect_numeric_leaves(nested_key, subvalue, target)
+
+
 def _aggregate_controller_stats(results: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate statistics for a single controller kind across all runs.
 
     Extracts composites and per-axis metrics for the specific colony_id that
-    this controller occupied in each run, using metadata to ensure correct mapping.
+    this controller occupied in each run. Handles axes with different structures:
+    - Nested per-colony (dict[colony_id][metric_name]): exploration, labour, etc.
+    - Flat integers (dict[metric_name]): trade, aggression counts
+    - Complex nested (dict[metric_name][sub_metric]): survival, growth, prosperity
     """
     composites = []
     # Collect per-axis values: dict[axis_name][metric_name] = [values...]
@@ -311,17 +540,29 @@ def _aggregate_controller_stats(results: list[dict[str, Any]]) -> dict[str, Any]
         if "composites" in metrics and colony_id in metrics["composites"]:
             composites.append(int(metrics["composites"][colony_id]))
 
-        # Extract per-axis metrics for this colony
-        for axis_name in ["exploration", "labour", "recovery", "communication", "decision_quality"]:
-            if axis_name in metrics and colony_id in metrics[axis_name]:
-                if axis_name not in axis_values:
-                    axis_values[axis_name] = {}
-                axis_data = metrics[axis_name][colony_id]
-                for metric_key, metric_value in axis_data.items():
-                    if isinstance(metric_value, (int, float)):
-                        if metric_key not in axis_values[axis_name]:
-                            axis_values[axis_name][metric_key] = []
-                        axis_values[axis_name][metric_key].append(float(metric_value))
+        # Extract per-axis metrics: iterate over all axes, not hardcoded list
+        # Skip known non-axis fields
+        skip_keys = {"composites", "tenure_metrics"}
+        for axis_name, axis_data in metrics.items():
+            if axis_name in skip_keys or not isinstance(axis_data, dict):
+                continue
+
+            if axis_name not in axis_values:
+                axis_values[axis_name] = {}
+
+            # Every axis is keyed by colony, whether its value is a nested dict of
+            # sub-metrics (exploration, survival) or a bare number (trade, aggression).
+            # Only this controller's own colony may be read: rotation moves controllers
+            # between seats on purpose, so keeping the colony id would average a
+            # controller's turn-11 seat with a rival's turn-17 seat and call it a result.
+            if colony_id not in axis_data:
+                continue
+            own = axis_data[colony_id]
+            if isinstance(own, dict):
+                for metric_key, metric_value in own.items():
+                    _collect_numeric_leaves(metric_key, metric_value, axis_values[axis_name])
+            else:
+                _collect_numeric_leaves("value", own, axis_values[axis_name])
 
     # Aggregate composites
     composite_stats = {

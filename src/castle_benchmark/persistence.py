@@ -123,8 +123,35 @@ def action_to_dict(action: object) -> dict[str, object]:
     raise TypeError(f"unsupported action: {type(action).__name__}")
 
 
+# What each action kind accepts on the wire, beyond "kind" itself. An action carrying a
+# field this table does not list is refused rather than quietly stripped: a controller
+# that thinks it asked for something the simulation never read is being scored on a plan
+# it did not actually submit, which is the one failure a benchmark cannot let pass.
+ACTION_FIELDS: dict[str, frozenset[str]] = {
+    "wait": frozenset(),
+    "gather": frozenset({"x", "y"}),
+    "build": frozenset({"structure", "x", "y"}),
+    "diplomacy": frozenset({"target_colony_id", "operation", "message"}),
+    "trade_offer": frozenset({"target_colony_id", "give", "receive", "message"}),
+    "trade_respond": frozenset({"offer_id", "accept"}),
+    "raid": frozenset({"target_colony_id"}),
+    "set_policy": frozenset({"policy", "value"}),
+    "scout": frozenset({"x", "y"}),
+    "repair": frozenset({"structure_id"}),
+    "extinguish": frozenset({"structure_id"}),
+    "demolish": frozenset({"structure_id"}),
+    "message": frozenset({"target_colony_id", "text"}),
+    "diplomacy_respond": frozenset({"proposal_id", "accept"}),
+}
+
+
 def action_from_dict(data: dict[str, object]) -> object:
     kind = data["kind"]
+    allowed = ACTION_FIELDS.get(str(kind))
+    if allowed is not None:
+        unknown = sorted(set(data) - allowed - {"kind"})
+        if unknown:
+            raise ValueError(f"unknown fields for {kind} action: {', '.join(unknown)}")
     if kind == "wait":
         return WaitAction()
     if kind == "gather":

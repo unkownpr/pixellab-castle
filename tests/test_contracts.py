@@ -209,6 +209,8 @@ def test_live_report_accumulates_model_usage_and_decision_metrics(service: GameS
         "input_tokens": 120,
         "output_tokens": 35,
         "latency_ms": 480,
+        "server_latency_ms": 0,
+        "budget_exceeded": 0,
     }
     assert report["metrics"]["decision_quality"]["c1"]["invalid_actions"] == 0
 

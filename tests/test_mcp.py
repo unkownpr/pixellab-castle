@@ -927,6 +927,7 @@ async def test_rules_are_match_independent_and_leak_no_state() -> None:
         "repair",
         "extinguish",
         "terminal_conditions",
+        "budgets",
         "scenarios",
     }
     serialized = json.dumps(no_match, sort_keys=True)

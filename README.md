@@ -157,6 +157,32 @@ on a later suite to get each controller's z-score against scripted play. An offi
 comparison uses at least five seeds and the full rotation, so no agent is judged on one
 seat.
 
+### One model against scripted play
+
+```bash
+uv run castle-benchmark mixed-run \
+  --scenario basic-survival-v1 --seed 17 \
+  --external-seats 1 --baseline-kinds survivalist,trader,expansionist \
+  --external-timeout 60 --output runs/mixed
+```
+
+The run prints a pairing code for each external seat and waits for an agent to claim it
+through the ordinary session flow; the other seats play scripted baselines on the same map
+and the same seed. An agent that never connects, or that misses a turn, is completed as a
+measured wait rather than stalling the match. The artifacts are the same as any other run,
+and the run metadata records which seat was external and which was scripted — a comparison
+that cannot say who played which seat is not a comparison.
+
+### Thinking budgets
+
+A match may carry two optional ceilings per controller: cumulative output tokens and
+cumulative server-measured thinking time. Both are unset by default. A controller that
+crosses one has its remaining turns completed as measured waits and the crossing is counted
+in the cost axis, so a model cannot buy a better score with unbounded deliberation. Latency
+is measured by the server from turn open to submission and reported next to — never mixed
+with — the adapter's own token figures, because one of those two numbers is a measurement
+and the other is a claim.
+
 ### Held-out maps
 
 `--scenario procedural-v1` samples a map family instead of replaying the three published
@@ -265,6 +291,9 @@ artifacts again.
 ```bash
 scripts/gate.sh
 ```
+
+The same gate runs in CI on every push and pull request (`.github/workflows/gate.yml`);
+it needs no secrets, because everything it checks is local.
 
 The gate rebuilds the manifest, runs the Python and TypeScript tests, builds the production
 client, produces a full headless run and verifies the replay hashes.

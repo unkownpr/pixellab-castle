@@ -285,6 +285,10 @@ def build_rules() -> dict[str, object]:
             "monument_victory": "a colony completes a monument",
             "domination_victory": "only one colony has population above zero",
         },
+        "budgets": {
+            "output_token_budget": "optional per-match ceiling on cumulative output tokens; unset by default",
+            "thinking_time_budget_ms": "optional per-match ceiling on cumulative server-measured latency; unset by default; when exceeded, remaining turns resolve as measured waits",
+        },
         "scenarios": tuple(
             {
                 "id": scenario.id,
@@ -446,6 +450,8 @@ def build_mcp_server(
                     (slot.colony_id, slot.controller_type, slot.baseline_kind)
                     for slot in request.slots
                 ),
+                output_token_budget=request.output_token_budget,
+                thinking_time_budget_ms=request.thinking_time_budget_ms,
             )
             game.attribute_mcp_invocation(session.match_id, "benchmark.create_session")
             return encode(

@@ -744,7 +744,14 @@ class SimCore:
         offers = dict(self.state.offers)
         offers[action.offer_id] = replace(offer, status="accepted")
         self.state = replace(self.state, offers=offers)
-        events.append(DomainEvent(self.state.turn, "trade_completed", colony_id, {"offer_id": offer.id}))
+        events.append(
+            DomainEvent(
+                self.state.turn,
+                "trade_completed",
+                colony_id,
+                {"offer_id": offer.id, "source_colony_id": offer.source_colony_id},
+            )
+        )
         return ActionResult(colony_id, action.kind, "accepted", "ok")
 
     def _raid(self, colony_id: str, action: RaidAction, events: list[DomainEvent]) -> ActionResult:

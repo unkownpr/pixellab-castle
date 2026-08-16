@@ -159,6 +159,32 @@ runs/suite-baseline/suite.json` verirsen her kontrolörün betikli oyuna göre z
 alırsın. Resmî karşılaştırma en az beş seed ve tam rotasyon ister; böylece hiçbir ajan tek
 bir koltuğa göre yargılanmaz.
 
+### Bir model, betikli oyuna karşı
+
+```bash
+uv run castle-benchmark mixed-run \
+  --scenario basic-survival-v1 --seed 17 \
+  --external-seats 1 --baseline-kinds survivalist,trader,expansionist \
+  --external-timeout 60 --output runs/mixed
+```
+
+Koşu her dış koltuk için bir eşleştirme kodu basar ve ajanın olağan oturum akışıyla
+bağlanmasını bekler; kalan koltuklar aynı harita ve aynı seed üzerinde betikli baseline
+oynar. Hiç bağlanmayan ya da bir turu kaçıran ajan maçı kilitlemez, ölçülen bir `wait` olur.
+Artefaktlar diğer koşularla aynıdır ve metadata hangi koltuğun dış hangisinin betikli
+olduğunu kaydeder — kimin hangi koltukta oynadığını söyleyemeyen bir karşılaştırma
+karşılaştırma değildir.
+
+### Düşünme bütçesi
+
+Bir maç kontrolör başına iki isteğe bağlı tavan taşıyabilir: kümülatif çıktı tokenı ve
+sunucuda ölçülen kümülatif düşünme süresi. İkisi de varsayılan olarak kapalıdır. Tavanı
+aşan kontrolörün kalan turları ölçülen `wait` olarak tamamlanır ve aşım maliyet ekseninde
+sayılır; böylece bir model sınırsız düşünerek daha iyi bir skor satın alamaz. Gecikme,
+turun açılışından gönderime kadar sunucu tarafından ölçülür ve adaptörün kendi token
+beyanının yanında — asla onunla karıştırılarak değil — raporlanır: bu iki sayıdan biri
+ölçüm, diğeri iddiadır.
+
 ### Saklı haritalar
 
 `--scenario procedural-v1`, yayımlanmış üç haritayı tekrar oynatmak yerine bir harita ailesi
@@ -265,6 +291,9 @@ doğrular.
 ```bash
 scripts/gate.sh
 ```
+
+Aynı gate her push ve pull request'te CI'da koşar (`.github/workflows/gate.yml`); hiçbir
+gizli anahtara ihtiyaç duymaz, çünkü kontrol ettiği her şey yereldir.
 
 Gate; manifesti yeniden üretir, Python ve TypeScript testlerini çalıştırır, production
 istemcisini derler, tam bir headless koşu üretir ve replay hash'lerini doğrular.

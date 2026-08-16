@@ -328,3 +328,114 @@ def test_usage_is_segmented_by_controller_tenure(
     assert tenures[0]["adapter_reported_model_usage"]["input_tokens"] == 11
     assert tenures[0]["server_measured"]["timeouts"] == 1
     assert tenures[0]["server_measured"]["mcp_calls"] == 1
+
+
+def test_server_latency_is_recorded_without_adapter_reporting(clock: Clock) -> None:
+    """Server-measured latency is tracked separately from adapter-reported latency."""
+    service = GameService()
+    session = service.create_session("orch", "basic-survival-v1", 19, 1)
+    pairing = service.create_pairing(session.admin_token, "c1", clock.now)
+    claimed = service.claim_slot(pairing.code or "", _identity(), clock.now)
+    token = claimed.controller_token
+    assert token is not None
+    service.heartbeat(token, 0, "connected", clock.now)
+    service.start_match(session.admin_token, clock.now)
+
+    # Submit without recording adapter-reported latency or tokens
+    clock.advance(0.5)
+    result = service.submit_actions(token, 0, ({"kind": "wait"},))
+
+    # Turn resolves with server latency measured
+    assert result.status == "resolved"
+    report = service.run_report(session.admin_token)
+    cost = report["metrics"]["cost"]["c1"]
+    assert cost["server_latency_ms"] > 0
+    assert cost["latency_ms"] == 0  # adapter never reported any latency
+    assert cost["output_tokens"] == 0  # adapter never reported tokens
+
+
+def test_output_token_budget_forces_waits_on_excess(clock: Clock) -> None:
+    """When cumulative output tokens exceed budget, controller's remaining turns resolve as waits."""
+    service = GameService()
+    session = service.create_session(
+        "orch",
+        "basic-survival-v1",
+        21,
+        1,
+        output_token_budget=100,  # tight budget
+    )
+    pairing = service.create_pairing(session.admin_token, "c1", clock.now)
+    claimed = service.claim_slot(pairing.code or "", _identity(), clock.now)
+    token = claimed.controller_token
+    assert token is not None
+    service.heartbeat(token, 0, "connected", clock.now)
+    service.start_match(session.admin_token, clock.now)
+
+    # First turn: report 60 tokens
+    service.record_usage(token, input_tokens=0, output_tokens=60, latency_ms=0)
+    service.submit_actions(token, 0, ({"kind": "wait"},))
+
+    # Second turn: report 50 more tokens (total 110, exceeds budget of 100)
+    service.record_usage(token, input_tokens=0, output_tokens=50, latency_ms=0)
+    result = service.submit_actions(token, 1, ({"kind": "wait"},))
+    assert result.status == "resolved"
+
+    report = service.run_report(session.admin_token)
+    cost = report["metrics"]["cost"]["c1"]
+    assert cost["output_tokens"] == 110
+    assert cost["budget_exceeded"] == 1
+
+
+def test_thinking_time_budget_forces_waits_on_excess(clock: Clock) -> None:
+    """When cumulative server latency exceeds thinking_time_budget, remaining turns resolve as waits."""
+    service = GameService()
+    session = service.create_session(
+        "orch",
+        "basic-survival-v1",
+        23,
+        1,
+        thinking_time_budget_ms=1000,  # 1 second
+    )
+    pairing = service.create_pairing(session.admin_token, "c1", clock.now)
+    claimed = service.claim_slot(pairing.code or "", _identity(), clock.now)
+    token = claimed.controller_token
+    assert token is not None
+    service.heartbeat(token, 0, "connected", clock.now)
+    service.start_match(session.admin_token, clock.now)
+
+    # First turn: submit after 600ms
+    clock.advance(0.6)
+    service.submit_actions(token, 0, ({"kind": "wait"},))
+
+    # Second turn: submit after 500ms more (total 1100ms, exceeds budget of 1000ms)
+    clock.advance(0.5)
+    result = service.submit_actions(token, 1, ({"kind": "wait"},))
+    assert result.status == "resolved"
+
+    report = service.run_report(session.admin_token)
+    cost = report["metrics"]["cost"]["c1"]
+    assert cost["server_latency_ms"] >= 1100
+    assert cost["budget_exceeded"] == 1
+
+
+def test_budgets_default_unset(clock: Clock) -> None:
+    """With no budget specified, controllers can use unlimited resources."""
+    service = GameService()
+    session = service.create_session("orch", "basic-survival-v1", 25, 1)
+    # No budgets specified
+    pairing = service.create_pairing(session.admin_token, "c1", clock.now)
+    claimed = service.claim_slot(pairing.code or "", _identity(), clock.now)
+    token = claimed.controller_token
+    assert token is not None
+    service.heartbeat(token, 0, "connected", clock.now)
+    service.start_match(session.admin_token, clock.now)
+
+    # Record very large usage
+    service.record_usage(token, input_tokens=0, output_tokens=100000, latency_ms=0)
+    result = service.submit_actions(token, 0, ({"kind": "wait"},))
+
+    # No budget exceeded because budgets are unset
+    assert result.status == "resolved"
+    report = service.run_report(session.admin_token)
+    cost = report["metrics"]["cost"]["c1"]
+    assert cost["budget_exceeded"] == 0

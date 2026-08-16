@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass, field
 
 from .actions import VALID_ACTION_KINDS
-from .domain import MatchState, StructureStatus
+from .domain import MatchState, StructureKind, StructureStatus
 from .engine import TurnResult
 
 # Composite score weights (economic reasoning in comments)
@@ -14,9 +14,29 @@ from .engine import TurnResult
 POPULATION_ALIVE_WEIGHT = 3  # AM-19: reduced from 5x (was 5–10x dominance); 3x balances at ~60
 # Peak population records the highest point reached, rewarding growth investment.
 PEAK_POPULATION_WEIGHT = 1
-# Operational structures are productivity multipliers: gathering, production, and defense all
-# depend on structure availability, so their count directly affects colony capability.
+# Operational structures are productivity multipliers, but only the ones that make,
+# shelter, heal or hold something. The first model to play this benchmark found the hole
+# in counting them all: an eight-stone wall took one action and paid the same two points
+# as a mine, so it built five of them and said so in its own summary. Defence is scored
+# by what it prevents — the raids it survives and the population it keeps — not by
+# standing there, so walls, gates, barracks and watchtowers no longer score directly.
 OPERATIONAL_STRUCTURES_WEIGHT = 2
+SCORING_STRUCTURE_KINDS = frozenset(
+    {
+        StructureKind.HEADQUARTERS,
+        StructureKind.HOUSE,
+        StructureKind.WAREHOUSE,
+        StructureKind.WELL,
+        StructureKind.FARM,
+        StructureKind.LUMBER_CAMP,
+        StructureKind.QUARRY,
+        StructureKind.MINE,
+        StructureKind.MARKET,
+        StructureKind.WORKSHOP,
+        StructureKind.CLINIC,
+        StructureKind.MONUMENT,
+    }
+)
 # Exploration scales down by 10 because individual cells have low marginal value; the insight
 # is incremental and the known_cells count would dominate the score otherwise.
 EXPLORATION_DIVISOR = 10
@@ -127,7 +147,14 @@ class MetricCollector:
             if event.kind in {"raid", "surprise_raid"}:
                 self.raids[colony_id] = self.raids.get(colony_id, 0) + 1
             elif event.kind == "trade_completed":
+                # A trade is two colonies agreeing. The event names the one that accepted,
+                # so crediting only that side scored the seller at zero no matter how many
+                # deals it opened — which is how the scripted trader ended a suite with a
+                # trade count of nought.
                 self.trades[colony_id] = self.trades.get(colony_id, 0) + 1
+                source = str((event.data or {}).get("source_colony_id", ""))
+                if source and source != colony_id:
+                    self.trades[source] = self.trades.get(source, 0) + 1
             elif event.kind == "scout_dispatched":
                 self.scouts_dispatched[colony_id] = self.scouts_dispatched.get(colony_id, 0) + 1
             elif event.kind == "scout_revealed":
@@ -204,6 +231,17 @@ class MetricCollector:
     def record_reconnect(self, colony_id: str) -> None:
         self.reconnects[colony_id] = self.reconnects.get(colony_id, 0) + 1
 
+    @staticmethod
+    def _scoring_structures(state: MatchState, colony_id: str) -> int:
+        """Operational structures that count toward the composite (see SCORING_STRUCTURE_KINDS)."""
+        return sum(
+            1
+            for structure in state.structures.values()
+            if structure.colony_id == colony_id
+            and structure.status == StructureStatus.OPERATIONAL
+            and structure.kind in SCORING_STRUCTURE_KINDS
+        )
+
     def _calculate_resource_value(self, resources: object) -> int:
         """Calculate weighted resource value for composite score (AM-11).
 
@@ -230,11 +268,7 @@ class MetricCollector:
         colony = state.colonies[colony_id]
         monument_victory = state.termination_reason == "monument_victory"
 
-        # Count operational structures for this colony
-        operational_structures = sum(
-            1 for struct in state.structures.values()
-            if struct.colony_id == colony_id and struct.status == StructureStatus.OPERATIONAL
-        )
+        operational_structures = self._scoring_structures(state, colony_id)
 
         # Count explored cells
         known_cells = len(colony.known_cells)
@@ -369,10 +403,7 @@ class MetricCollector:
         # For simplicity, use a few key axes: population, resources, trades, raids, structures
         def get_point(cid: str) -> tuple[float, ...]:
             colony = state.colonies[cid]
-            operational_structures = sum(
-                1 for struct in state.structures.values()
-                if struct.colony_id == cid and struct.status == StructureStatus.OPERATIONAL
-            )
+            operational_structures = self._scoring_structures(state, cid)
             resource_value = self._calculate_resource_value(colony.resources)
             return (
                 colony.population,

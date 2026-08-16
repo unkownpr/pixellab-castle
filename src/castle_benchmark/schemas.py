@@ -37,6 +37,8 @@ class CreateSessionRequest(ContractModel):
     colony_count: int = Field(default=4, ge=1, le=8)
     deadline_seconds: int = Field(default=30, ge=1, le=300)
     slots: list["SessionSlotConfiguration"] = Field(default_factory=list, max_length=8)
+    output_token_budget: int | None = Field(default=None, ge=1)
+    thinking_time_budget_ms: int | None = Field(default=None, ge=1)
 
 
 class SessionSlotConfiguration(ContractModel):
@@ -301,8 +303,10 @@ class CostMetricResponse(ContractModel):
     input_tokens: int
     output_tokens: int
     latency_ms: int
+    server_latency_ms: int = 0
     timeouts: int = 0
     reconnects: int = 0
+    budget_exceeded: int = 0
 
 
 class PresenceMetricResponse(ContractModel):

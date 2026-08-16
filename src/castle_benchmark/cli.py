@@ -7,7 +7,7 @@ import logging
 import os
 from pathlib import Path
 
-from .runner import RunConfig, SuiteConfig, run_match, run_suite, verify_replay
+from .runner import MixedRunConfig, RunConfig, SuiteConfig, run_match, run_mixed_match, run_suite, verify_replay
 from .scenarios import get_scenario
 
 
@@ -79,6 +79,29 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--seed", type=int, default=17)
     run.add_argument("--colonies", type=int, default=4)
     run.add_argument("--output", type=Path, default=Path("runs"))
+    mixed = commands.add_parser("mixed-run")
+    mixed.add_argument(
+        "--scenario", default="basic-survival-v1", help="scenario to run"
+    )
+    mixed.add_argument("--seed", type=int, default=17, help="random seed")
+    mixed.add_argument(
+        "--external-seats",
+        type=str,
+        default="1",
+        help="comma-separated 1-indexed seat numbers for external agents",
+    )
+    mixed.add_argument(
+        "--baseline-kinds",
+        type=str,
+        help="comma-separated baseline kinds for non-external seats (default: all survivalist)",
+    )
+    mixed.add_argument(
+        "--external-timeout",
+        type=int,
+        default=30,
+        help="seconds to wait for external agents to connect",
+    )
+    mixed.add_argument("--output", type=Path, default=Path("runs"))
     suite = commands.add_parser("suite")
     suite.add_argument("--scenario", default="basic-survival-v1")
     suite.add_argument("--seeds", default="11,17,23,29,37", help="comma-separated seed list")
@@ -126,6 +149,28 @@ def main() -> None:
         kinds = ("survivalist", "trader", "expansionist", "militarist")[: args.colonies]
         report = run_match(
             RunConfig(get_scenario(args.scenario), args.seed, args.colonies, args.output, kinds)
+        )
+        print(report.report_path)
+    elif args.command == "mixed-run":
+        # Parse external seat indices (1-indexed)
+        external_seats = tuple(
+            int(s.strip()) for s in args.external_seats.split(",") if s.strip()
+        )
+        # Parse baseline kinds if provided
+        baseline_kinds = None
+        if args.baseline_kinds:
+            baseline_kinds = tuple(
+                k.strip() for k in args.baseline_kinds.split(",") if k.strip()
+            )
+        report = run_mixed_match(
+            MixedRunConfig(
+                get_scenario(args.scenario),
+                args.seed,
+                args.output,
+                external_seats,
+                baseline_kinds,
+                args.external_timeout,
+            )
         )
         print(report.report_path)
     elif args.command == "suite":

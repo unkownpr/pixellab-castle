@@ -133,6 +133,7 @@ class LiveMatch:
     usage: dict[str, dict[str, int]] = field(default_factory=dict)
     deadline_at: float | None = None
     deadline_seconds: int = DEFAULT_DEADLINE_SECONDS
+    turn_opened_at: float | None = None
     pending_controller_ids: dict[str, str | None] = field(default_factory=dict)
     operational_events: list[DomainEvent] = field(default_factory=list)
     operational_event_sequences: list[int] = field(default_factory=list)
@@ -143,6 +144,9 @@ class LiveMatch:
     persisted_turn_count: int = 0
     mcp_invocations_by_tool: dict[str, int] = field(default_factory=dict)
     completed_at: float | None = None
+    output_token_budget: int | None = None
+    thinking_time_budget_ms: int | None = None
+    budget_exceeded_colonies: set[str] = field(default_factory=set)
     turn_lock: object = field(default_factory=RLock)
 
 
@@ -391,6 +395,8 @@ class GameService:
             "input_tokens": 0,
             "output_tokens": 0,
             "latency_ms": 0,
+            "server_latency_ms": 0,
+            "budget_exceeded": 0,
         }
         if include_presence:
             values.update({"timeouts": 0, "reconnects": 0})
@@ -514,6 +520,7 @@ class GameService:
                     match.sim.state.termination_reason,
                 )
             elif now is not None:
+                match.turn_opened_at = now
                 match.deadline_at = now + match.deadline_seconds
                 self._record_operational_event(
                     match, "turn_opened", deadline_at=match.deadline_at
@@ -543,6 +550,8 @@ class GameService:
         colony_count: int,
         deadline_seconds: int = DEFAULT_DEADLINE_SECONDS,
         slot_configs: Iterable[tuple[str, str, str | None]] = (),
+        output_token_budget: int | None = None,
+        thinking_time_budget_ms: int | None = None,
     ) -> LobbySession:
         """Create a pre-match session whose controller capabilities are not yet minted."""
         if not orchestrator_token:
@@ -582,6 +591,8 @@ class GameService:
             {},
             metrics=MetricCollector.create(sim.state),
             deadline_seconds=deadline_seconds,
+            output_token_budget=output_token_budget,
+            thinking_time_budget_ms=thinking_time_budget_ms,
         )
         slots: list[ControllerSlot] = []
         for colony_id in sorted(sim.state.colonies):
@@ -952,6 +963,7 @@ class GameService:
         if unready:
             raise ConflictError("session_not_ready", code="session_not_ready")
         session.status = SessionStatus.RUNNING
+        match.turn_opened_at = now
         match.deadline_at = now + match.deadline_seconds
         self._record_operational_event(
             match, "turn_opened", deadline_at=match.deadline_at
@@ -1244,6 +1256,37 @@ class GameService:
         with match.turn_lock:
             return project_spectator_view(match.sim.state)
 
+    def _check_and_record_submission_metrics(
+        self,
+        match: LiveMatch,
+        colony_id: str,
+        server_latency_ms: int,
+        session: LobbySession | None,
+    ) -> bool:
+        """Record server latency and check budget ceilings. Returns True if budget exceeded."""
+        usage = match.usage.setdefault(
+            colony_id, self._usage_defaults(session is not None)
+        )
+        usage["server_latency_ms"] += server_latency_ms
+
+        # Check if any ceiling is exceeded
+        budget_exceeded = False
+        if (
+            match.thinking_time_budget_ms is not None
+            and usage["server_latency_ms"] > match.thinking_time_budget_ms
+        ):
+            budget_exceeded = True
+
+        # Increment budget_exceeded counter only on first ceiling cross
+        if budget_exceeded and colony_id not in match.budget_exceeded_colonies:
+            match.budget_exceeded_colonies.add(colony_id)
+            usage["budget_exceeded"] += 1
+            if session is not None:
+                slot = self._slot(session, colony_id)
+                self._tenure_usage(match, slot)["budget_exceeded"] += 1
+
+        return budget_exceeded
+
     def submit_actions(
         self, token: str, turn: int, actions: Iterable[dict[str, object]]
     ) -> Submission:
@@ -1253,6 +1296,7 @@ class GameService:
     def _submit_actions(
         self, token: str, turn: int, actions: Iterable[dict[str, object]]
     ) -> Submission:
+        submission_time = time.monotonic()
         access, match = self._authorize(token)
         if access.admin or access.colony_id is None:
             raise ForbiddenError("admin capabilities cannot submit colony actions")
@@ -1275,7 +1319,24 @@ class GameService:
             session = self._lobbies.get(access.match_id)
             if session is not None:
                 self._submit_baseline_batches(match, session)
+
+            # Measure server latency: time from turn open to submission arrival
+            server_latency_ms = 0
+            if match.turn_opened_at is not None:
+                elapsed = submission_time - match.turn_opened_at
+                server_latency_ms = max(0, int(round(elapsed * 1000)))
+
+            # Check budgets and record server latency
+            budget_exceeded_this_turn = self._check_and_record_submission_metrics(
+                match, access.colony_id, server_latency_ms, session
+            )
+
+            # If budget was already exceeded in a prior turn, replace submission with wait
+            if access.colony_id in match.budget_exceeded_colonies and not budget_exceeded_this_turn:
+                batch = ActionBatch(turn, access.colony_id, (WaitAction(),))
+
             match.pending[access.colony_id] = batch
+
             if session is not None:
                 slot = self._slot(session, access.colony_id)
                 previous_presence = slot.presence
@@ -1359,6 +1420,16 @@ class GameService:
         usage["input_tokens"] += input_tokens
         usage["output_tokens"] += output_tokens
         usage["latency_ms"] += latency_ms
+
+        # Check if output token budget is exceeded
+        if (
+            match.output_token_budget is not None
+            and usage["output_tokens"] > match.output_token_budget
+            and access.colony_id not in match.budget_exceeded_colonies
+        ):
+            match.budget_exceeded_colonies.add(access.colony_id)
+            usage["budget_exceeded"] += 1
+
         session = self._lobbies.get(access.match_id)
         if session is not None:
             slot = self._slot(session, access.colony_id)
@@ -1367,6 +1438,11 @@ class GameService:
             tenure_usage["input_tokens"] += input_tokens
             tenure_usage["output_tokens"] += output_tokens
             tenure_usage["latency_ms"] += latency_ms
+            if (
+                match.output_token_budget is not None
+                and usage["output_tokens"] > match.output_token_budget
+            ):
+                tenure_usage["budget_exceeded"] += 1
             self._record_operational_event(
                 match,
                 "metric_updated",
