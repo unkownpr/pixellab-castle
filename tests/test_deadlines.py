@@ -386,6 +386,38 @@ def test_output_token_budget_forces_waits_on_excess(clock: Clock) -> None:
     assert cost["budget_exceeded"] == 1
 
 
+def test_output_token_budget_tenure_counter_counts_the_crossing_not_every_report(
+    clock: Clock,
+) -> None:
+    """The per-tenure budget_exceeded counter must stay at 1 once crossed, not grow with
+    every later usage report that is still over budget."""
+    service = GameService()
+    session = service.create_session(
+        "orch",
+        "basic-survival-v1",
+        21,
+        1,
+        output_token_budget=100,  # tight budget
+    )
+    pairing = service.create_pairing(session.admin_token, "c1", clock.now)
+    claimed = service.claim_slot(pairing.code or "", _identity(), clock.now)
+    token = claimed.controller_token
+    assert token is not None
+    service.heartbeat(token, 0, "connected", clock.now)
+    service.start_match(session.admin_token, clock.now)
+
+    service.record_usage(token, input_tokens=0, output_tokens=60, latency_ms=0)
+    service.submit_actions(token, 0, ({"kind": "wait"},))
+    service.record_usage(token, input_tokens=0, output_tokens=50, latency_ms=0)  # crosses 100
+    service.submit_actions(token, 1, ({"kind": "wait"},))
+    service.record_usage(token, input_tokens=0, output_tokens=10, latency_ms=0)  # still over
+    service.submit_actions(token, 2, ({"kind": "wait"},))
+
+    match = service._matches[session.match_id]
+    controller_id = next(iter(match.tenure_usage["c1"]))
+    assert match.tenure_usage["c1"][controller_id]["budget_exceeded"] == 1
+
+
 def test_thinking_time_budget_forces_waits_on_excess(clock: Clock) -> None:
     """When cumulative server latency exceeds thinking_time_budget, remaining turns resolve as waits."""
     service = GameService()

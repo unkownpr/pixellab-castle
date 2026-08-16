@@ -1423,6 +1423,7 @@ class GameService:
         usage["latency_ms"] += latency_ms
 
         # Check if output token budget is exceeded
+        just_exceeded_budget = False
         if (
             match.output_token_budget is not None
             and usage["output_tokens"] > match.output_token_budget
@@ -1430,6 +1431,7 @@ class GameService:
         ):
             match.budget_exceeded_colonies.add(access.colony_id)
             usage["budget_exceeded"] += 1
+            just_exceeded_budget = True
 
         session = self._lobbies.get(access.match_id)
         if session is not None:
@@ -1439,10 +1441,7 @@ class GameService:
             tenure_usage["input_tokens"] += input_tokens
             tenure_usage["output_tokens"] += output_tokens
             tenure_usage["latency_ms"] += latency_ms
-            if (
-                match.output_token_budget is not None
-                and usage["output_tokens"] > match.output_token_budget
-            ):
+            if just_exceeded_budget:
                 tenure_usage["budget_exceeded"] += 1
             self._record_operational_event(
                 match,
